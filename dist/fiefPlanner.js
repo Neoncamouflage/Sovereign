@@ -370,6 +370,25 @@ const fiefPlanner = {
     },
     //Generates a room plan and returns a room plan CM and room plan object
     generateRoomPlan: function(roomName,opts){
+        /*
+        Need to find a way that saves some blocks for stuff like avoidance zones
+        Think I'm currently using 25 or something like that
+
+        
+        Cost Matrix Blocks
+        100    Rampart
+        200    ~Unassigned~
+        0-9    ~Unassigned~
+        10-18  Roads
+        20-28  Extensions
+        30-38  Spawn
+        40-48  Link
+        50-58  Tower
+        60-68  Container
+        70-78  Lab
+        80-88  ~Unassigned~
+        90-98  ~Unassigned~
+        */
         //Default weights
         if(!opts){
             opts = {
@@ -927,11 +946,12 @@ const fiefPlanner = {
         for(let ramp of trimmedRamps){
             basePlanCM.set(ramp.x,ramp.y,100)
         }
-
+        Memory.testStructureBlobCM = structureBlobCM.serialize();
         //Now assign structures
         fiefPlanner.assignStructures(roomName,terrain,basePlanCM,structureBlobCM,basePlan,exitMatrix,0,opts.assnEWeight,opts.assnCWeight);
         //Assign labs
         fiefPlanner.assignLabs(roomName,terrain,basePlanCM,structureBlobCM)
+        
         //Array for extension roads before we fill it
         basePlan.roads.extensions = []
         //Fill base plan and base plan CM with assigned structure blob buildings
@@ -976,7 +996,7 @@ const fiefPlanner = {
         }
 
         Memory.testBasePlanCM = basePlanCM.serialize();
-        Memory.testStructureBlobCM = structureBlobCM.serialize();
+        
 
         basePlan.ramparts = trimmedRamps
         Memory.minCutResult = trimmedRamps;
@@ -1432,7 +1452,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
             { dx: -1, dy: 1 },  { dx: 0, dy: 1 },  { dx: 1, dy: 1 }
         ];
         
-        while (toVisit.length > 0 && count < structures.length + extCount + labCount + distantStructs.length) {
+        while (toVisit.length > 0 && count + secondCount < structures.length + extCount + labCount + distantStructs.length) {
             let current = toVisit.shift(); // Remove the first element, now an object
             let currentPos = current.pos;
             let currentKey = `${currentPos.x},${currentPos.y}`;

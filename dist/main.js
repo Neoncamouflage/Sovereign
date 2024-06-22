@@ -241,13 +241,28 @@ module.exports.loop = function () {
             mapVisuals.intel();
         }
 
+        if(Memory.testStruct){
+            let roomVis =  new RoomVisual();
+            let testStructureBlobCM = PathFinder.CostMatrix.deserialize(Memory.testStructureBlobCM);
+            for (let x = 0; x <= 49; x += 1) {
+                for (let y = 0; y <= 49; y += 1) {
+                    let weight = testStructureBlobCM.get(x,y);
+                    if(weight == 0) continue;
+                    //new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
+                        //fill: `hsl(${200}${testStructureBlobCM.get(x, y) * 10}, 100%, 60%)`,
+                        //opacity: 0.4,
+                    //})
+                    new RoomVisual().text(weight,x,y+0.25)
+                }
+            }
+        }
 
 
         if(Memory.testRPVisuals){
             let startCPU = Game.cpu.getUsed()
             //Flood Fill Section
             //Wall Groups
-            let groups = Object.keys(Memory.test4)
+            /*let groups = Object.keys(Memory.test4)
             groups.forEach((each) =>{
                 let wallGroup = Memory.test4[each]
                 //console.log(JSON.stringify(wallGroup))
@@ -264,7 +279,7 @@ module.exports.loop = function () {
                 groupTiles.forEach(spot=>{
                     new RoomVisual().circle(spot.x,spot.y,{fill: `hsl(${hue}, 100%, 50%)`});
                 })
-            })
+            })*/
             //Combined exit and controller fill
             //Combined scores in Memory.test9
             /*let cCM = PathFinder.CostMatrix.deserialize(Memory.test9);
@@ -377,7 +392,7 @@ module.exports.loop = function () {
             }*/
             let roomVis =  new RoomVisual();
             let basePlanCM = PathFinder.CostMatrix.deserialize(Memory.testBasePlanCM);
-            let mnCM = PathFinder.CostMatrix.deserialize(Memory.minCutCM);
+            //let mnCM = PathFinder.CostMatrix.deserialize(Memory.minCutCM);
             let mnResult;
 
 
@@ -457,18 +472,7 @@ module.exports.loop = function () {
                 }
             }
 
-            /*let testStructureBlobCM = PathFinder.CostMatrix.deserialize(Memory.testStructureBlobCM);
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = testStructureBlobCM.get(x,y);
-                    if(weight == 0) continue;
-                    //new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        //fill: `hsl(${200}${testStructureBlobCM.get(x, y) * 10}, 100%, 60%)`,
-                        //opacity: 0.4,
-                    //})
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }*/
+
 
 
             
