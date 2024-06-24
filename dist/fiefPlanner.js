@@ -648,7 +648,7 @@ const fiefPlanner = {
         basePlan.roads.core = [];
         for(let ny=-1;ny<=1;ny++){
             for(let nx=-1;nx<=1;nx++){
-                if(coreLocation.x+nx > 0 && coreLocation.x+nx < 49 && coreLocation.y+ny > 0 && coreLocation.y+ny < 40){
+                if(coreLocation.x+nx > 0 && coreLocation.x+nx < 49 && coreLocation.y+ny > 0 && coreLocation.y+ny < 49){
                     if(terrain.get(coreLocation.x+nx,coreLocation.y+ny) != TERRAIN_MASK_WALL){
                         if(!(nx==0 && ny==0)){
                             basePlanCM.set(coreLocation.x+nx,coreLocation.y+ny,99);
