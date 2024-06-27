@@ -67,7 +67,7 @@ const fiefPlanner = {
     //Runs scoring on all plans
     //Returns CM and object for best plan
     //Stores rejected plans in heap
-    getFiefPlan: function(roomName,totalPop = 20, maxIterations=10,mutationRate=0.01){
+    getFiefPlan: function(roomName,totalPop = 10, maxIterations=50,mutationRate=0.01){
         // 2.3,0.69,2.28,1.91,2.74,0.44,2.5,2.84,0.46,0.37,1.88,2.45
         //Set up weight minimums and maximums for the genetic algorithm
         let geneLimits = [
@@ -192,8 +192,8 @@ const fiefPlanner = {
                 }
                 //Else we move to the next generation
                 else{
-                    //Check if all 3 top scores are the same. If so, we've converged.
-                    if(fiefPlanner.bestScore == fiefPlanner.secondScore && fiefPlanner.secondScore == fiefPlanner.thirdScore){
+                    //Check if all 3 top scores are within 1%. If so, we've converged.
+                    if(fiefPlanner.bestScore - fiefPlanner.secondScore <= fiefPlanner.bestScore *0.01 && fiefPlanner.secondScore - fiefPlanner.thirdScore <= fiefPlanner.thirdScore * 0.01){
                         console.log("Plan evolution complete due to score convergence. Generated",fiefPlanner.iterations*fiefPlanner.population.length,"plans over",fiefPlanner.iterations,"generations in",Game.time-fiefPlanner.startTick,"ticks\nTotalCPU:",fiefPlanner.totalCPU,"\nBest score:",fiefPlanner.bestScore,"\n2nd Place:",fiefPlanner.secondScore,"\n3rd Place:",fiefPlanner.thirdScore)
                         fiefPlanner.stage = 0;
                         let rclPlan = this.getRCLPlan();

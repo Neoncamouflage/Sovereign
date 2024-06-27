@@ -19,11 +19,11 @@ var roleStarters = {
         let babyRelays = starters.filter(creep => creep.memory.job === 'babyRelay');
         let baddies = room.find(FIND_HOSTILE_CREEPS);
         //Check for FF can
-        let ffCan;
+        let ffCan = null;
         let tower = room.find(FIND_MY_STRUCTURES,{
             filter: (structure) => {return structure.structureType == STRUCTURE_TOWER}
         })[0]
-        if(Object.keys(fief.fastFiller).length){
+        if(fief.fastFiller && Object.keys(fief.fastFiller).length){
             //If ff spawn exists, get the can ID
             ffCan = Game.getObjectById(fief.fastFiller[Object.keys(fief.fastFiller)[0]]['can']);
         }

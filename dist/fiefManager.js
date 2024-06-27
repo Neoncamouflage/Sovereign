@@ -1,45 +1,16 @@
-const roomPlanner = require('roomPlanner');
+//const roomPlanner = require('roomPlanner');
 const helper = require('functions.helper');
+const fiefPlanner = require('fiefPlanner');
 const roleStarters = require('role.starters');
 require('roomVisual');
 const profiler = require('screeps-profiler');
 const missionManager = require('missionManager');
 const supplyDemand = require('supplyDemand');
 const fiefManager = {
-    run:function(room,roomCreeps){
-        //SHARD3 MAIN TEST - SOV MMO
-        //if(room.name == 'W55N12') delete Memory.kingdom.fiefs.W55N12.sources.closest
-        //Begin CPU tracking
+    run:function(room,fiefCreeps){
         let cpuStart = Game.cpu.getUsed();
-        //Say stuff!
-        let rand = Math.floor(Math.random() * 3) + 1;
-        let fiefCreeps = room.find(FIND_MY_CREEPS);
-        /*if(rand == 1){
-            let sent = ''
-            let cPick = fiefCreeps[Math.floor(Math.random() * fiefCreeps.length)];
-            let addon = '';
-            let rand2 = Math.floor(Math.random() * 3) + 1;
-            
-            if(rand2 == 1){
-                addon = Memory.icons[cPick.memory.role]+' ';
-                sent = addon+helper.getSentence();
-                cPick.say(sent,true);
-            }
-            else if(Game.time % 10 == 0){
-                sent = '𐌿𐍅𐌰~';
-                cPick.say(sent,true);
-            }
-            else{
-                sent = addon+helper.getSentence()
-                cPick.say(sent,true);
-                
-            }
-            //console.log(sent)
-        }*/
-
-
-
         //Set Reference
+        let restartFlag = false;
         let fief = Memory.kingdom.fiefs[room.name];
         let factory = room.find(FIND_MY_STRUCTURES,{filter:{structureType:STRUCTURE_FACTORY}})[0];
         let fiefHeap = global.heap[room.name];
@@ -75,7 +46,7 @@ const fiefManager = {
         ];
 
         //Create harvest spot if none exists
-        if(!fief.sources){
+        if(!fief.sources || !fief.sources.length){
             restartFlag = true;
             fief.sources = {}
             let sources = room.find(FIND_SOURCES);
@@ -138,8 +109,9 @@ const fiefManager = {
             return;
         }
 
-        if(Game.time % 100 == 0 && fief.rclPlan && !cSites.length){
-            let plan = fief.rclPlan
+        if(Game.time % 100 == 0 && fief.roomPlan && !cSites.length){
+            console.log("Checking for new constructions.")
+            let plan = fief.roomPlan
             for(let rcl = 1;rcl <= roomLevel;rcl++){
                 for(let building in plan[rcl]){
                     for(coordinate of plan[rcl][building]){
@@ -155,7 +127,7 @@ const fiefManager = {
                                 let hallSpawn;
                                 if(roomSpawns.length > 0){
                                     for(spawn of roomSpawns){
-                                        let spawnType = name.split(" ")[1];
+                                        let spawnType = spawn.name.split(" ")[1];
                                         switch(spawnType){
                                             case 'Keep':
                                                 keepSpawn = true;
@@ -254,9 +226,9 @@ const fiefManager = {
             
             
         }
-        
+        //console.log("To fiefcreep check")
         //Check all room creeps and add starters to the array for later
-        for(myCreep of roomCreeps){
+        for(myCreep of fiefCreeps){
             if(myCreep.memory.role == 'starter') starterCreeps.push(myCreep);
         }
         // - Memory checks -
@@ -279,33 +251,29 @@ const fiefManager = {
         
         //Create room plan, spawns, and spawn queue if none exists, then return
         //
-        let restartFlag = false
-        if(!fief.roomPlan || fief.roomPlanLevel != room.controller.level || fief.roomPlan == 'null'){
-            restartFlag = true;
-            fief.roomPlan = JSON.stringify(roomPlanner.run(room));
-            fief.roomPlanLevel = room.controller.level;
-        }
 
-        if(!fief.rampartPlan){
-            try{
-
+        if(!fief.roomPlan || fief.roomPlan == 'null'){
+            //restartFlag = true;
+            let roomPlans = JSON.parse(RawMemory.segments[1]);
+            let toss = null;
+            if(roomPlans[room.name]){
+                [fief.roomPlan, toss] = roomPlans[room.name]
             }
-            catch(e){
-                console.log("Rampart plan issue - room",room.name,'\n',e)
+            else if(global && global.heap && (!global.heap.fiefPlanner || !global.heap.fiefPlanner.stage ||global.heap.fiefPlanner.stage == 0)){
+                fiefPlanner.getFiefPlan(room.name);
+                console.log("Getting plan for room")
             }
-            let plan = roomPlanner.getRamparts(room);
-            fief.rampartPlan = {inner:plan[0],outer:plan[1]};
+            //fief.roomPlanLevel = room.controller.level;
+            //console.log(`${room.name} has no room plan!`)
         }
 
         //Set minimum hits for ramparts
-        if(!fief.rampartPlan.innerMin) fief.rampartPlan.innerMin = 50000
-        if(!fief.rampartPlan.outerMin) fief.rampartPlan.outerMin = 100000
+        //if(!fief.rampartPlan.innerMin) fief.rampartPlan.innerMin = 50000
+        //if(!fief.rampartPlan.outerMin) fief.rampartPlan.outerMin = 100000
 
 
 
         //Gather things for reference
-        
-        let storagePos = roomPlanner.getStoragePos(room);
 
 
         
@@ -318,26 +286,26 @@ const fiefManager = {
             restartFlag = true;
         };
         
-        if(!fief.costMatrix){
+        if(!fief.costMatrix && fief.roomPlan){
             //Get new cost matrix
-            let thisCM = roomPlanner.getCM(room);
+            let thisCM = new PathFinder.CostMatrix;
             let sources = room.find(FIND_SOURCES);
 
-            //Add existing roads and paths to cost matrix
-            room.find(FIND_STRUCTURES).forEach(function(struct) {
-                if (struct.structureType === STRUCTURE_ROAD) {
-                    thisCM.set(struct.pos.x, struct.pos.y, 1);
-                }else if (struct.structureType !== STRUCTURE_CONTAINER &&
-                    (struct.structureType !== STRUCTURE_RAMPART ||
-                     !struct.my)) {
-                // Can't walk through non-walkable buildings
-                //Only set if not already
-                if(thisCM.get(struct.pos.x,struct.pos.y) == 0){
-                    thisCM.set(struct.pos.x, struct.pos.y, 0xff);
+            for(let rcl in fief.roomPlan){
+                for(let building in fief.roomPlan[rcl]){
+                    fief.roomPlan[rcl][building].forEach(coordinate => {
+                        if(building == STRUCTURE_ROAD){
+                            //Make roads walkable
+                            thisCM.set(coordinate.x,coordinate.y,1);
+                        }else if(building != STRUCTURE_CONTAINER && building != STRUCTURE_RAMPART){
+                            //Make planned buildings unwalkabe
+                            thisCM.set(coordinate.x,coordinate.y,255)
+                        }
+                    });
                 }
-                
-                }
-            });
+            }
+
+
             if(fief.paths){
                 Object.keys(fief.paths).forEach(path =>{
                     fief.paths[path].forEach(spot=>{
@@ -376,6 +344,7 @@ const fiefManager = {
                     }
                 }
             }
+
             //Set 1 tile higher cost border around sources
             sources.forEach(source =>{
                 let pos = source.pos
@@ -403,8 +372,6 @@ const fiefManager = {
             fief.costMatrix = thisCM.serialize();
         }
         let fiefSources = Object.keys(fief.sources);
-
-        if(restartFlag) return;
 
 
         //SEASONAL MANAGER INSTEAD OF FF
@@ -441,14 +408,14 @@ const fiefManager = {
         //Temporary, likely to be removed or changed
         if(room.controller.level >= 4 && room.storage && room.storage.store[RESOURCE_ENERGY] > 6000 && !fief.ffMobile){
             //Mobile can based on spawn position
-            let ffSpawn = Game.getObjectById(spawns[0]);
+            //let ffSpawn = Game.getObjectById(spawns[0]);
             //console.log(ffSpawn,room.name)
-            let cStuff = room.lookForAt(LOOK_STRUCTURES,ffSpawn.pos.x+9,ffSpawn.pos.y);
+            //let cStuff = room.lookForAt(LOOK_STRUCTURES,ffSpawn.pos.x+9,ffSpawn.pos.y);
             //console.log(cStuff)
-            let ffCan = cStuff.filter(structure => structure.structureType === STRUCTURE_CONTAINER)[0];
+            //let ffCan = cStuff.filter(structure => structure.structureType === STRUCTURE_CONTAINER)[0];
             //console.log(ffCan)
             //FF spots based on can position
-            if(ffCan)fief.ffMobile = {can:ffCan.id,coords:[{x:ffCan.pos.x+1,y:ffCan.pos.y-1,filler:''},{x:ffCan.pos.x,y:ffCan.pos.y+1,filler:''}]};
+            //if(ffCan)fief.ffMobile = {can:ffCan.id,coords:[{x:ffCan.pos.x+1,y:ffCan.pos.y-1,filler:''},{x:ffCan.pos.x,y:ffCan.pos.y+1,filler:''}]};
 
         }
         if(!fief.links){
@@ -495,10 +462,10 @@ const fiefManager = {
         });
         
         //Create road plans if none exist or if we're on starter plan with storage
-        if(storagePos && !fief.paths){
+        if(room.storage && (!fief.paths || !fief.paths.length)){
             fief.paths = {};
             //Probably don't need these but will keep for redundancy
-            Object.keys(fief.sources).forEach(source => {
+            /*Object.keys(fief.sources).forEach(source => {
                 //Get path to each source
                 fief.paths[source] = PathFinder.search(storagePos,{pos:new RoomPosition(fief.sources[source].spotx,fief.sources[source].spoty,room.name),range:1},{
                     plainCost: 10,
@@ -548,13 +515,14 @@ const fiefManager = {
                     
                 });
                 fief.costMatrix = cm.serialize();
-            });
+            });*/
 
             //Create upgrade can path
             let path = PathFinder.search(storagePos,{pos:room.controller.pos,range:1},{
                 plainCost: 10,
                 swampCost: 11,
                 maxOps:6000,
+                maxRooms: 1,
                 roomCallback: function(roomName) {
                     let room = Game.rooms[roomName];
                     //Use our costmatrix because we're staying in the room.
@@ -563,7 +531,7 @@ const fiefManager = {
                     }else{
                         costs = new PathFinder.CostMatrix
                     }
-                    if (room){
+                    /*if (room){
                       room.find(FIND_STRUCTURES).forEach(function(struct) {
                           if (struct.structureType === STRUCTURE_ROAD) {
                             costs.set(struct.pos.x, struct.pos.y, 1);
@@ -576,7 +544,7 @@ const fiefManager = {
                         });
                     }else{
                       return;
-                    }
+                    }*/
                     return costs;
                 },
             }).path;
@@ -601,15 +569,19 @@ const fiefManager = {
             fief.costMatrix = cm.serialize()            
         }
         //Road plans with no storage, starter set - must have spawn
-        /*else if(!fief.paths && spawns.length){
+        else if((!fief.paths || !Object.keys(fief.paths).length) && spawns.length){
+            //console.log("No storage, secondary path creation")
+            fief.paths = {}
             let shortestSource;
             let shortestPath = 99;
             let cm = PathFinder.CostMatrix.deserialize(fief.costMatrix)
             Object.keys(fief.sources).forEach(source => {
-                fief.paths[source] = PathFinder.search(roomPlanner.getStoragePos(room),{pos:new RoomPosition(fief.sources[source].spotx,fief.sources[source].spoty,room.name),range:1},{
+                console.log("Logging source")
+                fief.paths[source] = PathFinder.search(Game.getObjectById(spawns[0]).pos,{pos:new RoomPosition(fief.sources[source].spotx,fief.sources[source].spoty,room.name),range:1},{
                     plainCost: 10,
                     swampCost: 11,
                     maxOps:6000,
+                    maxRooms: 1,
                     roomCallback: function(roomName) {
                       let room = Game.rooms[roomName];
                       let costs;
@@ -620,7 +592,7 @@ const fiefManager = {
                       else{
                         costs = new PathFinder.CostMatrix;
                       }
-                      if (room){
+                      /*if (room){
                         room.find(FIND_STRUCTURES).forEach(function(struct) {
                             if (struct.structureType === STRUCTURE_ROAD) {
                               costs.set(struct.pos.x, struct.pos.y, 1);
@@ -631,7 +603,7 @@ const fiefManager = {
                             costs.set(struct.pos.x, struct.pos.y, 0xff);
                             }
                           });
-                      };
+                      };*/
                       return costs;
                     },
                 }).path;
@@ -656,10 +628,11 @@ const fiefManager = {
             fief.sources.closest = shortestSource;
             //Create upgrade can spot if none exists
             //Get the route from storage to controller
-            let path = PathFinder.search(roomPlanner.getStoragePos(room),{pos:room.controller.pos,range:1},{
+            /*let path = PathFinder.search(roomPlanner.getStoragePos(room),{pos:room.controller.pos,range:1},{
                 plainCost: 10,
                 swampCost: 11,
                 maxOps:6000,
+                maxRooms: 1,
                 roomCallback: function(roomName) {
                   let room = Game.rooms[roomName];
                   let costs;
@@ -700,10 +673,10 @@ const fiefManager = {
                     cm.set(spot.x,spot.y,1)
                 }
                 
-            });
+            });*/
             //Save cost matrix
             fief.costMatrix = cm.serialize()
-        }*/
+        }
         
         // -- Actions --
         // - All Levels - 
@@ -711,26 +684,44 @@ const fiefManager = {
         //Only process if nothing is spawning and nothing is queued
         //Stage2 is when we are fully built in RCL2
         
-        
+        //console.log("Spawn logic: ",fief.sources && fief.sources.length && Object.keys(fief.sources).length && spawns.length && !spawns[0].spawning && !Object.keys(spawnQueue).length && !stage4)
+        //console.log(!fief.sources)
+        //console.log(fief.sources.length)
+        //console.log(spawns.length)
+        //console.log(!spawns[0].spawning)
+        //console.log(!Object.keys(spawnQueue).length)
+        //console.log(!stage4)
         //Spinup operations
-        if(fief.sources && Object.keys(fief.sources).length && spawns.length && !spawns[0].spawning && !Object.keys(spawnQueue).length && !stage4){
+        if(!Object.keys(spawnQueue).length && fief.sources && Object.keys(fief.sources).length && spawns.length && !spawns[0].spawning && !stage4){
             let totalSpawnParts = 0;
             let closeSource;
             let closeDistance = 99
+            let ffCan;
+            if(fief.fastFiller && Object.keys(fief.fastFiller).length){
+                //If ff spawn exists, get the can ID
+                ffCan = Game.getObjectById(fief.fastFiller[Object.keys(fief.fastFiller)[0]]['can']);
+            }
             //Starter memory on sources if needed, also assignments and checks per source
             Object.keys(fief.sources).forEach(key =>{
                 let livingBHarvs = [];
                 let livingBHauls = [];
                 //Set up arrays to track baby haulers and harvesters
                 //If arrays already exist, update them
+                /*console.log("Checking baby")
+                console.log("Source: ",key)
+                console.log(JSON.stringify(fief.sources[key]))
+                console.log(fief.sources[key]['babyHarvs'])
                 if(!fief.sources[key]['babyHarvs']){
+                    console.log("NOPE!")
                     fief.sources[key]['babyHarvs'] = [];
                 }else{
                     livingBHarvs = [];
                     //Check if baby is alive or queued, if so add to living array
                     fief.sources[key]['babyHarvs'].forEach(baby =>{
+                        console.log("Checking baby",baby)
                         if(Game.creeps[baby] || fief.spawnQueue[baby]){
                             livingBHarvs.push(baby);
+                            console.log("Baby alive")
                         }
                     });
                     fief.sources[key]['babyHarvs'] = livingBHarvs;
@@ -748,7 +739,7 @@ const fiefManager = {
                     });
                     fief.sources[key]['babyHauls'] = livingBHauls;
                 }
-
+*/
                 if(closeDistance > fief.paths[key].length){
                     closeDistance = fief.paths[key].length;
                     closeSource = key;
@@ -775,6 +766,7 @@ const fiefManager = {
             //Check haulers first, see if we have enough to match harvesters working on each source. If so, check if we need another harvester.
             let totalHarv = 0;
             let totalHaul = 0;
+
             //Triggers for subsequent spawns
             let closestGood = false;
             let readyUp = false;
@@ -784,16 +776,24 @@ const fiefManager = {
             })
             //Get total harvesting per tick
             //console.log(JSON.stringify(fief.sources[fief.sources.closest]));
-            fief.sources[closeSource].babyHarvs.forEach(boo => {
+            let closeHarvs = 0
+            starterCreeps.forEach(boo => {
+                console.log(boo.memory.role,boo.memory.target)
+                if(boo.memory.job != 'babyHarvest' || boo.memory.target !=  closeSource) return
                 //Pull the work parts based on where it is
+                boo = boo.name
+                console.log("Checking",boo)
+                console.log(Game.creeps[boo])
                 if(Game.creeps[boo]){
                     //console.log("Living creep")
+                    closeHarvs++
                     Game.creeps[boo].body.forEach(part => {
                         totalSpawnParts += 1;
                         if(part.type == WORK) totalHarv += 2;
                     })
                 }else if(spawnQueue[boo]){
                     //console.log("Spawning creep")
+                    closeHarvs++
                     spawnQueue[boo].body.forEach(part => {
                         totalSpawnParts += 1;
                         if(part.type == WORK) totalHarv += 2;
@@ -803,11 +803,15 @@ const fiefManager = {
             //If we're big enough, we'll construct full size harvesters. So just set total harvest to that.
             if(stage2 || roomLevel >=3){
                 if(Game.creeps[fief.sources[closeSource].harvester] || spawnQueue[fief.sources[closeSource].harvester]){
+                    
                     totalHarv = 10;
                 }
             }
             //Get total hauling per tick
-            fief.sources[closeSource].babyHauls.forEach(boo => {
+            
+            starterCreeps.forEach(boo => {
+                if(boo.memory.job != 'babyHaul' || boo.memory.target !=  closeSource) return
+                boo = boo.name
                 //Pull the work parts based on where it is
                 if(Game.creeps[boo]){
                     Game.creeps[boo].body.forEach(part => {
@@ -826,24 +830,26 @@ const fiefManager = {
             let dist = fief.paths[closeSource].length*2;
             //Get how much we can haul per tick
             let perTick = totalHaul/dist;
-
+            console.log("Per tick:",perTick)
+            console.log("Total Haul",totalHaul)
+            console.log("Total Harv",totalHarv)
+            console.log("Downcheck",perTick < Math.min(totalHarv,10))
             //If we're hauling less than we're harvesting per tick, spawn a hauler. Min of total or 10 as sources only do up to 10/tick.
             if(perTick < Math.min(totalHarv,10)){
+                console.log("Spawning")
                 newName = 'Wagon '+helper.getName()+' of House '+room.name;
                 spawnQueue[newName] = {
                     sev:6,body:babyHaulerBody,
                     memory:{role:'starter',job:'babyHaul',target:closeSource,fief:room.name,preflight:false}}
-                fief.sources[closeSource]['babyHauls'].push(newName);
             }
             //If we're good on haulers, see if we need harvesters
             //If we aren't harvesting the max energy, and there's room for another
             //Check for stage2 to skip because we have full harvesters
-            else if(!stage2 && totalHarv < 10 && fief.sources[closeSource].openSpots > fief.sources[closeSource].babyHarvs.length){
+            else if(!stage2 && totalHarv < 10 && fief.sources[closeSource].openSpots > closeHarvs){
                 let newName = 'Peon '+helper.getName()+' of House '+room.name;
                 spawnQueue[newName] = {
                     sev:8,body:babyHarvesterBody,
                     memory:{role:'starter',job:'babyHarvest',fief:room.name,target:closeSource,preflight:false}}
-                fief.sources[closeSource]['babyHarvs'].push(newName);
             }
             //Else set up for a check on the farthest
             else{
@@ -859,14 +865,19 @@ const fiefManager = {
                 totalHarv = 0;
                 totalHaul = 0;
                 //console.log(farSource)
-                fief.sources[farSource].babyHarvs.forEach(boo => {
+                let farHarvs = 0;
+                starterCreeps.forEach(boo => {
+                    if(boo.memory.job != 'babyHarvest' || boo.memory.target ==  closeSource) return
+                    boo = boo.name
                     //Pull the work parts based on where it is
                     if(Game.creeps[boo]){
+                        farHarvs++
                         Game.creeps[boo].body.forEach(part => {
                             totalSpawnParts += 1;
                             if(part.type == WORK) totalHarv += 2;
                         })
                     }else if(spawnQueue[boo]){
+                        farHarvs++
                         spawnQueue[boo].body.forEach(part => {
                             totalSpawnParts += 1;
                             if(part.type == WORK) totalHarv += 2;
@@ -879,7 +890,9 @@ const fiefManager = {
                     }
                 }
                 //Get total hauling per tick
-                fief.sources[farSource].babyHauls.forEach(boo => {
+                starterCreeps.forEach(boo => {
+                    if(boo.memory.job != 'babyHaul' || boo.memory.target ==  closeSource) return
+                    boo = boo.name
                     //Pull the work parts based on where it is
                     if(Game.creeps[boo]){
                         Game.creeps[boo].body.forEach(part => {
@@ -899,21 +912,24 @@ const fiefManager = {
                 //Get how much we can haul per tick
                 perTick = totalHaul/dist;
                 //If we're hauling less than we're harvesting per tick, spawn a hauler. Min of total or 10 as sources only do up to 10/tick.
+                console.log("FAR CHECK")
+                console.log("Per tick:",perTick)
+                console.log("Total Haul",totalHaul)
+                console.log("Total Harv",totalHarv)
+                console.log("Downcheck",perTick < Math.min(totalHarv,10))
                 if(perTick < Math.min(totalHarv,10)){
                     newName = 'Wagon '+helper.getName()+' of House '+room.name;
                     spawnQueue[newName] = {
                         sev:6,body:babyHaulerBody,
                         memory:{role:'starter',job:'babyHaul',target:farSource,fief:room.name,preflight:false}}
-                    fief.sources[farSource]['babyHauls'].push(newName);
                 }
                 //If we're good on haulers, see if we need harvesters
                 //If we aren't harvesting the max energy, and there's room for another
-                else if(!stage2 && totalHarv < 10 && fief.sources[farSource].openSpots > fief.sources[farSource].babyHarvs.length){
+                else if(!stage2 && totalHarv < 10 && fief.sources[farSource].openSpots > farHarvs){
                     let newName = 'Peon '+helper.getName()+' of House '+room.name;
                     spawnQueue[newName] = {
                         sev:8,body:babyHarvesterBody,
                         memory:{role:'starter',job:'babyHarvest',fief:room.name,target:farSource,preflight:false}}
-                    fief.sources[farSource]['babyHarvs'].push(newName);
                 }
                 else{
                     readyUp = true;
@@ -940,7 +956,7 @@ const fiefManager = {
                         liveBuilders.push(up)
                     }
                 });
-                if(liveBuilders.length < possibleBlds && liveBuilders.length < stupidCap){
+                if(liveBuilders.length < possibleBlds && liveBuilders.length < stupidCap && (!ffCan || ffCan.store[RESOURCE_ENERGY] > 1000)){
                     //console.log('UP ',liveUpgraders.length,' Need ',upgradersNeeded)
                     let newName = 'Bricklayer '+helper.getName()+' of House '+room.name;
                     spawnQueue[newName] = {
@@ -959,11 +975,10 @@ const fiefManager = {
             if(readyUp && !spawns[0].spawning && (roomLevel != 2 || stage2)){
                 let possibleUps = (500-totalSpawnParts)/babyUpgraderBody.length;
                 let stupidCap = 8;
-                let ffCan;
-                //if(Object.keys(fief.fastFiller).length){
+                if(fief.fastFiller && Object.keys(fief.fastFiller).length){
                     //If ff spawn exists, get the can ID
-                    //ffCan = Game.getObjectById(fief.fastFiller[Object.keys(fief.fastFiller)[0]]['can']);
-               // }
+                    ffCan = Game.getObjectById(fief.fastFiller[Object.keys(fief.fastFiller)[0]]['can']);
+                }
 
                 if(stage2 || stage3){
                     if(ffCan && ffCan.store[RESOURCE_ENERGY] < 1500){
@@ -1050,21 +1065,6 @@ const fiefManager = {
             let topQM = false;
             if(stage2) bottomQM = true;
             if(stage3) topQM = true;
-            /*Object.keys(fief.fastFiller).forEach(spawn => {
-                fief.fastFiller[spawn].coords.forEach(spot => {
-                    if((spot.y == Game.getObjectById(spawn).pos.y+1 || stage3 || stage4) && !Game.creeps[spot.filler] && !spawnQueue[spot.filler]){
-                        //console.log("QM NEEDED")
-                        let newName = 'Quartermaster '+helper.getName()+' of House '+room.name;
-                        //console.log(JSON.stringify(spot), 'spot')
-                        let spotDirection = Game.getObjectById(spawn).pos.getDirectionTo(spot.x,spot.y)
-                        //console.log('direction ',spotDirection)
-                        spawnQueue[newName] = {
-                            sev:getSev('fastFiller',room.name),body:getBody('fastFiller',room.name,'fastFiller'),
-                            memory:{role:'fastFiller',job:'fastFiller',homeRoom:room.name,preflight:false,can:fief.fastFiller[spawn].can,spawner:spawn},dir:[spotDirection]}
-                        spot.filler = newName;
-                    }
-                });
-            });*/
 
         }
         //Stage 4 - Once storage is set up. Standard room operations.
@@ -1910,7 +1910,7 @@ const fiefManager = {
         }
 
 
-        let ramps = room.find(FIND_STRUCTURES, {
+        /*let ramps = room.find(FIND_STRUCTURES, {
             filter: (structure) => (structure.hits < fief.rampartPlan.outerMin && structure.structureType == STRUCTURE_RAMPART)
         });
         let babyRamps = ramps.filter(structure=> structure.hits <=1000);
@@ -1920,7 +1920,7 @@ const fiefManager = {
                     sev:getSev('homeBuilder',room.name),body:getBody('builder',room.name,'fortBuilder'),
                     memory:{role:'builder',job:'fortBuilder',fief:room.name,homeRoom:room.name,preflight:false}}
                 fief.ramper = newName;
-        }
+        }*/
 
 
         towers = room.find(FIND_MY_STRUCTURES, {
@@ -2086,7 +2086,9 @@ function spawnCreep(spawner,name,plan,exts=[]){
         //console.log(x)
     }
 }
+//#region Spawning
 
+//#endregion
 function getBody(role,roomName,job='default',target='default'){
     let parts;
     let mult;
@@ -2181,7 +2183,7 @@ function getBody(role,roomName,job='default',target='default'){
             }       
             break;
         case 'guard':
-            return [TOUGH,TOUGH,MOVE,MOVE,ATTACK,ATTACK]
+            return [MOVE,MOVE,ATTACK,ATTACK]
         case 'fastFiller':
             let roomLevel = Game.rooms[roomName].controller.level;
             switch(job){

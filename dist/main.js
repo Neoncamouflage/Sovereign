@@ -408,7 +408,7 @@ module.exports.loop = function () {
                         //opacity: 0.4,
                     //})
                     
-                    if(Memory.testRoomPlanReference[weight] && weight == 99) roomVis.structure(x,y,Memory.testRoomPlanReference[weight]);
+                    if(Memory.roomPlanReference[weight] && weight == 99) roomVis.structure(x,y,Memory.roomPlanReference[weight]);
                     //new RoomVisual().text(basePlanCM.get(x,y),x,y+0.25)
                     //new RoomVisual().text(weight,x,y+0.25);
                 }
@@ -433,7 +433,7 @@ module.exports.loop = function () {
                         //opacity: 0.4,
                     //})
                     
-                    if(Memory.testRoomPlanReference[weight] && weight != 99) roomVis.structure(x,y,Memory.testRoomPlanReference[weight]);
+                    if(Memory.roomPlanReference[weight] && weight != 99) roomVis.structure(x,y,Memory.roomPlanReference[weight]);
                     //new RoomVisual().text(basePlanCM.get(x,y),x,y+0.25)
                     //new RoomVisual().text(weight,x,y+0.25);
                 }
