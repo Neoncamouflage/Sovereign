@@ -37,7 +37,7 @@ const kingdomManager = {
             let fiefCreeps = []
             let fiefResults;
             //Make sure fief is live, remove if not
-            if(!Game.rooms[fief]){
+            if(!Game.rooms[fief] || !Game.rooms[fief].controller.my){
                 console.log("Removing dead fief ",fief);
                 delete Memory.kingdom.fiefs[fief];
                 continue;

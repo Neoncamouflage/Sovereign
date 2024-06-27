@@ -58,7 +58,7 @@ const fiefManager = {
                 let openSpots = area.filter(spot => spot.terrain !== 'wall');
                 if(openSpots.length > 0){
                     //If we don't have a spawn, just assign whatever
-                    if(!spawns.length){
+                    if(!spawns ||!spawns.length){
                         let harvestSpot = openSpots[0];
                         fief.sources[source.id] = {spotx:harvestSpot.x,spoty:harvestSpot.y,can:'',harvester:'',hauler:''};
                     }
@@ -80,7 +80,7 @@ const fiefManager = {
         }
 
         //If no spawns in the room, check for settlers and request from our support room if needed
-        if(!spawns.length){
+        if(!spawns || !spawns.length){
             //Sanity check for a support room
             if(!fief.support){
                 console.log(room.name,'has no supporting fief to provide settlers');
@@ -427,10 +427,6 @@ const fiefManager = {
         if(room.controller.level == 8 && fief.ffMobile && spawns.length >= 2){
             delete fief.ffMobile
         }
-        
-        
-        //Create last roomcheck if none exists
-        if(!room.memory.lastCheck) room.memory.lastCheck = Game.time;
 
         //Track spawn uptime
         //console.log(JSON.stringify(fief.spawnUptime))
