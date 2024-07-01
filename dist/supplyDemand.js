@@ -1,3 +1,5 @@
+const helper = require('functions.helper');
+
 const supplyDemand = {
     prepShipping: function(roomName){
         if (!global.heap) global.heap = {};
@@ -13,6 +15,7 @@ const supplyDemand = {
         //Run prepShipping for the room to ensure we're set up
         this.prepShipping(roomName);
         let room = Game.rooms[roomName];
+        let fief = Memory.kingdom.fiefs[roomName]
         let terminal = room.terminal;
         let storage = room.storage;
         let poolHaulers = fiefCreeps;
@@ -96,7 +99,7 @@ const supplyDemand = {
         };
 
         //Handle in-room haulers, get idle count in return
-        if(poolHaulers.length){
+        if(poolHaulers && poolHaulers.length){
             let idleCount = this.runHaulers(room,poolHaulers);
             global.heap.shipping[roomName].utilization.unshift(idleCount/poolHaulers)
 
@@ -111,7 +114,7 @@ const supplyDemand = {
         let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[roomName].utilization.length
         if(utilization > MAX_UTILIZATION){
             let newName = 'Porter '+helper.getName()+' of House '+room.name;
-            room.spawnQueue[newName] = {memory:{role:'hauler',fief:room.name,preflight:false}}
+            fief.spawnQueue[newName] = {memory:{role:'hauler',fief:room.name,preflight:false}}
         }
     },
     addRequest: function(room,details){

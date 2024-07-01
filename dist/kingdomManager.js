@@ -31,7 +31,7 @@ const kingdomManager = {
         //Assign creeps to their fiefs and sort by role
         fiefCreeps = {}
         for(let creepName in Game.creeps){
-            let creep = creepName;
+            let creep = Game.creeps[creepName];
             let fief = creep.memory.fief;
             let role = creep.memory.role
             if (!fiefCreeps[fief]) {
@@ -52,6 +52,7 @@ const kingdomManager = {
         for(const fief in Memory.kingdom.fiefs){
             //Assignments
             let fiefResults;
+            if(!fiefCreeps[fief]) fiefCreeps[fief] = [];
             //Make sure fief is live, remove if not
             if(!Game.rooms[fief] || !Game.rooms[fief].controller.my){
                 console.log("Removing dead fief ",fief);
@@ -78,12 +79,12 @@ const kingdomManager = {
             if(!Game.creeps[settler] &&)
         }*/
 
-        runRoles(kingdomCreeps);
+        //runRoles(kingdomCreeps);
         
 
         //Run status manager to draw room visuals
         //Must be last thing run in kingdom for accurate details
-        if(Memory.statusVisuals)statusManager.run(kingdomStatus);
+        //if(Memory.statusVisuals)statusManager.run(kingdomStatus);
     }
 }
 

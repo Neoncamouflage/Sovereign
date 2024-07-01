@@ -165,7 +165,7 @@ const fiefManager = {
 
             //Swamp road check
             
-            if((stage3 || stage4) && fief.paths){
+            if(false && (stage3 || stage4) && fief.paths){
                 Object.keys(fief.paths).forEach(path => {
                     if(path != 'closest'){
                         Object.keys(fief.paths[path]).forEach(spot => {
@@ -222,9 +222,7 @@ const fiefManager = {
         }
         //console.log("To fiefcreep check")
         //Check all room creeps and add starters to the array for later
-        for(myCreep of fiefCreeps){
-            if(myCreep.memory.role == 'starter') starterCreeps.push(myCreep);
-        }
+        if(fiefCreeps.starter) starterCreeps = fiefCreeps.starter
         
         //Create room plan, spawns, and spawn queue if none exists, then return
         //
@@ -385,7 +383,7 @@ const fiefManager = {
 
 
         //Stage 4 - Once storage is set up. Standard room operations.
-        if(stage4 && (room.storage.store[RESOURCE_ENERGY] > 5000 || room.energyAvailable < 500)){
+        if(room.storage && room.storage.store[RESOURCE_ENERGY] > 5000 || room.energyAvailable < 500){
 
             roadReady = true;
             // - Refiller Check -
@@ -1197,11 +1195,13 @@ const fiefManager = {
         if(room.storage){
             storageLevel = room.storage.store.getUsedCapacity();
         }
+        let totalCreeps = 0;
+        if(fiefCreeps && fiefCreeps.length) totalCreeps = fiefCreeps.length;
         return {
             roomLevel:roomLevel,
             cSites: cSites.length,
             wares: totalWares(room),
-            totalCreeps: fiefCreeps.length,
+            totalCreeps: totalCreeps,
             fiefCreeps: fiefCreeps,
             hostileCreeps: roomBaddies,
             controllerProgress: room.controller.progress,

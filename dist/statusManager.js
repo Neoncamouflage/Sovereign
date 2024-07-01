@@ -153,7 +153,7 @@ const statusManager = {
             let tradeFlagLength = 0
 
             //Get trade flag content
-            let fiefShipping = global.heap.shipping[fief];
+            let fiefShipping = global.heap.shipping[fief].requests;
             //Text array
             let tradeText = []
             let tradeVis = [];

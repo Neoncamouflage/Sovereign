@@ -1,6 +1,7 @@
 const registry = {
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room){
+        console.log("Calculating spawns. Tickmod:",Game.time % 3)
         let fief = Memory.kingdom.fiefs[room.name]
         let spawnQueue = fief.spawnQueue;
         let spawns = fief.spawns.map(spawn => Game.getObjectById(spawn))
@@ -15,26 +16,39 @@ const registry = {
         for(let i = 0; i < sortedQueue.length; i++){
             let each = sortedQueue[i];
             //If there's a body requested, use it. Otherwise, calculate based on creep role.
-            let body = spawnQueue[each].body || getBody(spawnQueue[each].memory.role,room)
-
-            let cost = 0;
-            for(every of body){
-                cost += BODYPART_COST[every];
+            console.log("SPAWNING",spawnQueue[each].memory.role,(spawnQueue[each].memory.job || 'default'))
+            let body;
+            let cost;
+            
+            if(spawnQueue[each].body){
+                body = spawnQueue[each].body
+                cost = 0;
+                for(every of body){
+                    cost += BODYPART_COST[every];
+                }
             }
-    
+            else{
+                [body,cost] = getBody(spawnQueue[each].memory.role,room,(spawnQueue[each].memory.job || 'default'))
+            }
+            
+            
+            spawnQueue[each]['body'] = body
             //Check if spawn has energy
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
-                spawnCreep(nextSpawn,each,sortedQueue[each])
+                this.spawnCreep(nextSpawn,each,spawnQueue[each])
                 sortedQueue.splice(i,1);
                 i--;
                 delete sortedQueue[each];
             }
         }
+        fief.spawnQueue = {};
 
     },
     //Spawns a creep
     spawnCreep: function(spawner,name,plan){
+        console.log("Spawn function")
+        console.log(`Spawner: ${spawner}, Name: ${name}, Plan: ${plan}`)
         let spawnDir = plan.dir;
         let switchDir = plan.dir;
         //console.log("Spawning with "+switchDir);
@@ -130,7 +144,7 @@ function getBody(role,room,job='default',target='default'){
                         partsCost += BODYPART_COST[each];
                     }
                     //Add work/move cost
-                    let engAvail = Game.rooms[roomName].energyCapacityAvailable
+                    let engAvail = room.energyCapacityAvailable
                     mult = Math.floor(engAvail/partsCost)
                     //Max number of arrays so we don't pass 50 parts
                     let arrMax = Math.floor(50/parts.length)
@@ -140,12 +154,6 @@ function getBody(role,room,job='default',target='default'){
                     return newBod;
                 case 'energyHarvester':
                     return getEHarvester(room)
-                default:
-                    switch(roomName){
-                        default:
-                            return [MOVE,WORK,WORK,WORK,WORK,WORK];
-                    }       
-                    break;
             }
             break;
         case 'remoteDefender':
@@ -316,74 +324,7 @@ function getBody(role,room,job='default',target='default'){
             }
             break;
         case 'hauler':
-            switch(job){
-                case 'canHauler':
-                    parts = [MOVE,CARRY,CARRY];
-                    let partsCost = 0;
-                    for(each of parts){
-                        partsCost += BODYPART_COST[each];
-                    }
-                    //Get available room energy
-                    let engAvail = Game.rooms[roomName].energyCapacityAvailable;
-                    //Get the size needed for the trip
-                    let canDist= Game.rooms[roomName].storage.pos.getRangeTo(new RoomPosition(Memory.kingdom.fiefs[roomName].sources[target]['spotx'],Memory.kingdom.fiefs[roomName].sources[target]['spoty'],roomName))*2;
-                    //Add 2 for pickup/dropoff ticks, plus 5 for small buffer                 
-                    canDist +=7;                    
-                    //console.log(canDist)
-                    let energyNeeded = canDist*10
-                    let sizeMult = Math.ceil(energyNeeded/100)
-                    mult = Math.floor(engAvail/partsCost)
-                    //console.log(sizeMult)
-                    newBod = [].concat(...Array(Math.min(mult, sizeMult)).fill(parts));
-                    //console.log(newBod)
-                    return newBod;
-                    break;
-                case 'mineralHauler':
-                    let parts2 = [MOVE,CARRY,CARRY];
-                    let partsCost2 = 0;
-                    for(each of parts2){
-                        partsCost2 += BODYPART_COST[each];
-                    }
-                    //Get available room energy
-                    let engAvail2 = Game.rooms[roomName].energyCapacityAvailable;
-                    //Get the size needed for the trip
-                    let canDist2= Game.rooms[roomName].storage.pos.getRangeTo(new RoomPosition(Memory.kingdom.fiefs[roomName].mineral.spot.x,Memory.kingdom.fiefs[roomName].mineral.spot.y,roomName))*2;
-                    //Add 2 for pickup/dropoff ticks, plus 5 for small buffer                 
-                    canDist2 +=7;                    
-                    //console.log(canDist)
-                    let energyNeeded2 = canDist2*10
-                    let sizeMult2 = Math.ceil(energyNeeded2/100)
-                    let mult2 = Math.floor(engAvail2/partsCost2)
-                    //console.log(sizeMult)
-                    newBod = [].concat(...Array(Math.min(mult2, sizeMult2)).fill(parts2));
-                    //console.log(newBod)
-                    return newBod;
-                case 'refiller':
-                    parts = [MOVE,CARRY,CARRY];
-                    let total = parts.length*50;
-                    let cap = Math.max(Game.rooms[roomName].energyAvailable, 1800);
-                    mult = Math.floor(Game.rooms[roomName].energyAvailable/total);
-                    newBod = [].concat(...Array(mult).fill(parts));
-                    if(newBod.length > 50){
-                        newBod.splice(50);
-                    }
-                    return newBod
-                    /*switch(roomName){
-                        case 'W29N25':
-                            return [MOVE,CARRY,CARRY,MOVE,CARRY,CARRY,MOVE,CARRY,CARRY,MOVE,CARRY,CARRY];
-                            break;
-                        case 'W28N25':
-                            return [MOVE,CARRY,CARRY];
-                            break;
-                        case 'W46N42':
-                            return [MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY];
-                            break;
-                        default:
-                            return [MOVE,CARRY,MOVE,CARRY,MOVE,CARRY];
-                    }*/ 
-                    break;
-            }
-            break;
+            return getHauler(room);
         case 'builder':
             switch(job){
                 case 'homeBuilder':
@@ -432,7 +373,7 @@ function getBody(role,room,job='default',target='default'){
 //#region Creep Body Functions
 
 
-
+//Energy harvester - Serf
 function getEHarvester(room){
     let newBody = [MOVE];
     let partsCost = 0
@@ -452,6 +393,24 @@ function getEHarvester(room){
     }
 
     return [newBody,partsCost];
+}
+
+//General hauler - Porter
+function getHauler(room){
+    let parts = [MOVE, CARRY, CARRY];
+    let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+    let energyAvailable = room.energyAvailable;
+    let cap = Math.min(1800, energyAvailable);
+    let maxParts = Math.floor(cap / setCost);
+    let newBody = [];
+    let totalCost = setCost;
+    //Add parts til we hit part or energy cap
+    for (let i = 0; i < maxParts && newBody.length + parts.length <= 50; i++) {
+        newBody.push(...parts);
+        totalCost += setCost;
+    }
+    
+    return [newBody,totalCost];
 }
 
 //#endregion
