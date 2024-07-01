@@ -123,13 +123,15 @@ module.exports.loop = function () {
         //Segment 1 is for room plans
         RawMemory.setActiveSegments([0,1])
         //Global heap
-        global.heap = {};
+        global.heap = {granary:{}};
     }
     //If no reset, do stuff with segments
     else{
+        let roomData = RawMemory.segments[1]
+        if(roomData == "")  RawMemory.segments[1] = "{}"
         if(!global.heap.scoutData){
             let scoutData = RawMemory.segments[0];
-            if(scoutData != ""){
+            if(scoutData == ""){
                 global.heap.scoutData = {}
             }
             else{
@@ -201,7 +203,6 @@ module.exports.loop = function () {
         let keepRooms = [
             ...Object.keys(Memory.kingdom.fiefs),
             ...Object.keys(Memory.kingdom.holdings),
-            ...Object.keys(Memory.kingdom.settlements)
         ];
         let deadRooms = [];
         for(var name in Memory.rooms) {
@@ -455,7 +456,7 @@ module.exports.loop = function () {
 
         if (Game.cpu.bucket == 10000) {
             Game.cpu.generatePixel()
-            console.log("<font color='green'>", Game.shard.name, ": generated pixel.</font>")
+            console.log("<font color='green'>", Game.shard.name, "generated pixel.</font>")
         }
     });
 }

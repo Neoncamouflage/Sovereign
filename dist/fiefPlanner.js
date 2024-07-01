@@ -67,7 +67,7 @@ const fiefPlanner = {
     //Runs scoring on all plans
     //Returns CM and object for best plan
     //Stores rejected plans in heap
-    getFiefPlan: function(roomName,totalPop = 10, maxIterations=50,mutationRate=0.01){
+    getFiefPlan: function(roomName,totalPop = 20, maxIterations=10,mutationRate=0.01){
         // 2.3,0.69,2.28,1.91,2.74,0.44,2.5,2.84,0.46,0.37,1.88,2.45
         //Set up weight minimums and maximums for the genetic algorithm
         let geneLimits = [

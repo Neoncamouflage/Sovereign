@@ -119,7 +119,7 @@ var roleStarters = {
                     if(creep.pos.getRangeTo(spawn) < 4){
                         let mo = creep.pos.getDirectionTo(spawn);
                         let avoid;
-                        console.log(mo)
+                        //console.log(mo)
                         
                         switch(mo){
                             case TOP:

@@ -2,7 +2,11 @@ const supplyDemand = {
     prepShipping: function(roomName){
         if (!global.heap) global.heap = {};
         if (!global.heap.shipping) global.heap.shipping = {};
-        if (!global.heap.shipping[roomName]) global.heap.shipping[roomName] = [];
+        if (!global.heap.shipping[roomName]){
+            global.heap.shipping[roomName] = {};
+            global.heap.shipping[roomName].requests = [];
+            global.heap.shipping[roomName].utilization = [];
+        }
     },
     manageShipping: function(roomName,fiefCreeps){
         //Primary management function for a room to handle all supply/demand tasks
@@ -11,7 +15,7 @@ const supplyDemand = {
         let room = Game.rooms[roomName];
         let terminal = room.terminal;
         let storage = room.storage;
-        let poolHaulers = fiefCreeps.filter(creep => creep.memory.role == 'hauler')
+        let poolHaulers = fiefCreeps;
         //No nuker because it takes so much energy. Only fill upon explicit request
         let fillStructures = [
             STRUCTURE_SPAWN,
@@ -20,6 +24,7 @@ const supplyDemand = {
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_TOWER
         ]
+        const MAX_UTILIZATION = 0.8;
 
         //global.heap.shipping[roomName].forEach(task =>{
             //console.log(JSON.stringify(task));
@@ -90,15 +95,31 @@ const supplyDemand = {
 
         };
 
-        //Handle in-room haulers
-        this.runHaulers(room,poolHaulers);
+        //Handle in-room haulers, get idle count in return
+        if(poolHaulers.length){
+            let idleCount = this.runHaulers(room,poolHaulers);
+            global.heap.shipping[roomName].utilization.unshift(idleCount/poolHaulers)
+
+            //If utilization is past our tracking length, trim
+            if(global.heap.shipping[roomName].utilization.length > 50) global.heap.shipping[roomName].utilization.length = 50;
+        }
+        //If no haulers, utilization is set to max by default
+        else{
+            global.heap.shipping[roomName].utilization.unshift(1)
+        }
+        //Calculate utilization and request more haulers if needed
+        let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[roomName].utilization.length
+        if(utilization > MAX_UTILIZATION){
+            let newName = 'Porter '+helper.getName()+' of House '+room.name;
+            room.spawnQueue[newName] = {memory:{role:'hauler',fief:room.name,preflight:false}}
+        }
     },
     addRequest: function(room,details){
         supplyDemand.prepShipping(room.name);
         //Adds a request to the room's shipping tasks
         //Details is an object containing task data
         const DEFAULT_PRIORITY = 5;
-        let shippingTasks = global.heap.shipping[room.name];
+        let shippingTasks = global.heap.shipping[room.name].requests;
         let taskID = generateID();
 
         if(!(room instanceof Room)){
@@ -122,7 +143,7 @@ const supplyDemand = {
         }
         if(!details.resourceType) details.resourceType = RESOURCE_ENERGY
         //Check for an existing task for this target and type, return error if already there
-        let existingTaskIndex = global.heap.shipping[room.name].findIndex(task =>
+        let existingTaskIndex = global.heap.shipping[room.name].requests.findIndex(task =>
             task.targetID === details.targetID && task.type === details.type && task.resourceType === details.resourceType);
         if (existingTaskIndex !== -1){
             //console.log("ERR_EXISTING_TASK")
@@ -141,7 +162,7 @@ const supplyDemand = {
     },
     removeTask: function(room,taskID){
         //Removes a request from the room's shipping tasks
-        let shippingTasks = global.heap.shipping[room.name];
+        let shippingTasks = global.heap.shipping[room.name].requests;
         const index = shippingTasks.findIndex(t => t.id === taskID);
 
         if (index !== -1) {
@@ -151,7 +172,7 @@ const supplyDemand = {
     assignTask: function(creep,room){
         //Assigns a request to a creep based on capacity
         //Returns 0 if a task is found or -1 if not
-        let shippingTasks = global.heap.shipping[room.name];
+        let shippingTasks = global.heap.shipping[room.name].requests;
         let terminal = room.terminal;
         let storage = room.storage;
     
@@ -243,6 +264,7 @@ const supplyDemand = {
         const DROPOFF = 'dropoff';
         const RENEW = 'renew';
         const STATES = [IDLE,PICKUP,DROPOFF,RENEW];
+        const isIdle = 0;
 
         haulers.forEach(creep => {
             let state = creep.memory.state;
@@ -401,9 +423,9 @@ const supplyDemand = {
                 //Dunno what this will do yet
             }
             
-
+            if(state==IDLE) isIdle++;
         });
-
+        return isIdle;
     }
 };
 
