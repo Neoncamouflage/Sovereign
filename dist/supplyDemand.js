@@ -193,7 +193,7 @@ const supplyDemand = {
                 //Get closest task since we're dumping existing inventory
                 let closestTask = null;
                 let shortestRange = Infinity; // Start with a very high number
-
+        
                 matchingTasks.forEach(task => {
                     // Assuming task.targetID is the ID of the target structure
                     let target = Game.getObjectById(task.targetID);
@@ -205,10 +205,13 @@ const supplyDemand = {
                         }
                     }
                 });
+                if(closestTask == null){
+                    console.log("ERROR - Closest task is null! Matching tasks:",JSON.stringify(matchingTasks))
+                }
                 //Assign closest task
                 creep.memory.task = { ...closestTask};
                 assigned = true;
-    
+                
                 // Adjust the task amount or remove it if fully handled
                 let closestTaskIndex = shippingTasks.indexOf(closestTask);
                 if (closestTask.amount <= creep.store[carriedResourceType]) {

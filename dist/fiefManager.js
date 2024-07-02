@@ -17,6 +17,9 @@ const fiefManager = {
         let factory = room.find(FIND_MY_STRUCTURES,{filter:{structureType:STRUCTURE_FACTORY}})[0];
         let fiefHeap = global.heap[room.name];
         if(!fief.builders)fief.builders = [];
+        if(!fief.rclTimes){
+            fief.rclTimes = {tick:Game.time};
+        }
         if(!fief.upgraders)fief.upgraders = [];
         //Check if mineral data set up at all. If not, create and assign mineral
         if(!fief.mineral) fief.mineral = {id:room.find(FIND_MINERALS)[0].id}
@@ -24,7 +27,7 @@ const fiefManager = {
         let roomBaddies = room.find(FIND_HOSTILE_CREEPS);
         let spawnQueue = fief.spawnQueue;
         let roomLevel = room.controller.level;
-
+        if(!fief.rclTimes[roomLevel]) fief.rclTimes[roomLevel] = Game.time - fief.rclTimes.tick
         let spawns = fief.spawns;
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let starterCreeps = []
@@ -415,10 +418,8 @@ const fiefManager = {
             }
             //Pre storage logic
             else{
-                //If no upgraders, no cSites, and we're below a default cap
+                //If no upgraders(who are also builders at this stage), and we're below a default cap
                 if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length <MAX_STARTERS){
-                    //Make sure no cSites
-                    if(cSites.length) return;
                     //Make sure the spawn is nearly full
                     if(Game.getObjectById(spawns[0]).store[RESOURCE_ENERGY] < 250) return;
                     //Make sure we're good on energy

@@ -52,6 +52,24 @@ if (!Creep.prototype._build) {
     }
 }
 
+if (!Creep.prototype._upgradeController) {
+    //Store the original method
+    Creep.prototype._upgradeController = Creep.prototype.upgradeController;
+
+    //Create our new function
+    Creep.prototype.upgradeController = function(target) {
+        //Store whatever is lower, progress left to build or our build cost
+        let tEnergy = this.getActiveBodyparts(WORK) * UPGRADE_CONTROLLER_POWER
+        tEnergy = tEnergy*-1
+        //Call the actual harvest
+        let upCall = this._upgradeController(target);
+        //If success, register the expense
+        if(upCall == OK) granary.adjustIncome(this,tEnergy)
+
+        return upCall
+    }
+}
+
 
 
 
