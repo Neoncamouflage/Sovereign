@@ -1,95 +1,62 @@
+const helper = require('functions.helper');
+
 const registry = {
+    //Associates roles to names
+    nameRef: {
+        'hauler':'Porter',
+        'harvester':'Serf',
+        'upgrader':'Scribe'
+    },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room){
-        console.log("Calculating spawns. Tickmod:",Game.time % 3)
+        //console.log("Calculating spawns. Tickmod:",Game.time % 3)
         let fief = Memory.kingdom.fiefs[room.name]
-        let spawnQueue = fief.spawnQueue;
+        let spawnQueue = global.heap.registry[room.name] || []
         let spawns = fief.spawns.map(spawn => Game.getObjectById(spawn))
         let freeSpawns = [];
+        if(!spawnQueue.length) return;
         for(each of spawns){
             if(!each.spawning) freeSpawns.push(each);
         }
+        console.log("Queue",JSON.stringify(spawnQueue))
         //Sort the queue's keys based on severity
-        sortedQueue = Object.keys(spawnQueue).sort((a, b) => spawnQueue[b].sev - spawnQueue[a].sev);
+        spawnQueue.sort((a, b) => b.sev - a.sev);
         
         //Loop through the keys and calculate if we can spawn
-        for(let i = 0; i < sortedQueue.length; i++){
-            let each = sortedQueue[i];
+        for(let i = 0; i < spawnQueue.length; i++){
+            let newCreep = spawnQueue[i];
             //If there's a body requested, use it. Otherwise, calculate based on creep role.
-            console.log("SPAWNING",spawnQueue[each].memory.role,(spawnQueue[each].memory.job || 'default'))
             let body;
             let cost;
             
-            if(spawnQueue[each].body){
-                body = spawnQueue[each].body
+            if(newCreep.body){
                 cost = 0;
-                for(every of body){
-                    cost += BODYPART_COST[every];
+                for(let part of newCreep.body){
+                    cost += BODYPART_COST[part];
                 }
             }
             else{
-                [body,cost] = getBody(spawnQueue[each].memory.role,room,(spawnQueue[each].memory.job || 'default'))
+                [body,cost] = getBody(newCreep.memory.role,room,(newCreep.memory.job || 'default'))
+                newCreep.body = body
             }
             
             
-            spawnQueue[each]['body'] = body
+            
             //Check if spawn has energy
+            console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
-                this.spawnCreep(nextSpawn,each,spawnQueue[each])
-                sortedQueue.splice(i,1);
-                i--;
-                delete sortedQueue[each];
+                let newName = this.nameRef[newCreep.memory.role]+helper.getName()+' of House '+room.ame;
+                this.spawnCreep(nextSpawn,newName,newCreep)
             }
         }
-        fief.spawnQueue = {};
-
+        global.heap.registry[room.name] = [];
     },
     //Spawns a creep
     spawnCreep: function(spawner,name,plan){
-        console.log("Spawn function")
-        console.log(`Spawner: ${spawner}, Name: ${name}, Plan: ${plan}`)
-        let spawnDir = plan.dir;
-        let switchDir = plan.dir;
-        //console.log("Spawning with "+switchDir);
-        switch(switchDir){
-            case 'TOP_LEFT':
-                spawnDir = [TOP_LEFT];
-                //console.log("TOP_LEFT SPAWN DIR");
-                break;
-            case 'TOP_RIGHT':
-                spawnDir = [TOP_RIGHT];
-                //console.log("TOP_RIGHT SPAWN DIR");
-                break;
-            case 'BOTTOM':
-                spawnDir = [BOTTOM];
-                //console.log("BOTTOM SPAWN DIR");
-                break;
-            case 'BOTTOM_LEFT':
-                spawnDir = [BOTTOM_LEFT];
-                break;
-            case 'LEFT':
-                spawnDir = [LEFT];
-                break;
-            case 'TOP':
-                spawnDir = [TOP];
-                break;
-            case 'RIGHT':
-                spawnDir = [RIGHT];
-                break;
-            case 'BOTTOM_RIGHT':
-                spawnDir = [BOTTOM_RIGHT];
-                break;
-            default:
-                [LEFT,RIGHT,TOP,BOTTOM,TOP_LEFT,TOP_RIGHT,BOTTOM_LEFT,BOTTOM_RIGHT];
-                
-        }
-        //console.log(spawnDir)
-        //console.log(JSON.stringify(plan))
+        //console.log("Spawn function")
+        //console.log(`Spawner: ${spawner}, Name: ${name}, Plan: ${plan}`)
         if(spawner != null && spawner != undefined){
-            //console.log(spawner)
-            //console.log(exts)
-            //Fat creeps get a marker to help Traveler
             let movePart = 0;
             let nonMove = 0;
             plan.body.forEach(part=>{
@@ -101,11 +68,11 @@ const registry = {
                 }
             });
             //Only mark them fat if they're road fat
-            if(nonMove>movePart*2){
+            if(nonMove > movePart*2){
                 plan.memory['fat'] = true;
             }
             try{
-                var x = spawner.spawnCreep(plan.body, name,{memory:plan.memory,directions:spawnDir});
+                var x = spawner.spawnCreep(plan.body,name,{memory:plan.memory});
                 console.log("Spawn result",x)
             }
             catch(e){
@@ -121,6 +88,15 @@ const registry = {
             //console.log(name+'\n'+)
             //console.log(x)
         }
+    },
+    requestCreep: function(plan){
+        let roomName = plan.memory.fief;
+        if(roomName == undefined){
+            console.log("Fief missing while trying to spawn",plan.memory.role);
+            return
+        }
+        global.heap.registry[roomName] = global.heap.registry[roomName] || [];
+        global.heap.registry[roomName].push(plan);
     }
 }
         
@@ -269,30 +245,6 @@ function getBody(role,room,job='default',target='default'){
                     }       
                     break;
             }
-        case 'upgrader':
-            parts = [MOVE,CARRY,WORK,WORK,WORK,WORK,WORK];
-            let partsCost = 0;
-            for(each of parts){
-                partsCost += BODYPART_COST[each];
-            }
-            let engAvail = Game.rooms[roomName].energyCapacityAvailable
-            mult = Math.floor(engAvail/partsCost)
-            //console.log(mult)
-            newBod = [].concat(...Array(Math.min(mult,6)).fill(parts));
-            //If mult is 2 or more, stuff however many more work parts we can
-            if(mult >= 2){
-                //Get the total cost of the body
-                let totalCost = 0;
-                newBod.forEach(b => {
-                    totalCost += BODYPART_COST[b];
-                });
-                //Get how many work parts we can fit in the difference
-                let gapParts = Math.floor((engAvail-totalCost)/100);
-                newBod = newBod.concat(Array(Math.min(gapParts,50-newBod.length)).fill(WORK));
-            }
-
-            //console.log("BODLENGTH",newBod.length)
-            return newBod;
         case 'miner':
             switch(roomName){
                 case 'W39N46':
@@ -325,6 +277,8 @@ function getBody(role,room,job='default',target='default'){
             break;
         case 'hauler':
             return getHauler(room);
+        case 'upgrader':
+            return getUpgrader(room)
         case 'builder':
             switch(job){
                 case 'homeBuilder':
@@ -397,20 +351,49 @@ function getEHarvester(room){
 
 //General hauler - Porter
 function getHauler(room){
-    let parts = [MOVE, CARRY, CARRY];
+    //console.log("Firing Hauler")
+    let parts = room.controller.level > 2 ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let energyAvailable = room.energyAvailable;
     let cap = Math.min(1800, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];
-    let totalCost = setCost;
+    let totalCost = 0;
+    console.log(`Max parts: ${maxParts}, energyAvailable: ${energyAvailable}, setCost: ${setCost}, cap: ${cap}`)
+    newBody.push(...parts);
+    totalCost += setCost;
     //Add parts til we hit part or energy cap
-    for (let i = 0; i < maxParts && newBody.length + parts.length <= 50; i++) {
+    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
-    
+    //console.log("Hauler body",newBody)
     return [newBody,totalCost];
 }
 
+//Starter upgrader - Scribe
+function getUpgrader(room){
+    let parts = [MOVE,CARRY,WORK];
+    let partsCost = 0;
+    for(each of parts){
+        partsCost += BODYPART_COST[each];
+    }
+    let engAvail = Game.rooms[room.name].energyCapacityAvailable
+    let mult = Math.floor(engAvail/partsCost)
+    //console.log(mult)
+    let newBod = [].concat(...Array(Math.min(mult,6)).fill(parts));
+    //If mult is 2 or more, stuff however many more work parts we can
+    //Get the total cost of the body
+    let totalCost = 0;
+    newBod.forEach(b => {
+        totalCost += BODYPART_COST[b];
+    });
+    if(mult >= 2){
+        //Get how many work parts we can fit in the difference
+        let gapParts = Math.floor((engAvail-totalCost)/100);
+        newBod = newBod.concat(Array(Math.min(gapParts,50-newBod.length)).fill(WORK));
+        totalCost += gapParts*BODYPART_COST[WORK];
+    }
+    return [newBod,totalCost]
+}
 //#endregion

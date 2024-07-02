@@ -7,6 +7,7 @@ const profiler = require('screeps-profiler');
 const missionManager = require('missionManager');
 const supplyDemand = require('supplyDemand');
 const granary = require('granary');
+const registry = require('registry');
 const fiefManager = {
     run:function(room,fiefCreeps){
         let cpuStart = Game.cpu.getUsed();
@@ -31,7 +32,7 @@ const fiefManager = {
         let roadReady = false;
         let swampNeed = false;
         fief.spawns = mySpawns
-
+        let [plannedNet,averageNet] = granary.getIncome(room.name);
         //Create harvest spot if none exists
         if(!fief.sources || !Object.keys(fief.sources).length){
             console.log("NO SOURCES")
@@ -53,7 +54,7 @@ const fiefManager = {
                         });
                         let spawnPos = new RoomPosition(fief.roomPlan[1].spawn[0].x,fief.roomPlan[1].spawn[0].y,room.name);
                         let harvestSpot = spawnPos.findClosestByPath(openPositions);
-                        fief.sources[source.id] = {spotx:harvestSpot.x,spoty:harvestSpot.y,can:'',harvesters:[]};
+                        fief.sources[source.id] = {spotx:harvestSpot.x,spoty:harvestSpot.y,can:''};
                     }
                     //Else get the closest to spawn
                     else{
@@ -64,12 +65,30 @@ const fiefManager = {
                         });
                         let mySpawn = Game.getObjectById(spawns[0]);
                         let harvestSpot = mySpawn.pos.findClosestByPath(openPositions);
-                        fief.sources[source.id] = {spotx:harvestSpot.x,spoty:harvestSpot.y,can:'',harvesters:[]};
+                        fief.sources[source.id] = {spotx:harvestSpot.x,spoty:harvestSpot.y,can:''};
                     }
                     //Record total open spots for baby harvs
                     fief.sources[source.id].openSpots = openSpots.length;
                 }
-            })
+            });
+            //Set closest source
+            let sourceIDs = Object.keys(fief.sources);
+            if(sourceIDs.length == 1) fief.sources[sourceIDs[0]].closest = true;
+            else{
+                let rangeStart;
+                if((!spawns || !spawns.length) && fief.roomPlan){
+                    rangeStart = new RoomPosition(fief.roomPlan[1].spawn[0].x,fief.roomPlan[1].spawn[0].y,room.name)
+                }
+                else{
+                    rangeStart = Game.getObjectById(spawns[0]).pos;
+                }
+                if(rangeStart.getRangeTo(Game.getObjectById(sourceIDs[0])) > rangeStart.getRangeTo(Game.getObjectById(sourceIDs[1]))){
+                    fief.sources[sourceIDs[1]].closest = true;
+                }
+                else{
+                    fief.sources[sourceIDs[0]].closest = false;
+                }
+            }
         }
 
         //If no spawns in the room, check for settlers and request from our support room if needed
@@ -220,9 +239,6 @@ const fiefManager = {
             
             
         }
-        //console.log("To fiefcreep check")
-        //Check all room creeps and add starters to the array for later
-        if(fiefCreeps.starter) starterCreeps = fiefCreeps.starter
         
         //Create room plan, spawns, and spawn queue if none exists, then return
         //
@@ -244,10 +260,6 @@ const fiefManager = {
 
 
         
-        if(!fief.spawnQueue) {
-            fief.spawnQueue = {};
-            restartFlag = true;
-        }
         if(!fief.spawns || !fief.spawns.length) {
             fief.spawns = room.find(FIND_MY_SPAWNS).map(spawn => spawn.id)
             restartFlag = true;
@@ -357,39 +369,74 @@ const fiefManager = {
         //Check if we have enough harvesters by gathering total harvest strength from live creeps
         //let harvStrength = fiefCreeps['harvester'] && fiefCreeps['harvester'].reduce((sum,item) => sum+((item.body.getActiveBodyparts(WORK) * HARVEST_POWER)));
 
+        //Add requests for dropped resources
+        manageResourceCollection(room)
+
         //Spawn queue check every 3 ticks
         if(Game.time % 3 == 0){
             //-- Harvester --
             //Check each source for open space and harvester need
-            Object.entries(fief.sources).forEach(([sourceID,source])=>{
-                //Get living harvesters
-                let liveHarvs = source.harvesters.filter(creepName => Game.creeps[creepName] && Game.creeps[creepName].ticksToLive > 30);
-                //If there's no room, return. Otherwise get harvest strength
-                if(source.openSpots <= liveHarvs.length) return;
-                let harvStrength = 0
-                if(liveHarvs.length) harvStrength = liveHarvs.reduce((sum,creepName) => sum+((Game.creeps[creepName].body.getActiveBodyparts(WORK) * HARVEST_POWER)));
+            let noHarvs = false;
+            let targetSources = Object.keys(fief.sources).reduce((obj,key) =>{
+                obj[key] = {harvs:0,power:0};
+                return obj;
+            },{});
+            if(fiefCreeps.harvester){
+                fiefCreeps.harvester.forEach(creep =>{
+                    creepSource = creep.memory.target;
+                    targetSources[creepSource].harvs++;
+                    targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
+                })
+            }
+            else{
+                noHarvs = true;
+            }
 
-                //If not enough strength per tick, request a new harvester
-                if(harvStrength < 10){
-                    let sev = 50;
-                    if(harvStrength == 0) sev = 80;
-                    let newName = 'Serf '+helper.getName()+' of House '+room.name;
-                    spawnQueue[newName] = {sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}}
-                }
-                //Update harvester array
-                source.harvesters = liveHarvs
+            //For each source, see if we have enough harvest power or enough space for a new harvester
+            Object.entries(fief.sources).forEach(([sourceID,source])=>{
+                //If there's no room, or if we have enough harvest power, return
+
+                if(source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= 10) return;
+
+                //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
+                let sev = noHarvs == true ? 60 : 50;
+                if(source.closest) sev+= 15
+                //console.log("Adding harv to spawnQueue")
+                registry.requestCreep({sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}})
+                
             });
+
+            //-- Upgrader --
+            const MAX_STARTERS = 4;
+            //Pre and post storage logic
+            console.log("Planned net",plannedNet,"Average net",averageNet)
+            if(room.storage){
+
+            }
+            //Pre storage logic
+            else{
+                //If no upgraders, no cSites, and we're below a default cap
+                if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length <MAX_STARTERS){
+                    //Make sure no cSites
+                    if(cSites.length) return;
+                    //Make sure the spawn is nearly full
+                    if(Game.getObjectById(spawns[0]).store[RESOURCE_ENERGY] < 250) return;
+                    //Make sure we're good on energy
+                    if(plannedNet<=0 || averageNet<=0) return;
+                    //If we passed all, request an upgrader
+                    registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
+
+
+
+                }
+            }
         }
 
 
         //Stage 4 - Once storage is set up. Standard room operations.
-        if(room.storage && room.storage.store[RESOURCE_ENERGY] > 5000 || room.energyAvailable < 500){
+        if(false && room.storage && room.storage.store[RESOURCE_ENERGY] > 5000){
 
             roadReady = true;
-            // - Refiller Check -
-            if((!Game.creeps[fief.refiller] && !spawnQueue[fief.refiller]) || (Game.creeps[fief.refiller] && Game.creeps[fief.refiller].ticksToLive < 350)){
-                
-            }
             // - Upgrader Check -
             //Check for upgrader can
             if(!Game.getObjectById(fief.upCan)){
@@ -1061,7 +1108,6 @@ const fiefManager = {
     
         //console.log(crashCheck)
         if(roomLevel >= 2 && fiefCreeps.length == 0 && !spawnQueue[fief.crasher]){
-            spawnQueue = {};
             if(!Game.getObjectById(spawns[0]).spawning){
                 //console.log("AYE")
                 let newName = 'Undertaker '+helper.getName()+' of House '+room.name;
@@ -1187,8 +1233,6 @@ const fiefManager = {
                 room.visual.text(cm.get(x,y),x,y+0.25)
             }
         }*/
-        
-        
 
         //Return data for kingdomStatus
         let storageLevel;
@@ -1218,6 +1262,9 @@ const fiefManager = {
 
 module.exports = fiefManager;
 profiler.registerObject(fiefManager, 'fiefManager');
+
+
+
 function getSev(role){
     let sevList = {
         'default':50,
@@ -1261,4 +1308,48 @@ function totalWares(room) {
         totalResources[mineral.mineralType] = 0;
     }
     return totalResources;
+}
+
+function manageResourceCollection(room) {
+    //Retrieve all dropped resources in the room
+    const droppedResources = room.find(FIND_DROPPED_RESOURCES);
+    const droppedTombstones = room.find(FIND_TOMBSTONES);
+    //Retrieve current tasks to check against
+    let currentTasks = global.heap.shipping[room.name].requests;
+    droppedResources.forEach(resource => {
+        const { id, amount, resourceType } = resource;
+        //Check if this resource is already targeted by an existing task
+        if(resourceType==RESOURCE_ENERGY && amount<70) return
+        flag=false;
+        currentTasks.forEach(x=>{
+            if (x.targetID && x.targetID == id) {
+                flag=true;
+            }
+        })
+        if(flag) return;
+
+        //Details object for the addRequest call
+        let details = {
+            type: 'pickup',
+            targetID: id,
+            amount: amount,
+            resourceType: resourceType
+        };
+
+        const taskID = supplyDemand.addRequest(room, details);
+        console.log('Added new task:', taskID);
+    });
+
+    droppedTombstones.forEach(stone =>{
+        Object.entries(stone.store).forEach(([resource,amount]) => {
+            if(resource==RESOURCE_ENERGY && amount<70) return
+            let details = {
+                type: 'pickup',
+                targetID: stone.id,
+                amount: amount,
+                resourceType: resource
+            };
+            supplyDemand.addRequest(room, details);
+        });
+    });
 }

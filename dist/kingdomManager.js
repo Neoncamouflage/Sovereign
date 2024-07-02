@@ -23,25 +23,14 @@ const helper = require('functions.helper');
 const profiler = require('screeps-profiler');
 const supplyDemand = require('supplyDemand');
 const registry = require('registry');
+const granary = require('granary');
 const kingdomManager = {
     run:function(){
         // - Assignments -
         //Status object for room visuals
         let kingdomStatus = {fiefs:{},holdings:{}}
         //Assign creeps to their fiefs and sort by role
-        fiefCreeps = {}
-        for(let creepName in Game.creeps){
-            let creep = Game.creeps[creepName];
-            let fief = creep.memory.fief;
-            let role = creep.memory.role
-            if (!fiefCreeps[fief]) {
-                fiefCreeps[fief] = {};
-            }
-            if (!fiefCreeps[fief][role]) {
-                fiefCreeps[fief][role] = [];
-            }
-            fiefCreeps[fief][role].push(creep);
-        }
+        fiefCreeps = sortCreeps();
         // - Actions - 
         //Loop through all fiefs and holdings and run their respective manager
         //Holdings first so we can run the registry for each fief in the same loop
@@ -50,25 +39,27 @@ const kingdomManager = {
             helper.drawVisuals(holding,'holding')
         }
         for(const fief in Memory.kingdom.fiefs){
+            supplyDemand.prepShipping(fief);
             //Assignments
             let fiefResults;
-            if(!fiefCreeps[fief]) fiefCreeps[fief] = [];
+            fiefCreeps[fief] = fiefCreeps[fief] || [];
             //Make sure fief is live, remove if not
             if(!Game.rooms[fief] || !Game.rooms[fief].controller.my){
                 console.log("Removing dead fief ",fief);
                 delete Memory.kingdom.fiefs[fief];
                 continue;
             }
-            //Retrieve creeps belonging to fief
             
             fiefResults = fiefManager.run(Game.rooms[fief],fiefCreeps[fief]);
             //Manage shipping tasks
-            supplyDemand.manageShipping(fief,fiefCreeps[fief]['hauler']);
+            supplyDemand.manageShipping(fief,fiefCreeps[fief]['hauler'] || []);
             //Cache the status to display next tick
             kingdomStatus.fiefs[fief] = fiefResults;
             //Run spawn logic every 3 ticks
-            if(Game.time % 3 == 0) kingdomStatus.fiefs[fief].spawnQueue = registry.calculateSpawns(Game.rooms[fief]);
+            //if(Game.time % 3 == 0) kingdomStatus.fiefs[fief].spawnQueue = 
+            registry.calculateSpawns(Game.rooms[fief]);
             helper.drawVisuals(fief,'fief')
+            console.log(granary.getIncome(fief))
         }
 
         
@@ -79,7 +70,7 @@ const kingdomManager = {
             if(!Game.creeps[settler] &&)
         }*/
 
-        //runRoles(kingdomCreeps);
+        runRoles(Game.creeps);
         
 
         //Run status manager to draw room visuals
@@ -209,6 +200,23 @@ function runRoles(kingdomCreeps){
         cRoles[Game.creeps[creep].memory.role] = creepRole
     }
     missionManager.run(milCreeps);
+}
+
+function sortCreeps(){
+    let fiefCreeps={}
+    for(let creepName in Game.creeps){
+        let creep = Game.creeps[creepName];
+        let fief = creep.memory.fief;
+        let role = creep.memory.role
+        if (!fiefCreeps[fief]) {
+            fiefCreeps[fief] = {};
+        }
+        if (!fiefCreeps[fief][role]) {
+            fiefCreeps[fief][role] = [];
+        }
+        fiefCreeps[fief][role].push(creep);
+    }
+    return fiefCreeps;
 }
 
 addHolding = profiler.registerFN(runRoles, 'runRoles');

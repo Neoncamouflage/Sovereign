@@ -1,7 +1,37 @@
+const supplyDemand = require('supplyDemand');
+
 var roleUpgrader = {
 
     /** @param {Creep} creep **/
     run: function(creep) {
+        if(creep.memory.job = 'starterUpgrader'){
+            if(creep.store.getFreeCapacity() > creep.store.getCapacity()/2){
+                let x = supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+            }
+            let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES)
+            if(cSites.length){
+                let target = creep.pos.findClosestByRange(cSites);
+                let range = creep.pos.getRangeTo(target);
+                if(range <= 3){
+                    creep.build(target)
+                }
+                if(range > 2){
+                    creep.travelTo(target)
+                }
+                return;
+            }
+            if(creep.store.getFreeCapacity() > creep.store.getCapacity()/2){
+                let x = supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+            }
+            let range = creep.pos.getRangeTo(creep.room.controller);
+            if(range > 1){
+                creep.travelTo(creep.room.controller,{range:1});
+            }
+            if(range < 4){
+                creep.upgradeController(creep.room.controller)
+            }
+        return;
+        }
         let fief = Memory.kingdom.fiefs[creep.room.name];
         let upcan;
         if(fief.upLink){

@@ -1,10 +1,12 @@
 const helper = require('functions.helper');
+const registry = require('registry');
 
 const supplyDemand = {
     prepShipping: function(roomName){
         if (!global.heap) global.heap = {};
         if (!global.heap.shipping) global.heap.shipping = {};
         if (!global.heap.shipping[roomName]){
+            console.log("New shipping queue!")
             global.heap.shipping[roomName] = {};
             global.heap.shipping[roomName].requests = [];
             global.heap.shipping[roomName].utilization = [];
@@ -13,7 +15,6 @@ const supplyDemand = {
     manageShipping: function(roomName,fiefCreeps){
         //Primary management function for a room to handle all supply/demand tasks
         //Run prepShipping for the room to ensure we're set up
-        this.prepShipping(roomName);
         let room = Game.rooms[roomName];
         let fief = Memory.kingdom.fiefs[roomName]
         let terminal = room.terminal;
@@ -27,7 +28,7 @@ const supplyDemand = {
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_TOWER
         ]
-        const MAX_UTILIZATION = 0.8;
+        const MAX_IDLE = 0.1;
 
         //global.heap.shipping[roomName].forEach(task =>{
             //console.log(JSON.stringify(task));
@@ -101,40 +102,37 @@ const supplyDemand = {
         //Handle in-room haulers, get idle count in return
         if(poolHaulers && poolHaulers.length){
             let idleCount = this.runHaulers(room,poolHaulers);
-            global.heap.shipping[roomName].utilization.unshift(idleCount/poolHaulers)
+            //console.log("Idle count",idleCount)
+            global.heap.shipping[roomName].utilization.unshift(idleCount/poolHaulers.length)
 
             //If utilization is past our tracking length, trim
             if(global.heap.shipping[roomName].utilization.length > 50) global.heap.shipping[roomName].utilization.length = 50;
         }
-        //If no haulers, utilization is set to max by default
+        //If no haulers, utilization is set to 0 by default
         else{
-            global.heap.shipping[roomName].utilization.unshift(1)
+            global.heap.shipping[roomName].utilization.unshift(0)
         }
         //Calculate utilization and request more haulers if needed
         let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[roomName].utilization.length
-        if(utilization > MAX_UTILIZATION){
-            let newName = 'Porter '+helper.getName()+' of House '+room.name;
-            fief.spawnQueue[newName] = {memory:{role:'hauler',fief:room.name,preflight:false}}
+        //console.log(`Hauler utilization: ${utilization}`)
+        //console.log(global.heap.shipping[roomName].utilization)
+        if(utilization < MAX_IDLE){
+            registry.requestCreep({sev:poolHaulers.length > 2 ? 20 : 60,memory:{role:'hauler',fief:room.name,preflight:false}})
         }
     },
     addRequest: function(room,details){
-        supplyDemand.prepShipping(room.name);
+        //console.log("Shipping ready!")
         //Adds a request to the room's shipping tasks
         //Details is an object containing task data
         const DEFAULT_PRIORITY = 5;
+        //console.log("Add room",room.name)
         let shippingTasks = global.heap.shipping[room.name].requests;
+        console.log("Current supply/demand tasks",JSON.stringify(shippingTasks))
         let taskID = generateID();
 
-        if(!(room instanceof Room)){
-            if(Game.rooms[room]){
-                room = Game.rooms[room]
-            }
-            else{
-                console.log("ERR_NEED_ROOM_OBJECT")
-                return -1;
-            }
-           
-            
+        if (!(room instanceof Room)) {
+            console.log("ERR_NEED_ROOM_OBJECT");
+            return -1;
         }
 
 
@@ -146,12 +144,13 @@ const supplyDemand = {
         }
         if(!details.resourceType) details.resourceType = RESOURCE_ENERGY
         //Check for an existing task for this target and type, return error if already there
-        let existingTaskIndex = global.heap.shipping[room.name].requests.findIndex(task =>
-            task.targetID === details.targetID && task.type === details.type && task.resourceType === details.resourceType);
+        let existingTaskIndex = shippingTasks.findIndex(task =>
+            task.targetID == details.targetID && task.type == details.type && task.resourceType == details.resourceType);
         if (existingTaskIndex !== -1){
-            //console.log("ERR_EXISTING_TASK")
-            //console.log(global.heap.shipping[room.name])
-            return -1
+            let shipItem = shippingTasks[existingTaskIndex]
+            console.log("Updating Existing Task",shipItem.id)
+            shipItem.amount = details.amount;
+            return shipItem.id
         }
         let taskData = {
             id:taskID,
@@ -160,6 +159,7 @@ const supplyDemand = {
             amount: details.amount,
             resourceType: details.resourceType || RESOURCE_ENERGY
         }
+        //console.log("Task data!",JSON.stringify(taskData))
         shippingTasks.push(taskData);
         return taskID; //Returning ID in case the requester wants it for something
     },
@@ -186,9 +186,9 @@ const supplyDemand = {
         let assigned = false;
         //If they are carrying resources
         if (carriedResourceType) {
-            // Attempt to find a 'demand' task that matches the resource type the creep is carrying
+            // Attempt to find a 'demand' task that matches the resource type the creep is carrying 
             let matchingTasks = shippingTasks.filter(task => task.type === 'dropoff' && task.resourceType === carriedResourceType);
-    
+            
             if (matchingTasks.length) {
                 //Get closest task since we're dumping existing inventory
                 let closestTask = null;
@@ -229,7 +229,7 @@ const supplyDemand = {
                 if(task.type == 'dropoff'){
                     //If neither terminal nor storage can fulfill, pass on the task
                     if((!terminal || !terminal.store[task.resourceType] >= task.amount) && (!storage || !storage.store[task.resourceType] >= task.amount)){
-                        console.log('No task assignment due to missing resource',task.resourceType)
+                        //console.log('No task assignment due to missing resource',task.resourceType)
                         continue;
                     }
                 }
@@ -267,7 +267,7 @@ const supplyDemand = {
         const DROPOFF = 'dropoff';
         const RENEW = 'renew';
         const STATES = [IDLE,PICKUP,DROPOFF,RENEW];
-        const isIdle = 0;
+        let isIdle = 0;
 
         haulers.forEach(creep => {
             let state = creep.memory.state;
@@ -337,16 +337,31 @@ const supplyDemand = {
                 //Are we on a pickup task? If so, head to the target and take the resource
                 if(task.type == 'pickup'){
                     let pickTarget = Game.getObjectById(task.targetID);
+                    if(!pickTarget || pickTarget == null){
+                        //console.log("Bad picktarget",task.targetID)
+                        delete creep.memory.task;
+                        creep.memory.state = IDLE;
+                    }
                     
-                    if(creep.pos.getRangeTo(pickTarget) > 1){
+                    else if(creep.pos.getRangeTo(pickTarget) > 1){
                         creep.travelTo(pickTarget)
                     }
                     else{
+                        //Check for a store to see if it's a resource
+                        if(!pickTarget.store){
+                        //If we're in range, withdraw and finish the task
+                        let x = creep.pickup(pickTarget);
+                        //console.log(x)
+                        delete creep.memory.task;
+                        creep.memory.state = IDLE;
+                        }
+                        else{
                         //If we're in range, withdraw and finish the task
                         let x = creep.withdraw(pickTarget,task.resourceType);
                         //console.log(x)
                         delete creep.memory.task;
                         creep.memory.state = IDLE;
+                        }
                     }
                 }
                 else if(task.type == 'dropoff'){
@@ -377,7 +392,7 @@ const supplyDemand = {
                         }
                         //If no storage or terminal, throw alert and kill task. Move to idle.
                         else{
-                            console.log(creep.name,"unable to complete task! No pickup location for",task.resourceType);
+                            //console.log(creep.name,"unable to complete task! No pickup location for",task.resourceType);
                             delete creep.memory.task;
                             creep.memory.state = IDLE;
                             return;
@@ -415,7 +430,7 @@ const supplyDemand = {
                         }
                         //If no storage or terminal, throw alert and kill task. Move to idle.
                         else{
-                            console.log(creep.name,"unable to complete task! No storage/terminal for",task.resourceType);
+                            //console.log(creep.name,"unable to complete task! No storage/terminal for",task.resourceType);
                             delete creep.memory.task;
                             creep.memory.state = IDLE;
                         }
@@ -426,7 +441,10 @@ const supplyDemand = {
                 //Dunno what this will do yet
             }
             
-            if(state==IDLE) isIdle++;
+            if(state==IDLE){
+                //console.log("State is idle")
+                isIdle++;
+            }
         });
         return isIdle;
     }

@@ -6,9 +6,9 @@ var roleHarvester = {
         }
         else{
             const targetID = creep.memory.target
-            const homeRoom = creep.memory.homeRoom
+            const homeRoom = creep.memory.fief
             const fief = Memory.kingdom.fiefs[homeRoom]
-            if(!creep.memory.preflight){                
+            if(!creep.memory.preflight && !creep.memory.spawning){
                 creep.memory.preflight = true;
             }
             //Assign source ID to target
@@ -45,7 +45,16 @@ var roleHarvester = {
             //Else, regular harvesting stuff
             //If not in spot, go there
             else if(!(creep.memory.status == 'harvest')){
-                if (creep.pos.x != fief.sources[targetID].spotx || creep.pos.y != fief.sources[targetID].spoty) {
+                if(creep.getActiveBodyparts(WORK) < 5){
+                    if(creep.pos.getRangeTo(target) == 1){
+                        creep.memory.stay = true;
+                        creep.memory.status = 'harvest';
+                    }
+                    else{
+                        creep.travelTo(target)
+                    }
+                }
+                else if (creep.pos.x != fief.sources[targetID].spotx || creep.pos.y != fief.sources[targetID].spoty) {
                     creep.travelTo(new RoomPosition(fief.sources[targetID].spotx, fief.sources[targetID].spoty, homeRoom));
                 }else{
                     creep.memory.stay = true;

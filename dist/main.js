@@ -1,11 +1,14 @@
 //Imports
 const helper = require('functions.helper'); //Helper functions
-require('prototypes.room'); //Room prototype extensions
+//Prototype extensions and modifications
+require('prototypes.room');
+require('prototypes.creep')
+require('prototypes.spawn')
 //require('roomVisual');//RV prototypes
 const roomPlanner = require('roomPlanner');
 const kingdomManager = require('kingdomManager'); //Top level kingdom manager system
 const Traveler = require('Traveler');
-require('prototypes.creep')
+
 const profiler = require('screeps-profiler');
 const mapVisuals = require('mapVisuals');
 const fiefPlanner = require('fiefPlanner')
@@ -123,7 +126,7 @@ module.exports.loop = function () {
         //Segment 1 is for room plans
         RawMemory.setActiveSegments([0,1])
         //Global heap
-        global.heap = {granary:{}};
+        global.heap = {granary:{},registry:{}};
     }
     //If no reset, do stuff with segments
     else{
