@@ -410,7 +410,7 @@ const fiefManager = {
             });
 
             //-- Upgrader --
-            const MAX_STARTERS = 4;
+            const MAX_STARTERS = 6;
             //Pre and post storage logic
             console.log("Planned net",plannedNet,"Average net",averageNet)
             if(room.storage){
@@ -1106,17 +1106,6 @@ const fiefManager = {
         if(roomLevel == 8){
 
         }
-    
-        //console.log(crashCheck)
-        if(roomLevel >= 2 && fiefCreeps.length == 0 && !spawnQueue[fief.crasher]){
-            if(!Game.getObjectById(spawns[0]).spawning){
-                //console.log("AYE")
-                let newName = 'Undertaker '+helper.getName()+' of House '+room.name;
-                let z = Game.getObjectById(spawns[0]).spawnCreep(getBody('generalist',room.name,'crasher'),newName,{memory:{role:'generalist',job:'crasher',fief:room.name,targetRoom:'None',preflight:false}})
-                if(z == 0)fief.crasher = newName
-            }
-
-        }
         //console.log(JSON.stringify(spawnQueue))
         // -- Final Actions --
         //If there are starters, run starter code
@@ -1218,7 +1207,7 @@ const fiefManager = {
     });
 
     //Guard
-    if(towers.length == 0 && roomBaddies.length > 0 && (!Game.creeps[fief.guard] && !spawnQueue[fief.guard])){
+    if(towers.length == 0 && roomBaddies.length > 0 && (!Game.creeps[fief.guard])){
         let newName = 'Centurion '+helper.getName()+' of House '+room.name;
         spawnQueue[newName] = {
             sev:getSev('guard',room.name),body:getBody('guard',room.name,'guard'),
@@ -1316,18 +1305,10 @@ function manageResourceCollection(room) {
     const droppedResources = room.find(FIND_DROPPED_RESOURCES);
     const droppedTombstones = room.find(FIND_TOMBSTONES);
     //Retrieve current tasks to check against
-    let currentTasks = global.heap.shipping[room.name].requests;
     droppedResources.forEach(resource => {
         const { id, amount, resourceType } = resource;
         //Check if this resource is already targeted by an existing task
-        if(resourceType==RESOURCE_ENERGY && amount<70) return
-        flag=false;
-        currentTasks.forEach(x=>{
-            if (x.targetID && x.targetID == id) {
-                flag=true;
-            }
-        })
-        if(flag) return;
+        if(resourceType==RESOURCE_ENERGY && amount<50) return
 
         //Details object for the addRequest call
         let details = {
@@ -1343,7 +1324,7 @@ function manageResourceCollection(room) {
 
     droppedTombstones.forEach(stone =>{
         Object.entries(stone.store).forEach(([resource,amount]) => {
-            if(resource==RESOURCE_ENERGY && amount<70) return
+            if(resource==RESOURCE_ENERGY) return
             let details = {
                 type: 'pickup',
                 targetID: stone.id,

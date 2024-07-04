@@ -1,5 +1,5 @@
 const helper = require('functions.helper');
-
+const granary = require('granary');
 const registry = {
     //Associates roles to names
     nameRef: {
@@ -46,7 +46,7 @@ const registry = {
             console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
-                let newName = this.nameRef[newCreep.memory.role]+helper.getName()+' of House '+room.ame;
+                let newName = this.nameRef[newCreep.memory.role]+helper.getName()+' of House '+room.name;
                 this.spawnCreep(nextSpawn,newName,newCreep)
             }
         }
@@ -68,7 +68,7 @@ const registry = {
                 }
             });
             //Only mark them fat if they're road fat
-            if(nonMove > movePart*2){
+            if(nonMove*2 > movePart){
                 plan.memory['fat'] = true;
             }
             try{
@@ -329,12 +329,14 @@ function getBody(role,room,job='default',target='default'){
 
 //Energy harvester - Serf
 function getEHarvester(room){
-    let newBody = [MOVE];
+    let newBody = [MOVE,WORK];
     let partsCost = 0
     let maxWorkParts = 6;
-    let energyAvailable = room.energyCapacityAvailable;
+    let [tickNet,avgNet] = granary.getIncome(room.name)
+    //If we have 0 average energy and 0 planned energy, the cap is what we have now, not what we can have at max
+    let energyAvailable = tickNet+avgNet > 0 ? room.energyCapacityAvailable : room.energyAvailable;
     //Default 1 move part
-    partsCost += BODYPART_COST[MOVE];
+    partsCost += BODYPART_COST[MOVE]+BODYPART_COST[WORK];
     //Fill with work parts until we max out on energy or hit the cap
     while (newBody.length < maxWorkParts+1 && partsCost + BODYPART_COST[WORK] <= energyAvailable) {
         newBody.push(WORK);

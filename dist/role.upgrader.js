@@ -10,7 +10,7 @@ var roleUpgrader = {
             }
             let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES)
             if(cSites.length){
-                let target = creep.pos.findClosestByRange(cSites);
+                let target = cSites[0];
                 let range = creep.pos.getRangeTo(target);
                 if(range <= 3){
                     creep.build(target)
