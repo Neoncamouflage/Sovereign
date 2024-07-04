@@ -8,7 +8,7 @@ const registry = {
         'upgrader':'Scribe'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
-    calculateSpawns: function(room){
+    calculateSpawns: function(room,fiefCreeps){
         //console.log("Calculating spawns. Tickmod:",Game.time % 3)
         let fief = Memory.kingdom.fiefs[room.name]
         let spawnQueue = global.heap.registry[room.name] || []
@@ -36,7 +36,7 @@ const registry = {
                 }
             }
             else{
-                [body,cost] = getBody(newCreep.memory.role,room,(newCreep.memory.job || 'default'))
+                [body,cost] = getBody(newCreep.memory.role,room,(newCreep.memory.job || 'default'),fiefCreeps)
                 newCreep.body = body
             }
             
@@ -46,8 +46,11 @@ const registry = {
             console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
-                let newName = this.nameRef[newCreep.memory.role]+helper.getName()+' of House '+room.name;
-                this.spawnCreep(nextSpawn,newName,newCreep)
+                let newName = this.nameRef[newCreep.memory.role]+' '+helper.getName()+' of House '+room.name;
+                let spawnTry = this.spawnCreep(nextSpawn,newName,newCreep)
+
+                //If we successfully spawned and this was a respawn request from a creep, update them
+                if (spawnTry == OK && newCreep.respawn) Game.getObjectById(newCreep.respawn).memory.respawn = true;
             }
         }
         global.heap.registry[room.name] = [];
@@ -73,6 +76,7 @@ const registry = {
             }
             try{
                 var x = spawner.spawnCreep(plan.body,name,{memory:plan.memory});
+                return x;
                 console.log("Spawn result",x)
             }
             catch(e){
@@ -106,7 +110,7 @@ module.exports = registry;
 //#region Creep Body Switch
 
 
-function getBody(role,room,job='default',target='default'){
+function getBody(role,room,job='default',fiefCreeps){
     let parts;
     let mult;
     let newBod;
@@ -129,7 +133,7 @@ function getBody(role,room,job='default',target='default'){
                     //console.log(newBod)
                     return newBod;
                 case 'energyHarvester':
-                    return getEHarvester(room)
+                    return getEHarvester(room,fiefCreeps)
             }
             break;
         case 'remoteDefender':
@@ -328,13 +332,13 @@ function getBody(role,room,job='default',target='default'){
 
 
 //Energy harvester - Serf
-function getEHarvester(room){
+function getEHarvester(room,fiefCreeps){
     let newBody = [MOVE,WORK];
     let partsCost = 0
     let maxWorkParts = 6;
     let [tickNet,avgNet] = granary.getIncome(room.name)
-    //If we have 0 average energy and 0 planned energy, the cap is what we have now, not what we can have at max
-    let energyAvailable = tickNet+avgNet > 0 ? room.energyCapacityAvailable : room.energyAvailable;
+    //If we have 0 average and planned, and no harvesters, the energy is what we have now, otherwise max
+    let energyAvailable = tickNet > 0 || avgNet > 0 || fiefCreeps['harvester'] ? room.energyCapacityAvailable : room.energyAvailable;
     //Default 1 move part
     partsCost += BODYPART_COST[MOVE]+BODYPART_COST[WORK];
     //Fill with work parts until we max out on energy or hit the cap
@@ -356,7 +360,9 @@ function getHauler(room){
     //console.log("Firing Hauler")
     let parts = room.controller.level > 2 ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
-    let energyAvailable = room.energyAvailable;
+    let [tickNet,avgNet] = granary.getIncome(room.name)
+    //If we have 0 average and planned, and no haulers, the energy is what we have now, otherwise we wait for at least half of max
+    let energyAvailable = tickNet > 0 || avgNet > 0 || fiefCreeps['hauler'] ? Math.max(room.energyCapacityAvailable/2,room.energyAvailable) : room.energyAvailable;
     let cap = Math.min(1800, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];
@@ -382,8 +388,9 @@ function getUpgrader(room){
     }
     let engAvail = Game.rooms[room.name].energyCapacityAvailable
     let mult = Math.floor(engAvail/partsCost)
+    let arrCap = room.controller.level > 3 ? 4 : 2;
     //console.log(mult)
-    let newBod = [].concat(...Array(Math.min(mult,6)).fill(parts));
+    let newBod = [].concat(...Array(Math.min(mult,arrCap)).fill(parts));
     //If mult is 2 or more, stuff however many more work parts we can
     //Get the total cost of the body
     let totalCost = 0;

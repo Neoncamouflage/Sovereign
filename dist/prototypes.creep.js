@@ -8,6 +8,13 @@ navTo - Travel to a room without picking a random spot inside it that might be i
 return - Return and recycle/sucide into FF can
 */
 
+//Make Creep.say() public by default
+Creep.prototype._say = Creep.prototype.say;
+
+Creep.prototype.say = function(message, public = true) {
+    return this._say(message, public);
+};
+
 //#region Granary Modifications
 //#endregion
 

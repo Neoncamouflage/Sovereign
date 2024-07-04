@@ -5,7 +5,7 @@ var roleUpgrader = {
     /** @param {Creep} creep **/
     run: function(creep) {
         if(creep.memory.job = 'starterUpgrader'){
-            if(creep.store.getFreeCapacity() > creep.store.getCapacity()/2){
+            if(creep.store.getFreeCapacity() > creep.store.getCapacity()*0.2){
                 let x = supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
             let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES)

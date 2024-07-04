@@ -19,7 +19,6 @@ const granary = {
         //Upgrade
         //Spawn
         if(!global.heap.granary){
-            console.log("NO GRANARY!");
             return;
         }
         //If a room object, get its room name. Otherwise it's a creep, so get its fief.

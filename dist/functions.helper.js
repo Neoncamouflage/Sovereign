@@ -1,32 +1,38 @@
 const profiler = require('screeps-profiler');
 
 const helper = {
-    //Generates a name
-    getName: function(limit = 8){
-        let letters = ['𐌰','𐌱','𐌲','𐌳','𐌴','𐌵','𐌶','𐌷','𐌸','𐌹','𐌺','𐌻','𐌼','𐌽','𐌾','𐌿','𐍀','𐍁','𐍂','𐍃','𐍄','𐍅','𐍆','𐍇','𐍈','𐍉','𐍊'];//𐌽𐍅𐌰
-        let repeatCount = 0;
-        let nameLen = Math.floor(Math.random() * (limit - 3 + 1)) + 3;//
-        let name = ''
-        let lastChar = '';
-
-        for (let i = 0; i < nameLen; i++){
-            let randomChar = letters[Math.floor(Math.random() * letters.length)];
-            if(randomChar === lastChar){
-                repeatCount ++;
-                if(repeatCount > 1){
-                    while (randomChar === lastChar) {
-                        randomChar = letters[Math.floor(Math.random() * letters.length)];
-                    }
-                    repeatCount = 0; // Reset repeat count for the new character
-                } else{
-                    repeatCount = 0;
-                }
+    //Generates a creep.say()
+    getSay: function({ role=undefined, status=undefined, numLetters = 2, symbol=''} = {}){
+        let letters = ['𒉌','𒅗','𒍟','𒋲','𒋞','𒋘','𒉼','𒉽','𒉛','𒉃','𒈰','𒈞','𒈓','𒈔','𒈖','𒇸','𒆕','𒅐','𒅒','𒅅',
+                        '𒂡','𒁹','𒀸','𒀹','𒀺','𒀀','𒀃','𒋀','𒋦','𒋨','𒋧'];
+        let returnLetters = [];
+        if(!role && !status){
+            for(i=0;i<numLetters;i++){
+                let ind = Math.floor(Math.random() * letters.length);
+                returnLetters.push(letters[ind]);
             }
-
-            name += randomChar;
-            lastChar= randomChar;
         }
-        return name;
+        //Add symbol to random spot if one is provided
+        if(symbol!='') returnLetters.splice(Math.floor(Math.random() * (returnLetters.length+1)),0,symbol)
+        return returnLetters
+    },
+    //Generates a name
+    getName: function({isSpawn=false}={}){
+        //let letters = ['𐌰','𐌱','𐌲','𐌳','𐌴','𐌵','𐌶','𐌷','𐌸','𐌹','𐌺','𐌻','𐌼','𐌽','𐌾','𐌿','𐍀','𐍁','𐍂','𐍃','𐍄','𐍅','𐍆','𐍇','𐍈','𐍉','𐍊'];//𐌽𐍅𐌰
+        let firstNameLetters = ['𒊵','𒆠','𒊹','𒀭','𒌐','𒉭','𒊮','𒊶','𒊴','𒊯','𒈾','𒇼','𒇻','𒇪','𒇩','𒇨','𒇧','𒇦','𒇥','𒇠','𒇟']
+        let lastNameLetters = ['𒂷','𒂸','𒂹','𒂺','𒂻','𒂼','𒂽','𒂿','𒃀','𒃁','𒃂','𒃃','𒃄','𒃅','𒃆','𒃇','𒃈','𒃉','𒃊','𒃋','𒃌','𒃒','𒃓','𒃔','𒃕','𒃖','𒃪','𒃫','𒃬']
+        let spawnLetters = ['𒄅','𒄆','𒌷','𒌸','𒌹','𒌺','𒌻','𒌼','𒌽','𒌾','𒌿','𒍀','𒍁','𒍂','𒍃','𒍄','𒍅','𒍆','𒍇','𒍈','𒍉','𒍊','𒍋','𒍌','𒍍','𒍎',]
+        
+        //If we're naming a spawn then we prefix with a spawn letter
+        if(isSpawn){
+            let sp = spawnLetters[Math.floor(Math.random() * spawnLetters.length)];
+            let first = firstNameLetters[Math.floor(Math.random() * firstNameLetters.length)];
+            let last = lastNameLetters[Math.floor(Math.random() * lastNameLetters.length)];
+            return sp+first+last
+        }
+        let first = firstNameLetters[Math.floor(Math.random() * firstNameLetters.length)];
+        let last = lastNameLetters[Math.floor(Math.random() * lastNameLetters.length)]
+        return first+last;
     },
     //Returns a sentence for creep say
     getSentence: function(){
@@ -841,3 +847,13 @@ module.exports = helper;
 
 global.getRemoteRoad = helper.routeRemoteRoad;
 profiler.registerObject(helper, 'functions.helper');
+
+function randomElements(array, numElements) {
+    const indexes = new Set();
+    while (indexes.size < numElements) {
+        const randomIndex = Math.floor(Math.random() * array.length);
+        indexes.add(randomIndex);
+    }
+
+    return Array.from(indexes).map(index => array[index]);
+}

@@ -32,6 +32,7 @@ const fiefManager = {
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let starterCreeps = []
         let mySpawns = room.find(FIND_MY_SPAWNS).map(spawn => spawn.id);
+        let storagePos = new RoomPosition(fief.roomPlan[4].storage[0].x,fief.roomPlan[4].storage[0].y,room.name)
         let roadReady = false;
         let swampNeed = false;
         fief.spawns = mySpawns
@@ -381,7 +382,7 @@ const fiefManager = {
             //Check each source for open space and harvester need
             let noHarvs = false;
             let targetSources = Object.keys(fief.sources).reduce((obj,key) =>{
-                obj[key] = {harvs:0,power:0};
+                obj[key] = {harvs:0,power:0,ttlFlag:false};
                 return obj;
             },{});
             if(fiefCreeps.harvester){
@@ -389,6 +390,7 @@ const fiefManager = {
                     creepSource = creep.memory.target;
                     targetSources[creepSource].harvs++;
                     targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
+                    if(creep.ticksToLive < storagePos.getRangeTo(Game.getObjectById(creepSource)) + (CREEP_SPAWN_TIME*creep.body.length)) targetSources[creepSource].ttlFlag = true;
                 })
             }
             else{
@@ -399,7 +401,7 @@ const fiefManager = {
             Object.entries(fief.sources).forEach(([sourceID,source])=>{
                 //If there's no room, or if we have enough harvest power, return
 
-                if(source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= 10) return;
+                if((source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= SOURCE_ENERGY_CAPACITY/ENERGY_REGEN_TIME) && !targetSources[sourceID].ttlFlag) return;
 
                 //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
                 let sev = noHarvs == true ? 60 : 50;
@@ -410,11 +412,21 @@ const fiefManager = {
             });
 
             //-- Upgrader --
-            const MAX_STARTERS = 6;
+            const MAX_STARTERS = roomLevel >=2 ? 4 : 5;
             //Pre and post storage logic
             console.log("Planned net",plannedNet,"Average net",averageNet)
             if(room.storage){
+                if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length <MAX_STARTERS){
+                    //Make sure the spawn is nearly full
+                    if(Game.getObjectById(spawns[0]).store[RESOURCE_ENERGY] < 250) return;
+                    //Make sure we're good on energy
+                    if(plannedNet<=0 || averageNet<=0) return;
+                    //If we passed all, request an upgrader
+                    registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
 
+
+
+                }
             }
             //Pre storage logic
             else{

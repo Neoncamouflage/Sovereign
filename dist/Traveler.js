@@ -550,14 +550,14 @@ class Traveler {
             if(blocker){
                 if(!this.movementIntents[blocker.name] && blocker.fatigue == 0 && blocker.memory && !blocker.memory.stay){
                     //Log it for test
-                    blocker.say("🔄",true);
-                    Game.creeps[creep].say("🔄",true)
+                    //blocker.say("🔄",true);
+                    //Game.creeps[creep].say("🔄",true)
                     //Attempt swapping to the current creep
                     let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
                     if(bMove != 0){
-                        blocker.say("ERR -",bMove);
+                        //blocker.say("ERR -",bMove);
                     }else{
-                        blocker.say("🔄");
+                        //blocker.say("🔄");
                     }
                 }
                 //Fat creep check
@@ -568,10 +568,10 @@ class Traveler {
                     
                     if(!equalMove(blocker) && equalMove(Game.creeps[creep])){
                         //blocker.say("🐖🔄",true);
-                        Game.creeps[creep].say("🐖🔄",true)
+                        //Game.creeps[creep].say("🐖🔄",true)
                         let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
                         if(bMove != 0){
-                            blocker.say("ERR -",bMove);
+                            //blocker.say("ERR -",bMove);
                         }else{
                             //blocker.say("🔄");
                         }

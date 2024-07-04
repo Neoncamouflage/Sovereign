@@ -38,12 +38,12 @@ const supplyDemand = {
 
         //Process infrastructure energy demands (extensions,spawns,towers,labs)
         let energyStructures = [];
-        //Only check every 5 ticks
-
+        //Only check every 6 ticks
+        if(Game.time % 6 == 0){
             energyStructures = room.find(FIND_MY_STRUCTURES,{filter: 
                 (structure) => fillStructures.includes(structure.structureType) && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
             });
-
+        }
         //If any need energy, set up tasks
         if(energyStructures.length){
             energyStructures.forEach(struct =>{
@@ -52,12 +52,23 @@ const supplyDemand = {
                 switch(struct.structureType){
                     
                     //Towers get refilled below 700 in peacetime
+                    //Don't refill til we're leaving or soon to be out of safemode
                     case STRUCTURE_TOWER:
-                        if(structNeed > 300){
+                        if(structNeed > 300 && (!room.controller.safeMode || room.controller.safeMode < 500)){
                             this.addRequest(room,{
                                 type:'dropoff',
                                 targetID:struct.id,
-                                amount:structNeed
+                                amount:structNeed,
+                                priority:9
+                            });
+                        }
+                        //If it doesn't qualify, make sure it's at least got enough for a few repairs
+                        else if(struct.store.getUsedCapacity(RESOURCE_ENERGY) < 100){
+                            this.addRequest(room,{
+                                type:'dropoff',
+                                targetID:struct.id,
+                                amount:100,
+                                priority:9
                             });
                         }
                         break;
@@ -84,18 +95,19 @@ const supplyDemand = {
                         break;
                     //Spawns and extensions always get added
                     case STRUCTURE_SPAWN:
-                            let x = this.addRequest(room,{
+                            this.addRequest(room,{
                                 type:'dropoff',
                                 targetID:struct.id,
-                                amount:structNeed
+                                amount:structNeed,
+                                priority:9
                             });
-                            console.log("ADDCHECK",x)
                         break;
                     case STRUCTURE_EXTENSION:
                             this.addRequest(room,{
                                 type:'dropoff',
                                 targetID:struct.id,
-                                amount:structNeed
+                                amount:structNeed,
+                                priority:9
                             });
                         break;
                 }
@@ -119,11 +131,11 @@ const supplyDemand = {
         }
         //Calculate utilization and request more haulers if needed
         let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[roomName].utilization.length
-        //console.log(`Hauler utilization: ${utilization}`)
-        //console.log(global.heap.shipping[roomName].utilization)
         if(utilization < MAX_IDLE){
             registry.requestCreep({sev:poolHaulers.length > 2 ? 20 : 60,memory:{role:'hauler',fief:roomName,preflight:false}})
         }
+        //console.log(`Hauler utilization: ${utilization}`)
+        //console.log(global.heap.shipping[roomName].utilization)
     },
     addRequest: function(room,details){
         //console.log("Shipping ready!")
@@ -149,6 +161,11 @@ const supplyDemand = {
         //Check for an existing task for this target and type, update and return ID if already there
         for (let taskID in shippingTasks) {
             let task = shippingTasks[taskID];
+            //Check for priority update
+            if(details.priority && details.priority > task.priority){
+                console.log("Updated priority")
+                task.priority = details.priority;
+            }
             if (task.targetID == details.targetID && task.resourceType == details.resourceType){
                 if(details.amount> task.amount){
                     task.updateAmount(details.amount)
@@ -170,6 +187,15 @@ const supplyDemand = {
         //Assigns tasks to creeps based on capacity
         //Returns 0 if a task is found or -1 if not
         let shippingTasks = global.heap.shipping[room.name].requests;
+        //Every 5 ticks, check assigned haulers to see if we need to clear them out.
+        if(Game.time % 5 == 0){
+            Object.values(shippingTasks).forEach(task=>{
+                let haulIDs = Object.keys(task.assignedHaulers);
+                haulIDs.forEach(crpID =>{
+                    if(!Game.getObjectById(crpID)) delete task.assignedHaulers[crpID]
+                })
+            })
+        }
         console.log("Current supply/demand tasks",JSON.stringify(shippingTasks))
         
         let unassignedTasks = Object.values(shippingTasks).filter(task => task.unassignedAmount() > 0);
@@ -201,14 +227,19 @@ const supplyDemand = {
         });
         console.log("BE RESOURCE",JSON.stringify(haulersByResource))
         console.log("BE EMPTY",emptyHaulers)
+        //Prioritize
+        unassignedTasks.sort((a, b) => b.severity - a.severity);
         //Assign tasks to closest haulers, preferring ones already carrying the resource if possible
         //Should probably check at the end to see if we still have unassigned but this works for now.
         Object.values(unassignedTasks).forEach(task => {
             console.log("Checking task",task.taskID,"type",task.type,"has an amount",task.amount,"with unassigned",task.unassignedAmount())
             let hauler = null;
             let taskTarget = Game.getObjectById(task.targetID);
-            //If no valid target, bad task. Remove
-            if(!taskTarget) task.remove(room.name)
+            //If no valid target or amount, bad task. Remove
+            if(!taskTarget || !task.amount){
+                task.remove(room.name);
+                return;
+            }
             console.log("Valid target")
             //If dropoff, check if there are haulers for the required resource
             if (task.type === 'dropoff' && haulersByResource[task.resourceType] && haulersByResource[task.resourceType].length > 0) {
@@ -239,10 +270,10 @@ const supplyDemand = {
             //Task can be dropoff if there is a terminal or storage available with the resource amount needed
             if (!hauler && emptyHaulers.length > 0 && (task.type != 'dropoff' || (terminal && terminal.store[task.resourceType] > task.unassignedAmount()) || (storage && storage.store[task.resourceType] > task.unassignedAmount()))) {
                 console.log("Checking idle haulers now")
-                
-                //Check first to see if its a pickup for a dropped energy resource. If so, minimum 40.
-                if(!(task.resourceType == RESOURCE_ENERGY && !taskTarget.store) || task.unassignedAmount() > 40){
-                    hauler = taskTarget.pos.findClosestByRange(emptyHaulers);
+                checkHauler = taskTarget.pos.findClosestByRange(emptyHaulers);
+                //Check first to see if its a pickup for a dropped energy resource. If so, don't assign unless it's at least 80% capacity.
+                if(!(task.resourceType == RESOURCE_ENERGY && !taskTarget.store) || task.unassignedAmount()+(checkHauler.pos.getRangeTo(taskTarget)*18) >= checkHauler.store.getFreeCapacity(RESOURCE_ENERGY)){
+                    hauler = checkHauler;
                     emptyHaulers = emptyHaulers.filter(h => h.id !== hauler.id);
                     task.assignTo(hauler);
                     console.log(hauler.name,"assigned")
@@ -264,8 +295,18 @@ const supplyDemand = {
         const RENEW = 'renew';
         const STATES = [IDLE,PICKUP,DROPOFF,RENEW];
         let isIdle = 0;
-
+        
         haulers.forEach(creep => {
+            //Deathcheck every 3 ticks to match spawn timing
+            if(Game.time % 3 == 0 && creep.ticksToLive <= CREEP_SPAWN_TIME*creep.body.length && !creep.memory.respawn){
+                let utilization = global.heap.shipping[room.name].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[room.name].utilization.length
+                
+                //Check utilization to make sure we aren't respawning when not needed
+                if(utilization < 0.4){
+                    registry.requestCreep({sev:30,memory:{role:'hauler',fief:room.name,preflight:false},respawn:creep.id})
+                }
+            }
+            let oldState = creep.memory.state;
             let state = creep.memory.state;
             //If the creep's state is not in the list of hauler states, skip.
             //Unfamiliar state means logic is taken over by another handler, likely combat
@@ -273,6 +314,12 @@ const supplyDemand = {
             if(state && !STATES.includes(state)){
                 return;
             };
+            //If assigned 0 qty on task, remove it
+            if(creep.memory.task){
+                let checkTask = getTaskByID(creep.memory.fief,creep.memory.task);
+                if(!checkTask) delete creep.memory.task
+                else if(checkTask.assignedHaulers[creep.id] <= 0 || checkTask.assignedHaulers[creep.id] == null) checkTask.unassign(creep) 
+            }
             //If no state, or no task but a non-idle state, assign idle
             if(!state || (!creep.memory.task && creep.memory.state != IDLE)){
                 state = IDLE;
@@ -453,9 +500,33 @@ const supplyDemand = {
                 //console.log("State is idle")
                 isIdle++;
             }
-            let crpSay = state[0];
-            if(creep.memory.task)crpSay+=creep.memory.task.toString(16)
-            creep.say(crpSay)
+
+            //If all of its space isn't reserved, pick up anything on the ground nearby
+            if(creep.memory.task){
+                let resTask =  getTaskByID(room.name,creep.memory.task);
+                let reserved = resTask.assignedHaulers[creep.id]
+                if(reserved<creep.store.getFreeCapacity()){
+                    let drops = room.lookForAtArea(LOOK_RESOURCES,creep.pos.y-1,creep.pos.x-1,creep.pos.y+1,creep.pos.x+1);
+                    //If drops
+                    //If a pickup task and the drop amount is less than our free space plus reserved
+                    //Or if a dropoff task and we already have enough on us for the drop
+                    if(drops.length && ((resTask.type == 'pickup' && drops[0].amount < creep.store.getFreeCapacity()-reserved) || (resTask.type == 'dropoff' && creep.store.getUsedCapacity(resTask.resourceType) >= reserved))){
+                        creep.pickup(drops[0])
+                    }
+                }
+            }
+
+
+            if(oldState != state){
+                let signs={
+                    [IDLE]:    '💤',
+                    [PICKUP]:  '📤',
+                    [DROPOFF]: '📥'
+                }
+                let words = helper.getSay({symbol:signs[state]});
+                creep.say(words.join(''))
+            }
+
         });
         return isIdle;
     }
@@ -475,7 +546,14 @@ function Task(type, resourceType, targetID, amount, priority) {
 
 Task.prototype.assignTo = function(hauler,amount='default') {
     //Assign default amount of as much as possible unless an amount is specified
-    this.assignedHaulers[hauler.id] = amount == 'default' ? Math.min(hauler.store.getFreeCapacity(),this.unassignedAmount()) : amount;
+    if(this.type == 'dropoff'){
+        this.assignedHaulers[hauler.id] = amount == 'default' ? Math.min(hauler.store.getUsedCapacity(this.resourceType),this.unassignedAmount()) : amount;
+    }
+    else{
+        this.assignedHaulers[hauler.id] = amount == 'default' ? Math.min(hauler.store.getFreeCapacity(),this.unassignedAmount()) : amount;
+    }
+    
+    
     hauler.memory.task = this.taskID;
 };
 
@@ -499,7 +577,7 @@ Task.prototype.updateAmount = function(newAmount) {
         //If hauler's available space matches their assigned amount, return
         //At some point will need to adjust for multiple assigned tasks
         //hauler.getUnassignedSpace() - Would be a good prototype method
-        console.log("Trying to increase amount of",this.resourceType,"from",this.assignedHaulers[id],". Hauler",id,"has",space,"space")
+        console.log("Trying to increase amount of",this.resourceType,"from",this.assignedHaulers[id],". Hauler",id,"has",space,"space and is already assigned",this.assignedHaulers[id])
         if(space == this.assignedHaulers[id]) return;
         
         //Assign the remaining amount plus extra or the hauler's total space, whichever is less
@@ -559,10 +637,21 @@ function getTaskByID(fiefName, taskID) {
 Task.prototype.remove = function(fiefName) {
     //Remove this task from all assigned haulers
     for(id in this.assignedHaulers){
-        delete Game.getObjectById(id).memory.task;
+        let hauler = Game.getObjectById(id);
+        if(hauler){
+            delete hauler.memory.task;
+        }
+        
     }
     //Delete self
     delete global.heap.shipping[fiefName].requests[this.taskID];
+};
+
+Task.prototype.unassign = function(hauler) {
+    //Remove hauler from task
+    if(this.assignedHaulers[hauler.id]) delete this.assignedHaulers[hauler.id];
+    //Delete hauler task
+    delete hauler.memory.task
 };
 
 module.exports = supplyDemand;

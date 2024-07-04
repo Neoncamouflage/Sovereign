@@ -57,7 +57,7 @@ const kingdomManager = {
             kingdomStatus.fiefs[fief] = fiefResults;
             //Run spawn logic every 3 ticks
             //if(Game.time % 3 == 0) kingdomStatus.fiefs[fief].spawnQueue = 
-            registry.calculateSpawns(Game.rooms[fief]);
+            registry.calculateSpawns(Game.rooms[fief],fiefCreeps[fief]);
             helper.drawVisuals(fief,'fief')
             console.log(granary.getIncome(fief))
         }
