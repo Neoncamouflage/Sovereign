@@ -16,7 +16,7 @@ class Traveler {
     static travelTo(creep, destination, options = {}) {
         if(options == 25)console.log(JSON.stringify(creep))
         // uncomment if you would like to register hostile rooms entered
-        // this.updateRoomStatus(creep.room);
+        this.updateRoomStatus(creep.room);
         if (!destination) {
             return ERR_INVALID_ARGS;
         }
@@ -211,11 +211,12 @@ class Traveler {
             return;
         }
         if (room.controller) {
-            if (room.controller.owner && !room.controller.my) {
-                room.memory.avoid = 1;
+            Memory.avoidRooms = Memory.avoidRooms || [];
+            if (room.controller.owner && !room.controller.my && !Memory.avoidRooms.includes(room.name)) {
+                Memory.avoidRooms.push(room.name)
             }
-            else {
-                delete room.memory.avoid;
+            else if(Memory.avoidRooms && Memory.avoidRooms.includes(room.name)){
+                Memory.avoidRooms = Memory.avoidRooms.filter(rm => rm != room.name)
             }
         }
     }
@@ -472,6 +473,24 @@ class Traveler {
         }
         for (let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
+        }
+        if(Memory.kingdom.fiefs[room.name] && Memory.kingdom.fiefs[room.name].sources){
+            for (let source of Object.values(Memory.kingdom.fiefs[room.name].sources)) {
+                for(let x = -1;x<=1;x++){
+                    for(let y = -1;y<=1;y++){
+                        if(x!=0 && y!=0) matrix.set(source.x+x, source.y+y, 25);
+                    }
+                }
+            }
+        }
+        else if(Memory.kingdom.holdings[room.name] && Memory.kingdom.holdings[room.name].sources){
+            for (let source of Object.values(Memory.kingdom.holdings[room.name].sources)) {
+                for(let x = -1;x<=1;x++){
+                    for(let y = -1;y<=1;y++){
+                        if(x!=0 && y!=0) matrix.set(source.x+x, source.y+y, 25);
+                    }
+                }
+            }
         }
         return matrix;
     }

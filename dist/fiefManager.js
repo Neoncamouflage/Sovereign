@@ -32,7 +32,7 @@ const fiefManager = {
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let starterCreeps = []
         let mySpawns = room.find(FIND_MY_SPAWNS).map(spawn => spawn.id);
-        let storagePos = new RoomPosition(fief.roomPlan[4].storage[0].x,fief.roomPlan[4].storage[0].y,room.name)
+        let storagePos = fief.roomPlan ? new RoomPosition(fief.roomPlan[4].storage[0].x,fief.roomPlan[4].storage[0].y,room.name) : null;
         let roadReady = false;
         let swampNeed = false;
         fief.spawns = mySpawns
@@ -50,8 +50,8 @@ const fiefManager = {
                     true);
                 let openSpots = area.filter(spot => spot.terrain !== 'wall');
                 if(openSpots.length > 0){
-                    //If we don't have a spawn, assign the first in the room plan
-                    if(!spawns ||!spawns.length){
+                    //If we don't have a spawn and we have a plan, assign the first in the room plan
+                    if((!spawns ||!spawns.length) && fief.roomPlan){
                         let openPositions = [];
                         openSpots.forEach(every =>{
                             openPositions.push(new RoomPosition(every.x,every.y,room.name));
@@ -347,6 +347,7 @@ const fiefManager = {
             fief.spawnUptime = {};
         }
         let spawnUse = {};
+        let combinedSpawnUse = 0;
         spawns.forEach(spawn => {
             //console.log(spawn)
             if(!fief.spawnUptime[spawn]){
@@ -364,11 +365,56 @@ const fiefManager = {
                 totalSpawn += 3*item.bodySize
             });
             //Record spawn utilization
-            spawnUse[spawn] = ((totalSpawn / 3000) * 100);
+            let ute = ((totalSpawn / 3000) * 100);
+            spawnUse[spawn] = ute;
+            combinedSpawnUse += ute;
             //console.log("Spawn Utilization for",Game.getObjectById(spawn).name+':\n',((totalSpawn / 3000) * 100).toFixed(2)+'%');
         });
-        
+        combinedSpawnUse = combinedSpawnUse/spawns.length;
         //#region Room Operation
+        //#endregion
+        console.log("Spawn use:",combinedSpawnUse)
+        //Every 100 ticks (likely increase later) grab all closest remote sources and see if we should open any up
+        if(Game.time % 100 == 0){
+            let holdingCount = 0;
+            let roomRange = 2;
+            let neighbors = getNeighboringRooms(room.name,roomRange);
+            //For each neighbor, see if it's scouted and not already a holding. Add holding if so, set to standby initially
+            //Neutral and enemy rooms are both considered
+            for(let neighbor of neighbors){
+                if(global.heap.scoutData[neighbor] && (global.heap.scoutData[neighbor].roomType == 'neutral' || (global.heap.scoutData[neighbor].roomType == 'holding' && global.heap.scoutData[neighbor].ownerType == 'enemy')) && !Memory.kingdom.holdings[neighbor]){
+                    Memory.kingdom.holdings[neighbor] = {homeFief:room.name,standby:true};
+                }
+            }
+            //console.log("Checking closests sources for remotes")
+            //Run through the closest sources and see if we should use any
+            let closestSources = global.heap.fiefs[room.name].closestSources;
+            for(let source of closestSources){
+                if(holdingCount >= roomLevel){
+                    Memory.kingdom.holdings[source.holding].sources[source.id].standby = false;
+                    continue;
+                }
+                //If either the holding or the source is still on standby, add it unless the distance is too much
+                //console.log("Source",source,"json source",JSON.stringify(source))
+                //console.log(`Holding? ${source.holding} Memory Holding? ${Memory.kingdom.holdings[source.holding]}`)
+                //console.log(`Room standby? ${Memory.kingdom.holdings[source.holding].standby}. Source standby? ${Memory.kingdom.holdings[source.holding].sources[source.id].standby}`)
+                if(Memory.kingdom.holdings[source.holding].standby || Memory.kingdom.holdings[source.holding].sources[source.id].standby){
+                    //Stupid math using spawn utilization right now, definitely need to improve later
+                    console.log(`Source distance ${source.distance}, Combined spawn use: ${combinedSpawnUse}, math: ${source.distance/10 < 100-combinedSpawnUse}`)
+
+                    if(source.distance/10 < 100-combinedSpawnUse){
+                        Memory.kingdom.holdings[source.holding].standby = false;
+                        Memory.kingdom.holdings[source.holding].sources[source.id].standby = false;
+                        break;
+                    }
+                }
+                if(!Memory.kingdom.holdings[source.holding].standby){
+                    holdingCount++;
+                }
+            }
+        }
+
+
         
         //Check if we have enough harvesters by gathering total harvest strength from live creeps
         //let harvStrength = fiefCreeps['harvester'] && fiefCreeps['harvester'].reduce((sum,item) => sum+((item.body.getActiveBodyparts(WORK) * HARVEST_POWER)));
@@ -390,7 +436,7 @@ const fiefManager = {
                     creepSource = creep.memory.target;
                     targetSources[creepSource].harvs++;
                     targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
-                    if(creep.ticksToLive < storagePos.getRangeTo(Game.getObjectById(creepSource)) + (CREEP_SPAWN_TIME*creep.body.length)) targetSources[creepSource].ttlFlag = true;
+                    if(storagePos && creep.ticksToLive < storagePos.getRangeTo(Game.getObjectById(creepSource)) + (CREEP_SPAWN_TIME*creep.body.length)) targetSources[creepSource].ttlFlag = true;
                 })
             }
             else{
@@ -414,7 +460,8 @@ const fiefManager = {
             //-- Upgrader --
             const MAX_STARTERS = roomLevel >=2 ? 4 : 5;
             //Pre and post storage logic
-            console.log("Planned net",plannedNet,"Average net",averageNet)
+
+
             if(room.storage){
                 if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length <MAX_STARTERS){
                     //Make sure the spawn is nearly full
@@ -423,9 +470,6 @@ const fiefManager = {
                     if(plannedNet<=0 || averageNet<=0) return;
                     //If we passed all, request an upgrader
                     registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
-
-
-
                 }
             }
             //Pre storage logic
@@ -438,8 +482,13 @@ const fiefManager = {
                     if(plannedNet<=0 || averageNet<=0) return;
                     //If we passed all, request an upgrader
                     registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
-
-
+                }
+                else if(fiefCreeps.upgrader.length >= MAX_STARTERS && plannedNet > 0 && averageNet > 0){
+                    //Make sure they're all doing something. If so we can justify another
+                    let workingUps = fiefCreeps.upgrader.filter(up => up.store.getUsedCapacity() > 0);
+                    if(workingUps.length == fiefCreeps.upgrader.length){
+                        registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
+                    }
 
                 }
             }
@@ -1061,7 +1110,6 @@ const fiefManager = {
             
 
         }
-        //#endregion
         //#region Factory
 
         //#endregion
@@ -1219,7 +1267,7 @@ const fiefManager = {
     });
 
     //Guard
-    if(towers.length == 0 && roomBaddies.length > 0 && (!Game.creeps[fief.guard])){
+    if(false && towers.length == 0 && roomBaddies.length > 0 && (!Game.creeps[fief.guard])){
         let newName = 'Centurion '+helper.getName()+' of House '+room.name;
         spawnQueue[newName] = {
             sev:getSev('guard',room.name),body:getBody('guard',room.name,'guard'),
@@ -1327,11 +1375,12 @@ function manageResourceCollection(room) {
             type: 'pickup',
             targetID: id,
             amount: amount,
-            resourceType: resourceType
+            resourceType: resourceType,
+            priority: 6
         };
 
         const taskID = supplyDemand.addRequest(room, details);
-        console.log('Added new task:', taskID);
+        //console.log('Added new task:', taskID);
     });
 
     droppedTombstones.forEach(stone =>{
@@ -1346,4 +1395,45 @@ function manageResourceCollection(room) {
             supplyDemand.addRequest(room, details);
         });
     });
+}
+
+function getNeighboringRooms(fief, range) {
+    //Check if neighbors are already calculated
+    if(Memory.kingdom.fiefs[fief].neighbors) return Memory.kingdom.fiefs[fief].neighbors;
+
+    //Otherwise, calculate them, then save and return
+    const match = fief.match(/([EW])(\d+)([NS])(\d+)/);
+    const horizDir = match[1];
+    const horizNum = parseInt(match[2], 10);
+    const vertDir = match[3];
+    const vertNum = parseInt(match[4], 10);
+
+    const rooms = [];
+
+    for (let dx = -range; dx <= range; dx++) {
+        for (let dy = -range; dy <= range; dy++) {
+
+            const newHorizNum = horizNum + dx;
+            const newVertNum = vertNum + dy;
+
+            let newHorizDir = horizDir;
+            let effectiveHorizNum = newHorizNum;
+            if (newHorizNum < 0) {
+                newHorizDir = horizDir === 'E' ? 'W' : 'E';
+                effectiveHorizNum = Math.abs(newHorizNum) - 1;
+            }
+
+            let newVertDir = vertDir;
+            let effectiveVertNum = newVertNum;
+            if (newVertNum < 0) {
+                newVertDir = vertDir === 'N' ? 'S' : 'N';
+                effectiveVertNum = Math.abs(newVertNum) - 1;
+            }
+
+            const newRoomName = `${newHorizDir}${effectiveHorizNum}${newVertDir}${effectiveVertNum}`;
+            rooms.push(newRoomName);
+        }
+    }
+    Memory.kingdom.fiefs[fief].neighbors = rooms;
+    return rooms;
 }

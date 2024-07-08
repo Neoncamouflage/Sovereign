@@ -1,135 +1,47 @@
 //Imports
 const helper = require('functions.helper'); //Helper functions
-//Prototype extensions and modifications
 require('prototypes.room');
-require('prototypes.creep')
-require('prototypes.spawn')
-//require('roomVisual');//RV prototypes
-const roomPlanner = require('roomPlanner');
+require('prototypes.creep');
+require('prototypes.spawn');
+require('prototypes.roomposition');
+require('functions.global');
+const spinup = require('spinup')
 const kingdomManager = require('kingdomManager'); //Top level kingdom manager system
 const Traveler = require('Traveler');
-
 const profiler = require('screeps-profiler');
-const mapVisuals = require('mapVisuals');
 const fiefPlanner = require('fiefPlanner')
 profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 
 //Set Memory reference for building numbers
-Memory.roomPlanReference = {
-    100:STRUCTURE_RAMPART,
-    99:STRUCTURE_ROAD,
-    98:STRUCTURE_STORAGE,
-    97:STRUCTURE_FACTORY,
-    96:STRUCTURE_POWER_SPAWN,
-    95:STRUCTURE_LINK,
-    94:STRUCTURE_TERMINAL,
-    93:STRUCTURE_WALL,
-    88:STRUCTURE_TOWER,
-    87:STRUCTURE_EXTRACTOR,
-    76:STRUCTURE_LAB,
-    75:STRUCTURE_LAB,
-    60:STRUCTURE_EXTENSION,
-    45:STRUCTURE_OBSERVER,
-    44:STRUCTURE_NUKER,
-    33:STRUCTURE_SPAWN,
-    12:STRUCTURE_CONTAINER,
-};
+
 
 //Set scoring weights for room planning
-Memory.scoreWeights = {
-    rampTileWeight:2,
-    rampDistWeight:0.2,
-    controllerDistWeight:3,
-    sourceDistWeight:0.3,
-    extensionDistWeight:2,
-    extensionMaxWeight:1,
-    extensionMissingWeight:8,
-    controllerFoundWeight:100,
-    sourceFoundWeight:25,
-    structureFoundWeight:500
-}
 
-//Creep speech options
-Memory.creepTalk = {
-    'idle':[
-        '💤',
-
-    ]
-}
-Memory.icons = {
-    harvester: '⛏️',
-    soldier:'👮',
-    fastFiller:'✉️',
-    remoteDefender:'🛡️',
-    guard: '🛡️',
-    upgrader:'⏫',
-    gunner:'💥',
-    boost: '⏫',
-    runner: '🚚',
-    harvGrader:'⛏️',
-    starter:'👶',
-    builder:'👷',
-    marauder:'🏴‍☠️',
-    claimer:'📌',
-    dualHarv:'⛏️',
-    hauler:'📦',
-    lowHauler:'📦',
-    trucker:'🛢️',
-    generalist:'🚚',
-    hunter:'⚔️',
-    ranger:'🏹',
-    miner:'⛏️',
-    diver:'☢️',
-    bait:'☢️',
-    duo:'👮',
-    settler:'🚚',
-    manager:'🗃️',
-    extractor:'👮',
-    scout:'🧭'
-};
 Memory.globalReset = Game.time;
 module.exports.loop = function () {
     profiler.wrap(function() {
     //return;  
-    //Check if we've respawned, reset all memory if so
-    let respawn = false;
     if (hasRespawned()){
-        totalReset();
-        respawn = true;
+        spinup.run();
     }
-    //Memory checks to ensure we're set up properly
-    if(!Memory.me) Memory.me = 'NeonCamouflage';
-    //Allies are always friendly and will be healed, Ceasefire means friendly unless in an owned room
-    //Outlaws are always attacked when reasonable, and the Ledger is all encountered bots along with details and a Wrath rating to track aggressive acts
-    //Ledger bot format - {name:botOwnerUsername,Wrath:wrathAmount,realm:knownRoomsAndRemotes}
-    if(!Memory.diplomacy) Memory.diplomacy = {allies:[], ceasefire:[], outlaws:[],ledger:[]}
-    if(!Memory.kingdom) Memory.kingdom = {};
-    if(!Memory.kingdom.holdings) Memory.kingdom.holdings = {};
-    //if(!Memory.kingdom.settlements) Memory.kingdom.settlements = {};
-    if(respawn || !Memory.kingdom.fiefs || Object.keys(Memory.kingdom.fiefs).length === 0){
-        Memory.kingdom.fiefs = {};
-        for(const room in Game.rooms){
-            let myRoom = Game.rooms[room];
-            if(myRoom.controller && myRoom.controller.my){
-                Memory.kingdom.fiefs[myRoom.name] = {};
-            }
-        }
-    }
+    
 
     //Reset movement
     Traveler.resetMovementIntents();
     //Check for global reset and action accordingly
     if(Game.time == Memory.globalReset){
+        console.log("Global reset!")
         global.reset = true;
         //Segment 0 is for scout data
         //Segment 1 is for room plans
         RawMemory.setActiveSegments([0,1])
         //Global heap
-        global.heap = {granary:{},registry:{}};
+        global.heap = {fiefs:{},granary:{},registry:{}};
     }
     //If no reset, do stuff with segments
     else{
+        global.reset = false;
         let roomData = RawMemory.segments[1]
         if(roomData == "")  RawMemory.segments[1] = "{}"
         if(!global.heap.scoutData){
@@ -185,8 +97,13 @@ module.exports.loop = function () {
     //Check fiefs 
     for(const room in Game.rooms){
         let myRoom = Game.rooms[room];
-        if(myRoom.controller && myRoom.controller.my && !Memory.kingdom.fiefs[myRoom.name]){
-            Memory.kingdom.fiefs[myRoom.name] = {};
+        if(myRoom.controller && myRoom.controller.my){
+            if(!Memory.kingdom.fiefs[myRoom.name]){
+                Memory.kingdom.fiefs[myRoom.name] = {};
+            }
+            if(!global.heap.fiefs[myRoom.name]){
+                global.heap.fiefs[myRoom.name] = {};
+            }
         }
     }
 
@@ -215,10 +132,6 @@ module.exports.loop = function () {
             }
         }
         if(deadRooms.length > 0) console.log('Clearing unneeded room data:',deadRooms);
-    }
-
-    if(Memory.intelVisuals){
-        mapVisuals.intel();
     }
 
 
@@ -464,13 +377,6 @@ module.exports.loop = function () {
     });
 }
 
-//#region Globals
-//Respawn function for total reset
-global.totalReset = function() {
-    RawMemory._parsed = {};
-    Memory = {};
-};
-
 //Respawn checker by @SemperRabbit
 global.hasRespawned = function hasRespawned(){
     // check for multiple calls on same tick    
@@ -498,7 +404,7 @@ global.hasRespawned = function hasRespawned(){
     // check for controller, progress and safe mode
     const room = Game.rooms[rNames[0]];
     if(!room.controller || !room.controller.my || room.controller.level !== 1 || room.controller.progress ||
-       !room.controller.safeMode || room.controller.safeMode <= SAFE_MODE_DURATION-1) {
+       !room.controller.safeMode || room.controller.safeMode < SAFE_MODE_DURATION-1) {
         return false;
     }
 
@@ -508,6 +414,7 @@ global.hasRespawned = function hasRespawned(){
     }
 
     // if all cases point to a respawn, you've respawned
+    console.log("True due to passing all checks")
     Memory.respawnTick = Game.time;
     return true;
 }

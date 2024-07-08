@@ -419,6 +419,11 @@ const fiefPlanner = {
         const SOURCE_WEIGHT = opts.sWeight;
         const DISTANCE_WEIGHT = opts.dWeight;
         let roomData = global.heap.scoutData[roomName];
+        //If no room data, we're likely in spinup. Log and return
+        if(!roomData){
+            console.log("No room data for the room planner");
+            return;
+        }
         let sources = roomData.sources;
         let mineral = roomData.mineral;
         let exits = [];

@@ -131,6 +131,15 @@ Creep.prototype.emptyStore = function () {
             }
         }
     }
+    else if(this.room.name != this.memory.fief){
+        this.travelTo(new RoomPosition(25,25,this.memory.fief))
+    }
+    //If we're just chilling on the edge of the room, move
+    else if([0,49].includes(this.pos.x) || [0,49].includes(this.pos.y)){
+        let targetX = this.pos.x === 0 ? 1 : this.pos.x === 49 ? 48 : 25;
+        let targetY = this.pos.y === 0 ? 1 : this.pos.y === 49 ? 48 : 25;
+        this.travelTo(new RoomPosition(targetX,targetY,this.room.name))
+    }
 };
 
 //Dumps creep inventory except for specified resource, to be used with terminal/storage

@@ -3,6 +3,7 @@ const helper = require('functions.helper');
 const fiefPlanner = require('fiefPlanner');
 const missionManager = {
     run:function(milCreeps){
+        return;
         // - Assignments -
         //Set up missions if needed
         if(!Memory.kingdom.missions){
@@ -49,7 +50,8 @@ const missionManager = {
         }
         
     },
-    createMission: function(missionType,targetRoom,details=null){
+    createMission: function({missionType=undefined,targetRoom=undefined,details=undefined}={}){
+        return;
         //If no details, create a blank mission
         if(!details){
             Memory.kingdom.missions[missionType][targetRoom] = {creeps:[],complete:false}

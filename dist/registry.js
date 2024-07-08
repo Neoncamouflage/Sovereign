@@ -3,9 +3,11 @@ const granary = require('granary');
 const registry = {
     //Associates roles to names
     nameRef: {
-        'hauler':'Porter',
+        'hauler'   :'Porter',
         'harvester':'Serf',
-        'upgrader':'Scribe'
+        'upgrader' :'Scribe',
+        'scout'    :'Pilgrim',
+        'miner'    :'Yeoman'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -36,7 +38,7 @@ const registry = {
                 }
             }
             else{
-                [body,cost] = getBody(newCreep.memory.role,room,(newCreep.memory.job || 'default'),fiefCreeps)
+                [body,cost] = getBody(newCreep.memory.role,room,(newCreep.memory.job || 'default'),fiefCreeps,newCreep)
                 newCreep.body = body
             }
             
@@ -75,20 +77,22 @@ const registry = {
                 plan.memory['fat'] = true;
             }
             try{
-                var x = spawner.spawnCreep(plan.body,name,{memory:plan.memory});
+                let x = spawner.spawnCreep(plan.body,name,{memory:plan.memory});
+                
+                if(x == 0){
+                    //console.log("SPAWN UPTIME TRACK")
+                    //console.log(`RoomName ${spawner.room.name}, Uptime id ${spawner.id}, Body length ${plan.body.length}`)
+                    //console.log(JSON.stringify(Memory.kingdom.fiefs[spawner.room.name].spawnUptime[spawner.id]))
+                    Memory.kingdom.fiefs[spawner.room.name].spawnUptime[spawner.id].push({gameTime:Game.time,bodySize:plan.body.length});
+                    //console.log(JSON.stringify(Memory.kingdom.fiefs[spawner.room.name].spawnUptime[spawner.id]))
+                }
                 return x;
-                console.log("Spawn result",x)
             }
             catch(e){
                 console.log(name+'spawn error '+e)
             }
             //Track spawn uptime by logging the spawn call
-            if(x == 0){
-                //console.log("SUCCESS")
-                //console.log(JSON.stringify(Memory.kingdom.fiefs[spawner.room.name].spawnUptime[spawner.id]))
-                Memory.kingdom.fiefs[spawner.room.name].spawnUptime[spawner.id].push({gameTime:Game.time,bodySize:plan.body.length});
-                //console.log(JSON.stringify(Memory.kingdom.fiefs[spawner.room.name].spawnUptime[spawner.id]))
-            }
+
             //console.log(name+'\n'+)
             //console.log(x)
         }
@@ -110,7 +114,7 @@ module.exports = registry;
 //#region Creep Body Switch
 
 
-function getBody(role,room,job='default',fiefCreeps){
+function getBody(role,room,job='default',fiefCreeps,plan){
     let parts;
     let mult;
     let newBod;
@@ -250,16 +254,7 @@ function getBody(role,room,job='default',fiefCreeps){
                     break;
             }
         case 'miner':
-            switch(roomName){
-                case 'W39N46':
-                    return [MOVE,MOVE,WORK,WORK,WORK,WORK,WORK];
-                    break;
-                case 'W46N42':
-                    return [MOVE,MOVE,CARRY,CARRY,WORK];
-                    break;
-                default:
-                    return [MOVE,MOVE,CARRY,WORK,WORK,WORK,WORK,WORK,WORK];
-            }
+            return getMiner(plan.memory.holding)
             break;
         case 'trucker':
             switch(roomName){
@@ -280,7 +275,7 @@ function getBody(role,room,job='default',fiefCreeps){
             }
             break;
         case 'hauler':
-            return getHauler(room);
+            return getHauler(room,fiefCreeps);
         case 'upgrader':
             return getUpgrader(room)
         case 'builder':
@@ -355,10 +350,31 @@ function getEHarvester(room,fiefCreeps){
     return [newBody,partsCost];
 }
 
+//Miner - Yeoman
+function getMiner(holding){
+    let isReserved = Game.rooms[holding] && Game.rooms[holding].controller.reservation && Game.rooms[holding].controller.reservation.username == Memory.me;
+    let newBody = isReserved ? [MOVE,CARRY,WORK] : [MOVE,WORK];
+    let partsCost = 0
+    let maxWorkParts = isReserved ? 6 : 3;
+    let energyAvailable = Game.rooms[Memory.kingdom.holdings[holding].homeFief].energyCapacityAvailable;
+
+    //Set costs
+    newBody.forEach(part =>{
+        partsCost += BODYPART_COST[part]
+    })
+    //Fill with work parts until we max out on energy or hit the cap
+    while (newBody.length < maxWorkParts+1 && partsCost + BODYPART_COST[WORK] <= energyAvailable) {
+        newBody.push(WORK);
+        partsCost += BODYPART_COST[WORK];
+    }
+
+    return [newBody,partsCost];
+}
+
 //General hauler - Porter
-function getHauler(room){
+function getHauler(room,fiefCreeps){
     //console.log("Firing Hauler")
-    let parts = room.controller.level > 2 ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
+    let parts = room.controller.level > 3 && room.storage ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let [tickNet,avgNet] = granary.getIncome(room.name)
     //If we have 0 average and planned, and no haulers, the energy is what we have now, otherwise we wait for at least half of max
@@ -367,7 +383,7 @@ function getHauler(room){
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];
     let totalCost = 0;
-    console.log(`Max parts: ${maxParts}, energyAvailable: ${energyAvailable}, setCost: ${setCost}, cap: ${cap}`)
+    //console.log(`Max parts: ${maxParts}, energyAvailable: ${energyAvailable}, setCost: ${setCost}, cap: ${cap}`)
     newBody.push(...parts);
     totalCost += setCost;
     //Add parts til we hit part or energy cap

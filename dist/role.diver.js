@@ -4,6 +4,8 @@ var roleDiver = {
     /** @param {Creep} creep **/
     run: function(creep) {
         let lab;
+        creep.travelTo(new RoomPosition(16,3,'E16S33'))
+        return;
         if(!creep.memory.boosted){
             console.log("AYE")
             lab = Game.getObjectById('6605cfe8670173b7ce3154ef')

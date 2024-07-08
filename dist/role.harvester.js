@@ -45,7 +45,6 @@ var roleHarvester = {
             //Else, regular harvesting stuff
             //If not in spot, go there
             else if(!(creep.memory.status == 'harvest')){
-                if(creep.getActiveBodyparts(WORK) < 5){
                     if(creep.pos.getRangeTo(target) == 1){
                         creep.memory.stay = true;
                         creep.memory.status = 'harvest';
@@ -53,13 +52,6 @@ var roleHarvester = {
                     else{
                         creep.travelTo(target)
                     }
-                }
-                else if (creep.pos.x != fief.sources[targetID].spotx || creep.pos.y != fief.sources[targetID].spoty) {
-                    creep.travelTo(new RoomPosition(fief.sources[targetID].spotx, fief.sources[targetID].spoty, homeRoom));
-                }else{
-                    creep.memory.stay = true;
-                    creep.memory.status = 'harvest';
-                }
             }
             else{
                 //console.log("HERE")

@@ -3,13 +3,11 @@ const missionManager = require('missionManager')
 const holdingManager = require('holdingManager');
 const roleGeneralist = require('role.generalist');
 const roleHarvester = require('role.harvester');
-const roleHauler = require('role.hauler');
 const roleUpgrader = require('role.upgrader');
 const roleBuilder = require('role.builder');
 const roleFiller = require('role.filler');
 const roleClaimer = require('role.claimer');
 const roleMiner = require('role.miner')
-const roleScout = require('role.scout');
 const roleRemotedefender = require('role.remoteDefender');
 const roleTrucker = require('role.trucker');
 const roleManager = require('role.manager');
@@ -24,25 +22,26 @@ const profiler = require('screeps-profiler');
 const supplyDemand = require('supplyDemand');
 const registry = require('registry');
 const granary = require('granary');
+const intelManager = require('intelManager');
+const painter = require('painter');
 const kingdomManager = {
     run:function(){
         // - Assignments -
         //Status object for room visuals
         let kingdomStatus = {fiefs:{},holdings:{}}
         //Assign creeps to their fiefs and sort by role
-        fiefCreeps = sortCreeps();
+        kingdomCreeps = sortCreeps();
         // - Actions - 
+        //Run scouting
+        intelManager.run(kingdomCreeps.scouts ? kingdomCreeps.scouts : [],Object.keys(Memory.kingdom.fiefs))
         //Loop through all fiefs and holdings and run their respective manager
         //Holdings first so we can run the registry for each fief in the same loop
-        for(const holding in Memory.kingdom.holdings){
-            kingdomStatus.holdings[holding] = holdingManager.run(holding);
-            helper.drawVisuals(holding,'holding')
-        }
+        kingdomStatus.holdings = holdingManager.run(kingdomCreeps);
         for(const fief in Memory.kingdom.fiefs){
             supplyDemand.prepShipping(fief);
             //Assignments
             let fiefResults;
-            fiefCreeps[fief] = fiefCreeps[fief] || [];
+            kingdomCreeps[fief] = kingdomCreeps[fief] || [];
             //Make sure fief is live, remove if not
             if(!Game.rooms[fief] || !Game.rooms[fief].controller.my){
                 console.log("Removing dead fief ",fief);
@@ -50,16 +49,15 @@ const kingdomManager = {
                 continue;
             }
             
-            fiefResults = fiefManager.run(Game.rooms[fief],fiefCreeps[fief]);
+            fiefResults = fiefManager.run(Game.rooms[fief],kingdomCreeps[fief]);
             //Manage shipping tasks
-            supplyDemand.manageShipping(fief,fiefCreeps[fief]['hauler'] || []);
+            supplyDemand.manageShipping(fief,kingdomCreeps[fief]['hauler'] || []);
             //Cache the status to display next tick
             kingdomStatus.fiefs[fief] = fiefResults;
             //Run spawn logic every 3 ticks
             //if(Game.time % 3 == 0) kingdomStatus.fiefs[fief].spawnQueue = 
-            registry.calculateSpawns(Game.rooms[fief],fiefCreeps[fief]);
-            helper.drawVisuals(fief,'fief')
-            console.log(granary.getIncome(fief))
+            registry.calculateSpawns(Game.rooms[fief],kingdomCreeps[fief]);
+            //console.log(granary.getIncome(fief))
         }
 
         
@@ -72,6 +70,10 @@ const kingdomManager = {
 
         runRoles(Game.creeps);
         
+        //Run the painter for visuals if we have the cpu - Use painter estimate if we've recorded one, otherwise default 2
+        if(Game.cpu.limit-Game.cpu.getUsed() > Memory.painterEstimate ? Memory.painterEstimate : 2){
+            painter.run();
+        }
 
         //Run status manager to draw room visuals
         //Must be last thing run in kingdom for accurate details
@@ -191,11 +193,6 @@ function runRoles(kingdomCreeps){
             case 'raider':
                 roleRaider.run(myCreep);
                 break;
-            case 'scout':
-                //roleScout.run(myCreep);
-                milCreeps.push(myCreep);
-                creepRole = '🧭';
-                break
         }
         cRoles[Game.creeps[creep].memory.role] = creepRole
     }
@@ -203,20 +200,26 @@ function runRoles(kingdomCreeps){
 }
 
 function sortCreeps(){
-    let fiefCreeps={}
+    let kingdomCreeps={}
     for(let creepName in Game.creeps){
         let creep = Game.creeps[creepName];
         let fief = creep.memory.fief;
         let role = creep.memory.role
-        if (!fiefCreeps[fief]) {
-            fiefCreeps[fief] = {};
+        if(role == 'scout'){
+            kingdomCreeps.scouts = kingdomCreeps.scouts || []
+            kingdomCreeps.scouts.push(creep);
         }
-        if (!fiefCreeps[fief][role]) {
-            fiefCreeps[fief][role] = [];
+        else{
+            if (!kingdomCreeps[fief]) {
+                kingdomCreeps[fief] = {};
+            }
+            if (!kingdomCreeps[fief][role]) {
+                kingdomCreeps[fief][role] = [];
+            }
+            kingdomCreeps[fief][role].push(creep);
         }
-        fiefCreeps[fief][role].push(creep);
     }
-    return fiefCreeps;
+    return kingdomCreeps;
 }
 
 addHolding = profiler.registerFN(runRoles, 'runRoles');
