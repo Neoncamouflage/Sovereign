@@ -277,7 +277,7 @@ function getBody(role,room,job='default',fiefCreeps,plan){
         case 'hauler':
             return getHauler(room,fiefCreeps);
         case 'upgrader':
-            return getUpgrader(room)
+            return getUpgrader(room,fiefCreeps);
         case 'builder':
             switch(job){
                 case 'homeBuilder':
@@ -379,7 +379,7 @@ function getHauler(room,fiefCreeps){
     let [tickNet,avgNet] = granary.getIncome(room.name)
     //If we have 0 average and planned, and no haulers, the energy is what we have now, otherwise we wait for at least half of max
     let energyAvailable = tickNet > 0 || avgNet > 0 || fiefCreeps['hauler'] ? Math.max(room.energyCapacityAvailable/2,room.energyAvailable) : room.energyAvailable;
-    let cap = Math.min(1800, energyAvailable);
+    let cap = Math.min(room.controller.level > 3 ? 1800 : 400, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];
     let totalCost = 0;
@@ -396,13 +396,13 @@ function getHauler(room,fiefCreeps){
 }
 
 //Starter upgrader - Scribe
-function getUpgrader(room){
+function getUpgrader(room,fiefCreeps){
     let parts = [MOVE,CARRY,WORK];
     let partsCost = 0;
     for(each of parts){
         partsCost += BODYPART_COST[each];
     }
-    let engAvail = Game.rooms[room.name].energyCapacityAvailable
+    let engAvail = !fiefCreeps.upgrader ? Game.rooms[room.name].energyAvailable : Game.rooms[room.name].energyCapacityAvailable;
     let mult = Math.floor(engAvail/partsCost)
     let arrCap = room.controller.level > 3 ? 4 : 2;
     //console.log(mult)

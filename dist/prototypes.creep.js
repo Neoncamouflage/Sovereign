@@ -131,14 +131,22 @@ Creep.prototype.emptyStore = function () {
             }
         }
     }
+    //If we're just chilling with energy, see what we can fill
     else if(this.room.name != this.memory.fief){
         this.travelTo(new RoomPosition(25,25,this.memory.fief))
     }
-    //If we're just chilling on the edge of the room, move
-    else if([0,49].includes(this.pos.x) || [0,49].includes(this.pos.y)){
-        let targetX = this.pos.x === 0 ? 1 : this.pos.x === 49 ? 48 : 25;
-        let targetY = this.pos.y === 0 ? 1 : this.pos.y === 49 ? 48 : 25;
-        this.travelTo(new RoomPosition(targetX,targetY,this.room.name))
+    else{
+
+        let fills = this.room.find(FIND_MY_STRUCTURES,{filter: 
+            (structure) => [STRUCTURE_SPAWN,STRUCTURE_EXTENSION].includes(structure.structureType) && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        });
+        let target = this.pos.getClosestByTileDistance(fills);
+        if(this.pos.getRangeTo(target) == 1){
+            this.transfer(target,RESOURCE_ENERGY)
+        }
+        else{
+            this.moveTo(target)
+        }
     }
 };
 

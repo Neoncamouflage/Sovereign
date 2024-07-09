@@ -21,7 +21,7 @@ var holdingManager = {
                 //Add the sources
                 for(source of Object.values(holding.sources)){
                     let closestSources = global.heap.fiefs[holding.homeFief].closestSources
-
+                    if(!source.path) continue
                     let globalSource = {
                         distance:source.path.length,
                         id:source.id,

@@ -481,7 +481,7 @@ const fiefManager = {
                     //Make sure we're good on energy
                     if(plannedNet<=0 || averageNet<=0) return;
                     //If we passed all, request an upgrader
-                    registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
+                    registry.requestCreep({sev:(!fiefCreeps.upgrader || fiefCreeps.upgrader.length) ? 35 : 50,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
                 else if(fiefCreeps.upgrader.length >= MAX_STARTERS && plannedNet > 0 && averageNet > 0){
                     //Make sure they're all doing something. If so we can justify another
