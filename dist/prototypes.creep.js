@@ -174,3 +174,37 @@ Creep.prototype.dumpAndGet = function (target,resourceType, amount) {
         return 'withdraw'
     }
 };
+
+//Tows another creep to a target location
+Creep.prototype.tow = function (targetCreep,targetLocation) {
+    let isObject = targetLocation instanceof RoomObject;
+    if(this.pos.getRangeTo(targetCreep)==1){
+        //If it's an object, then we just want to be in range 1 of it:
+        if(isObject){
+            //If we're at the spot, try to swap places with the target creep
+            if(this.pos.getRangeTo(targetLocation) == 1){
+                this.move(this.pos.getDirectionTo(targetCreep))
+            }
+            //Else keep going
+            else{
+                this.travelTo(targetLocation,{ignoreCreeps:false})
+            }
+        }
+        //If not, we're going to the spot itself
+        else{   
+            //If we're at the spot, try to swap places with the target creep
+            if(this.pos.isEqualTo(targetLocation)){
+                this.move(this.pos.getDirectionTo(targetCreep))
+                
+            }
+            //Else keep going
+            else{
+                this.travelTo(targetLocation,{ignoreCreeps:false,range:0})
+            }
+        }
+    }
+    //If not in range, go to the target creep
+    else{
+        this.travelTo(targetCreep)
+    }
+};

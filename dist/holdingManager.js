@@ -12,6 +12,8 @@ var holdingManager = {
         if(Object.keys(global.heap.fiefs)[0] && !global.heap.fiefs[Object.keys(global.heap.fiefs)[0]].closestSources){
             //console.log("RESET, get closest sources")
             for(let [holdingName, holding] of Object.entries(Memory.kingdom.holdings)){
+                //If no homeFief, continue
+                if(!holding.homeFief) continue;
                 //If no sources yet, abandon
                 if(!holding.sources) continue;
                 //Create global if not already
@@ -60,7 +62,8 @@ var holdingManager = {
         let data = global.heap.scoutData;
         global.heap.fiefs[fief] = global.heap.fiefs[fief] || {};
         let fiefHeap = global.heap.fiefs[fief];
-        let isReserved = remote && remote.controller.reservation && remote.controller.reservation.username == Memory.me
+        let isReserved = remote && remote.controller.reservation && remote.controller.reservation.username == Memory.me;
+        let enemyReserve = remote && remote.controller.reservation && remote.controller.reservation.username != Memory.me;
         //------Initial Checks------//
         //Do we have source data for the room
         if(!holding.sources){
@@ -319,44 +322,68 @@ var holdingManager = {
             return;
         }
         if(Game.time % 3 == 0){
-            //-- Harvester --
-            //Check each source for open space and harvester need
-            //console.log("RUNNING HOLDING SPAWN")
-            //console.log("Sources",JSON.stringify(holding.sources))
-            let targetSources = Object.keys(holding.sources).reduce((obj,key) =>{
-                obj[key] = {harvs:0,power:0,ttlFlag:false};
-                return obj;
-            },{});
-            if(!fiefCreeps.miner) fiefCreeps.miner = [];
-            let fiefMiners = fiefCreeps.miner.filter(creep => creep.memory.holding == holdingName)
-            //console.log("TARGET SOURCES",JSON.stringify(targetSources))
-            if(fiefMiners){
-                fiefMiners.forEach(creep =>{
-                    //console.log("MINER MEMORY",JSON.stringify(creep.memory))
-                    creepSource = creep.memory.target;
-                    targetSources[creepSource].harvs++;
-                    targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
-                })
+            if(!enemyReserve){
+                //-- Harvester --
+                //Check each source for open space and harvester need
+                //console.log("RUNNING HOLDING SPAWN")
+                //console.log("Sources",JSON.stringify(holding.sources))
+                let targetSources = Object.keys(holding.sources).reduce((obj,key) =>{
+                    obj[key] = {harvs:0,power:0,ttlFlag:false};
+                    return obj;
+                },{});
+                if(!fiefCreeps.miner) fiefCreeps.miner = [];
+                let fiefMiners = fiefCreeps.miner.filter(creep => creep.memory.holding == holdingName)
+                //console.log("TARGET SOURCES",JSON.stringify(targetSources))
+                if(fiefMiners){
+                    fiefMiners.forEach(creep =>{
+                        //console.log("MINER MEMORY",JSON.stringify(creep.memory))
+                        creepSource = creep.memory.target;
+                        targetSources[creepSource].harvs++;
+                        targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
+                    })
+                }
+
+                //For each source, see if we have enough harvest power or enough space for a new harvester
+                Object.entries(holding.sources).forEach(([sourceID,source])=>{
+                    //If there's no room, or if we have enough harvest power, return
+
+                    if((source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= (isReserved ? SOURCE_ENERGY_CAPACITY : SOURCE_ENERGY_NEUTRAL_CAPACITY)/ENERGY_REGEN_TIME)) return;
+
+                    //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
+                    let sev = 30
+                    if(source.closest) sev+= 15
+                    //console.log("Adding remote harv to spawnQueue")
+                    registry.requestCreep({sev:sev,memory:{role:'miner',fief:fief,target:sourceID,holding:holdingName,status:'spawning',preflight:false}})
+                    
+                });
             }
+            
 
-            //For each source, see if we have enough harvest power or enough space for a new harvester
-            Object.entries(holding.sources).forEach(([sourceID,source])=>{
-                //If there's no room, or if we have enough harvest power, return
-
-                if((source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= (isReserved ? SOURCE_ENERGY_CAPACITY : SOURCE_ENERGY_NEUTRAL_CAPACITY)/ENERGY_REGEN_TIME)) return;
-
-                //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
-                let sev = 30
-                if(source.closest) sev+= 15
-                //console.log("Adding remote harv to spawnQueue")
-                registry.requestCreep({sev:sev,memory:{role:'miner',fief:fief,target:sourceID,holding:holdingName,status:'spawning',preflight:false}})
-                
-            });
+            //If we have the energy capacity in our home fief and we need a reservation, ask for a claim creep if needed
+            //We want vision for this
+            if(remote){
+                let reserverSet = false
+                if(fiefCreeps.claimer){
+                    for(creep of fiefCreeps.claimer){
+                        if(creep.memory.holding == holdingName && creep.memory.job == 'reserver'){
+                            reserverSet = true;
+                        }
+                    }
+                }
+                if(Game.rooms[fief].energyCapacityAvailable >= 650){
+                    let spots = helper.getOpenSpots(remote.controller.pos,true);
+                    console.log("Reserver checks")
+                    console.log(`For remote: ${remote.name}. Reserver set:${reserverSet},fiefCreep role:${fiefCreeps.claimer},isReserved:${isReserved},spots:${spots}`)
+                    if((!(isReserved) || remote.controller.reservation.ticksToEnd <= CONTROLLER_RESERVE_MAX/2) && !reserverSet && spots.length){
+                        registry.requestCreep({sev:20,memory:{role:'claimer',job:'reserver',fief:fief,target:{x:remote.controller.pos.x,y:remote.controller.pos.y,id:remote.controller.id},holding:holdingName,status:'spawning',preflight:false}})
+                    }
+                }
+            }
+            
         }
 
         //Check for dropped resources and submit tasks as needed
         if(remote){
-            
             let droppedResources = remote.find(FIND_DROPPED_RESOURCES);
             console.log("Checking drops in",remote.name,"and found",droppedResources.length)
             //Retrieve current tasks to check against
@@ -369,7 +396,8 @@ var holdingManager = {
                     targetID: id,
                     amount: amount,
                     resourceType: resourceType,
-                    international : true
+                    international : true,
+                    priority: 5
                 };
                 console.log("Attempting to add",JSON.stringify(details))
                 const taskID = supplyDemand.addRequest(Game.rooms[holding.homeFief], details);

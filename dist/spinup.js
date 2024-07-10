@@ -34,7 +34,7 @@ const spinup = {
 
             ]
         }
-        Memory.avoidRooms = Memory.avoidRooms || [];
+        
         Memory.icons = {
             harvester: '⛏️',
             soldier:'👮',

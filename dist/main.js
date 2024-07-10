@@ -35,7 +35,7 @@ module.exports.loop = function () {
         global.reset = true;
         //Segment 0 is for scout data
         //Segment 1 is for room plans
-        RawMemory.setActiveSegments([0,1])
+        RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
         global.heap = {fiefs:{},granary:{},registry:{}};
     }
@@ -467,5 +467,27 @@ global.getDistance = function getDistance(pos1,pos2){
     let incomp = route.incomplete;
     return [dist,incomp]
 }
+
+function recursiveMemoryProfile(memoryObject, sizes, currentDepth) {
+    for (const key in memoryObject) {
+        if (currentDepth == 0 || !_.keys(memoryObject[key]) || _.keys(memoryObject[key]).length == 0) {
+            sizes[key] = JSON.stringify(memoryObject[key]).length;
+        } else {
+            sizes[key] = {};
+            recursiveMemoryProfile(memoryObject[key], sizes[key], currentDepth - 1);
+        }
+    }
+}
+
+function profileMemory(root = Memory, depth = 1) {
+    const sizes = {};
+    console.log(`Profiling memory...`);
+    const start = Game.cpu.getUsed();
+    recursiveMemoryProfile(root, sizes, depth);
+    console.log(`Time elapsed: ${Game.cpu.getUsed() - start}`);
+    RawMemory.segments[9] = JSON.stringify(sizes, undefined, '\t');
+}
+
+global.profileMemory = profileMemory;
 //#endregion
 addHolding = profiler.registerFN(addHolding, 'addHolding');

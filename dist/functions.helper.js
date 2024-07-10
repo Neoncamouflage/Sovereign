@@ -64,17 +64,20 @@ const helper = {
         return name
     },
     //Gets the open spots next to a target room position
-    getOpenSpots: function(targetPosition){
+    getOpenSpots: function(targetPosition,checkConstructed = false){
         const terrain = Game.map.getRoomTerrain(targetPosition.roomName);
 
         let openSpots = [];
+        let walkables = [STRUCTURE_ROAD,STRUCTURE_CONTAINER];
+
         // Check the terrain in a 3x3 area centered on the target position
         for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
                 const x = targetPosition.x + dx;
                 const y = targetPosition.y + dy;
+                let lookAt = Game.rooms[targetPosition.roomName].lookAt(x,y).filter(obj => (obj.structure && !walkables.includes(obj.structure.structureType)));
                 // Check if the terrain at this position is not a wall
-                if (terrain.get(x, y) !== TERRAIN_MASK_WALL) {
+                if (terrain.get(x, y) !== TERRAIN_MASK_WALL && (!checkConstructed || !lookAt.length)) {
                     openSpots.push({ x: x, y: y, roomName: targetPosition.roomName });
                 }
             }

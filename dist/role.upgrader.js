@@ -5,9 +5,6 @@ var roleUpgrader = {
     /** @param {Creep} creep **/
     run: function(creep) {
         if(creep.memory.job = 'starterUpgrader'){
-            if(creep.store.getFreeCapacity() > creep.store.getCapacity()*0.2){
-                let x = supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
-            }
             let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES)
             if(cSites.length){
                 let target = cSites[0];
@@ -17,6 +14,9 @@ var roleUpgrader = {
                 }
                 if(range > 2){
                     creep.travelTo(target)
+                }
+                if(creep.store.getFreeCapacity() > creep.store.getCapacity()*0.2 && range <=5){
+                    let x = supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
                 }
                 return;
             }
@@ -30,7 +30,10 @@ var roleUpgrader = {
             if(range < 4){
                 creep.upgradeController(creep.room.controller)
             }
-        return;
+            if(creep.store.getFreeCapacity() > creep.store.getCapacity()*0.2 && range <=5){
+                let x = supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+            }
+            return;
         }
         let fief = Memory.kingdom.fiefs[creep.room.name];
         let upcan;

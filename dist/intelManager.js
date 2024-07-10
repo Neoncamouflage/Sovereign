@@ -7,9 +7,8 @@ const intelManager = {
         //If we have no scouts, order one
         if(Game.time % 3 == 0){
             //1 scout per fief untl 3
-            if(scouts.length < Math.max(fiefs.length,3)){
+            if(scouts.length < Math.min(fiefs.length,3)){
                 let plan = {
-                    body:[MOVE],
                     memory:{
                         sev:20,
                         role:'scout',

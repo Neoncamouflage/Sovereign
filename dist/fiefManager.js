@@ -28,6 +28,7 @@ const fiefManager = {
         let spawnQueue = fief.spawnQueue;
         let roomLevel = room.controller.level;
         if(!fief.rclTimes[roomLevel]) fief.rclTimes[roomLevel] = Game.time - fief.rclTimes.tick
+        if(!fief.rclTimes['storage'] && room.storage) fief.rclTimes['storage'] = Game.time - fief.rclTimes.tick
         let spawns = fief.spawns;
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let starterCreeps = []
@@ -61,7 +62,7 @@ const fiefManager = {
                         fief.sources[source.id] = {spotx:harvestSpot.x,spoty:harvestSpot.y,can:''};
                     }
                     //Else get the closest to spawn
-                    else{
+                    else if(spawns && spawns.length){
                         //Convert spots to room positions
                         let openPositions = [];
                         openSpots.forEach(every =>{
@@ -175,8 +176,12 @@ const fiefManager = {
                                 //console.log("SITE1")
                                 Memory.spawnBuild = l
                             }
-                            else{
-                                room.createConstructionSite(coordinate.x,coordinate.y,building)
+                            //Else if it's a road we don't build until room level 3
+                            else {
+                                if(building != STRUCTURE_ROAD || roomLevel >= 3){
+                                    room.createConstructionSite(coordinate.x,coordinate.y,building)
+                                }
+                                
                                 //console.log("SITE2",building,room.name,':',coordinate.x,coordinate.y)
                             }
                             
@@ -389,27 +394,28 @@ const fiefManager = {
             //console.log("Checking closests sources for remotes")
             //Run through the closest sources and see if we should use any
             let closestSources = global.heap.fiefs[room.name].closestSources;
-            for(let source of closestSources){
-                if(holdingCount >= roomLevel){
-                    Memory.kingdom.holdings[source.holding].sources[source.id].standby = false;
-                    continue;
-                }
-                //If either the holding or the source is still on standby, add it unless the distance is too much
-                //console.log("Source",source,"json source",JSON.stringify(source))
-                //console.log(`Holding? ${source.holding} Memory Holding? ${Memory.kingdom.holdings[source.holding]}`)
-                //console.log(`Room standby? ${Memory.kingdom.holdings[source.holding].standby}. Source standby? ${Memory.kingdom.holdings[source.holding].sources[source.id].standby}`)
-                if(Memory.kingdom.holdings[source.holding].standby || Memory.kingdom.holdings[source.holding].sources[source.id].standby){
-                    //Stupid math using spawn utilization right now, definitely need to improve later
-                    console.log(`Source distance ${source.distance}, Combined spawn use: ${combinedSpawnUse}, math: ${source.distance/10 < 100-combinedSpawnUse}`)
-
-                    if(source.distance/10 < 100-combinedSpawnUse){
-                        Memory.kingdom.holdings[source.holding].standby = false;
+            if(closestSources.length){
+                for(let source of closestSources){
+                    if(holdingCount >= roomLevel){
                         Memory.kingdom.holdings[source.holding].sources[source.id].standby = false;
-                        break;
+                        continue;
                     }
-                }
-                if(!Memory.kingdom.holdings[source.holding].standby){
-                    holdingCount++;
+                    //If either the holding or the source is still on standby, add it unless the distance is too much
+                    //console.log("Source",source,"json source",JSON.stringify(source))
+                    //console.log(`Holding? ${source.holding} Memory Holding? ${Memory.kingdom.holdings[source.holding]}`)
+                    //console.log(`Room standby? ${Memory.kingdom.holdings[source.holding].standby}. Source standby? ${Memory.kingdom.holdings[source.holding].sources[source.id].standby}`)
+                    if((Memory.kingdom.holdings[source.holding].standby || Memory.kingdom.holdings[source.holding].sources[source.id].standby) && !Memory.kingdom.holdings[source.holding].override){
+                        //Stupid math using spawn utilization right now, definitely need to improve later
+                        console.log(`Source distance ${source.distance}, Combined spawn use: ${combinedSpawnUse}, math: ${source.distance/10 < 100-combinedSpawnUse}`)
+                        if(source.distance/10 < 100-combinedSpawnUse){
+                            Memory.kingdom.holdings[source.holding].standby = false;
+                            Memory.kingdom.holdings[source.holding].sources[source.id].standby = false;
+                            break;
+                        }
+                    }
+                    if(!Memory.kingdom.holdings[source.holding].standby){
+                        holdingCount++;
+                    }
                 }
             }
         }
@@ -450,7 +456,7 @@ const fiefManager = {
                 if((source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= SOURCE_ENERGY_CAPACITY/ENERGY_REGEN_TIME) && !targetSources[sourceID].ttlFlag) return;
 
                 //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
-                let sev = noHarvs == true ? 60 : 50;
+                let sev = noHarvs == true ? 80 : 50;
                 if(source.closest) sev+= 15
                 //console.log("Adding harv to spawnQueue")
                 registry.requestCreep({sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}})
@@ -472,12 +478,12 @@ const fiefManager = {
                     registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
             }
-            //Pre storage logic
-            else{
+            //Pre storage logic - always make sure we have harvesters before spawning upgraders
+            
+            else if(fiefCreeps.harvester && fiefCreeps.harvester.length == Object.keys(fief.sources).length){
+                
                 //If no upgraders(who are also builders at this stage), and we're below a default cap
                 if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length <MAX_STARTERS){
-                    //Make sure the spawn is nearly full
-                    if(Game.getObjectById(spawns[0]).store[RESOURCE_ENERGY] < 250) return;
                     //Make sure we're good on energy
                     if(plannedNet<=0 || averageNet<=0) return;
                     //If we passed all, request an upgrader
@@ -1178,9 +1184,9 @@ const fiefManager = {
         //Set defense mission if hostile creeps are detected and they're not scouts
         if(roomBaddies.some(creep => !helper.isScout(creep)&& !Memory.diplomacy.allies.includes(creep.owner.username))){
             //Create defend mission if one isn't already active
-            if(!Memory.kingdom.missions.defend[room.name]){
-                missionManager.createMission('defend',room.name,{hostileCreeps:roomBaddies.filter(creep =>{!Memory.diplomacy.allies.includes(creep.owner.username)})})
-            }
+            //if(!Memory.kingdom.missions.defend[room.name]){
+                //missionManager.createMission('defend',room.name,{hostileCreeps:roomBaddies.filter(creep =>{!Memory.diplomacy.allies.includes(creep.owner.username)})})
+            //}
         }
 
         //Military manager needed for this stuff

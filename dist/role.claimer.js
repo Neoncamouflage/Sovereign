@@ -6,10 +6,10 @@ var roleClaimer = {
             if(!creep.memory.preflight){
                 creep.memory.preflight = true;
             }
-            var targetRoom = creep.memory.targetRoom;
+            var targetRoom = creep.memory.holding;
             var targetText = 'Tax Collection Ongoing💰'
             if(creep.room.name != targetRoom){
-                    creep.travelTo(new RoomPosition(creep.memory.controllerPos.x,creep.memory.controllerPos.y,targetRoom));
+                    creep.travelTo(new RoomPosition(creep.memory.target.x,creep.memory.target.y,creep.memory.holding));
             }
             else {
                 if(creep.room.controller.reservation && creep.room.controller.reservation.username != Memory.me){
@@ -22,7 +22,10 @@ var roleClaimer = {
                     let attempt = creep.reserveController(creep.room.controller)
                     if(attempt == ERR_NOT_IN_RANGE) {
                         creep.travelTo(creep.room.controller)
-                    }else{
+                    }else if(attempt == OK){
+                        if(!creep.memory.signed){
+                            creep.memory.signController(targetText)
+                        }
                         //console.log(attempt)
                     }
                     
