@@ -11,9 +11,14 @@ var roleMiner = {
             creep.memory.preflight = true;
         }
         
-
+        let holding = Memory.kingdom.holdings[creep.memory.holding];
         if(creep.room.name != creep.memory.holding){
-            if(targetSource){
+            if(targetSource && holding.sources[creep.memory.target].path){
+                let path = holding.sources[creep.memory.target].path
+                let pos = path[path.length-1]
+                creep.travelTo(new RoomPosition(pos.x,pos.y, creep.memory.holding),{range:0})
+            }
+            else if (targetSource){
                 creep.travelTo(targetSource)
             }
             else{

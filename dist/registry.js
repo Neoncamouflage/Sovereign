@@ -8,7 +8,10 @@ const registry = {
         'upgrader' :'Scribe',
         'scout'    :'Pilgrim',
         'miner'    :'Yeoman',
-        'claimer'  :'Baron'
+        'claimer'  :'Baron',
+        'builder'  :'Mason',
+        'diver'    :'Reaver',
+        'bait'     :'Rogue'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -55,6 +58,10 @@ const registry = {
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
                 let newName = this.nameRef[newCreep.memory.role]+' '+helper.getName()+' of House '+room.name;
+                //Assign a fief if one isn't provided or is invalid
+                if(!newCreep.memory.fief || !Memory.kingdom.fiefs[newCreep.memory.fief]){
+                    newCreep.memory.fief = room.name;
+                }
                 let spawnTry = this.spawnCreep(nextSpawn,newName,newCreep)
 
                 //If we successfully spawned and this was a respawn request from a creep, update them
@@ -157,7 +164,10 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             return getHauler(room,fiefCreeps);
             break;
         case 'upgrader':
-            return getUpgrader(room,fiefCreeps);
+            return getUpgrader(room,fiefCreeps,job);
+            break;
+        case 'builder':
+            return getBuilder(room,fiefCreeps);
             break;
     }
     console.log("GETBODY FAIL FOR",role,room,job,fiefCreeps,plan)
@@ -404,14 +414,14 @@ function getMiner(holding){
 //General hauler - Porter
 function getHauler(room,fiefCreeps){
     //console.log("Firing Hauler")
-    let parts = room.controller.level > 3 && room.storage ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
+    let parts = room.controller.level > 3 && room.storage ? [MOVE, CARRY] : [MOVE,CARRY];
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let [tickNet,avgNet] = granary.getIncome(room.name)
     //If we have 0 average and planned, and no haulers, the energy is what we have now, otherwise we wait for at least half of max
     //console.log("Hauler spawning: Ticknet",tickNet,"AvgNet",avgNet,"Hauler creeps?",fiefCreeps['hauler'])
     let energyAvailable = (tickNet > 0 || avgNet > 0) && (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? Math.max(room.energyCapacityAvailable/2,room.energyAvailable) : room.energyAvailable;
     //console.log("Available energy",energyAvailable)
-    let cap = Math.min(room.controller.level > 3 ? 1800 : 400, energyAvailable);
+    let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];
     let totalCost = 0;
@@ -428,13 +438,14 @@ function getHauler(room,fiefCreeps){
 }
 
 //Starter upgrader - Scribe
-function getUpgrader(room,fiefCreeps){
+function getUpgrader(room,fiefCreeps,job){
     let parts = [MOVE,CARRY,WORK];
     let partsCost = 0;
     for(each of parts){
         partsCost += BODYPART_COST[each];
     }
-    let engAvail = !fiefCreeps.upgrader ? room.energyAvailable : room.energyCapacityAvailable;
+    let isStarter = job == 'starterUpgrader';
+    let engAvail = (!fiefCreeps.upgrader && isStarter) ? room.energyAvailable : room.energyCapacityAvailable;
     let mult = Math.floor(engAvail/partsCost)
     let arrCap = room.controller.level > 3 ? 4 : 2;
     //console.log(mult)
@@ -462,7 +473,7 @@ function getScout(room,fiefCreeps){
 }
 
 function getReserver(room,fiefCreeps){
-    let parts = [MOVE,CLAIM];
+    let parts = [MOVE,MOVE,CLAIM,CLAIM];
     let partsCost = 0;
     for(each of parts){
         partsCost += BODYPART_COST[each];
@@ -481,5 +492,40 @@ function getReserver(room,fiefCreeps){
     //console.log("RESBOD",newBod)
     return [newBod,totalCost]
     //return[[],-1]
+}
+
+//Builder - Mason
+function getBuilder(room,fiefCreeps){
+    let nonWork = [MOVE,CARRY]
+    let fullSet = [MOVE,CARRY,WORK,WORK,WORK,WORK];
+    let fullCost = fullSet.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+    let totalCost = 0;
+    let engAvail = room.energyCapacityAvailable;
+    //First see if we have enough to do even a single full set
+    if(engAvail < fullCost){
+        //If not then we build what we can
+        let newBod = nonWork;
+        let engLeft = engAvail-newBod.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+        let workParts = Math.floor(engLeft/BODYPART_COST[WORK])
+        newBod = newBod.concat(Array(workParts))
+        totalCost = (engAvail-engLeft)+(workParts*BODYPART_COST[WORK])
+        return [newBod,totalCost]
+    }
+    //Get max sets we can afford, capping at the creep body limit
+    let maxSets = Math.min(Math.floor(engAvail/fullCost),Math.floor(MAX_CREEP_SIZE/fullSet.length));
+    //Build the body
+    let newBod = [];
+    for(let i=0;i<maxSets;i++){
+        newBod = newBod.concat(fullSet)
+        totalCost += fullCost
+    }
+    //See if we have space to fill with work parts and energy to do so
+    if(engAvail-totalCost >= BODYPART_COST[WORK] && newBod.length < MAX_CREEP_SIZE){
+        let extraWorks = Math.floor((engAvail-totalCost)/BODYPART_COST[WORK]);
+        newBod = newBod.concat(Array(extraWorks).fill(WORK));
+        totalCost += extraWorks*BODYPART_COST[WORK];
+    }
+    
+    return [newBod,totalCost]
 }
 //#endregion

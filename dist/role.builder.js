@@ -1,72 +1,53 @@
-var roleBuilder = {
+const supplyDemand = require('supplyDemand')
 
+const roleBuilder = {
     /** @param {Creep} creep **/
     run: function(creep) {
-        if(creep.memory.job == 'homeBuilder'){
-            let ramps = 'None'
-            if(!creep.memory.preflight){
-                creep.memory.preflight = true;
-            }
-            if(creep.room.name != creep.memory.homeRoom){
-                    creep.travelTo(new RoomPosition(38, 23, creep.memory.homeRoom));
-            }
-            else if(creep.store.getUsedCapacity() > 0){
-                var targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+        let ramps = 'None'
+        if(!creep.memory.preflight){
+            creep.memory.preflight = true;
+        }
+        if(creep.room.name != creep.memory.fief){
+                creep.travelTo(new RoomPosition(38, 23, creep.memory.fief));
+        }
+        else{
+            let target;
+            if(creep.memory.target) target = Game.getObjectById(creep.memory.target)
+            if(!target){
+                let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+                target = creep.pos.findClosestByRange(targets)
+                if(target){creep.memory.target = target.id}
                 
-                    if(targets.length) {
-                        var buildSite = creep.pos.findClosestByRange(targets)
-                        if(creep.room.storage){
-                            creep.withdraw(creep.room.storage,RESOURCE_ENERGY)
-                        }
-                        if(creep.pos.getRangeTo(buildSite) != 1){
-                            creep.travelTo(buildSite);
-                        }
-                        x = creep.build(buildSite);
-
-                        //Keeps him next to the site and out of narrow hallways
-                        
-                    }
-                    else{
-                        
-                        /*var damagedStructures = creep.room.find(FIND_STRUCTURES, {
-                            filter: (structure) => (structure.hits < 1000000 && structure.structureType == STRUCTURE_WALL)
-                        });
-                        if(creep.repair(damagedStructures[0]) == ERR_NOT_IN_RANGE) {
-                            creep.travelTo(damagedStructures[0]);
-                        }*/
-                        /*let ffCan = Object.keys(Memory.kingdom.fiefs[creep.room.name].fastFiller)[0];
-                        console.log(ffCan)
-                        if(Game.getObjectById(ffCan)){
-                            
-                            let can = Game.getObjectById(ffCan)
-                            if(creep.pos.getRangeTo(can) == 0){
-                                creep.suicide();
-                            }
-                            creep.travelTo(can);
-                        }*/
-                    }
             }
-            else{
-                var sources = false
-                    if (sources) {
-                        if (creep.pickup(sources) == ERR_NOT_IN_RANGE) {
-                            creep.travelTo(sources);
+            if(target && creep.store.getUsedCapacity() > 0) {
+                if(creep.pos.getRangeTo(target) > 3){
+                    creep.travelTo(target);
+                }
+                else{
+                    creep.build(target)
+                }                    
+            }
+
+            //Submit order if not close to storage
+            if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
+                if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
+                    supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                }
+                else if(creep.store.getUsedCapacity() == 0){
+                    if(creep.room.storage){
+                        let range = creep.pos.getRangeTo(creep.room.storage);
+                        if(range == 1){
+                            creep.withdraw(creep.room.storage,RESOURCE_ENERGY);
+                        }
+                        else if(range < 5){
+                            creep.travelTo(creep.room.storage)
                         }
                     }
-                    else{
-                        if(creep.room.terminal && creep.room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) > 1000){
-                            if (creep.withdraw(creep.room.terminal, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
-                                creep.travelTo(creep.room.terminal);
-                            }
-                        }
-                        else if(creep.room.storage && creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 5000){
-                            if (creep.withdraw(creep.room.storage, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
-                                creep.travelTo(creep.room.storage);
-                            }
-                        }
-                    }
+                }
             }
         }
+}
+        /*
         else if(creep.memory.job == 'remoteBuilder'){
             if(!creep.memory.preflight){
             }
@@ -214,7 +195,7 @@ var roleBuilder = {
                     }
             }
         }//--------------------------------------
-    }
+    }*/
 };
 
 module.exports = roleBuilder;

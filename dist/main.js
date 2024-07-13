@@ -35,9 +35,17 @@ module.exports.loop = function () {
         global.reset = true;
         //Segment 0 is for scout data
         //Segment 1 is for room plans
+        //Segment 2 is for cached paths
+        //Segment 9 is for ad-hoc logging
         RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
         global.heap = {fiefs:{},granary:{},registry:{}};
+        /*for(let fief in Memory.kingdom.fiefs){
+            global.heap.fiefs[fief] = {};
+        }
+        for(let holding in Memory.kingdom.holdings){
+            global.heap.holdings[holding] = {}
+        }*/
     }
     //If no reset, do stuff with segments
     else{
@@ -53,38 +61,7 @@ module.exports.loop = function () {
                 global.heap.scoutData = {} = JSON.parse(scoutData)
             }
         }
-        else{
-            //Record scout data if new
-            Object.entries(Game.rooms).forEach(([roomName,room])=>{
-                //Record every room at least once, update non-fief rooms only every 200 ticks
-                if(!global.heap.scoutData[roomName] || (global.heap.scoutData[roomName].lastRecord < Game.time - 200 && !Memory.kingdom.fiefs[roomName])){
-                    //console.log("AYE")
-                    let [roomType,ownerType,owner] = helper.getRoomType(room);
-                    let sources = room.find(FIND_SOURCES).map(src => {return {x:src.pos.x,y:src.pos.y,id:src.id}})
-                    let mineral = room.find(FIND_MINERALS)[0];
-                    let towerPositions = room.find(FIND_HOSTILE_STRUCTURES,{filter:{structureType:STRUCTURE_TOWER}}).map(tow => {return {x:tow.pos.x,y:tow.pos.y,id:tow.id}});
-                    let otherCreeps = room.find(FIND_HOSTILE_CREEPS);
-                    //let hostileCreeps = otherCreeps.filter(creep =>{!Memory.diplomacy.allies.includes(creep.owner.username)});
-                    //let allyCreeps = otherCreeps.filter(creep =>{Memory.diplomacy.allies.includes(creep.owner.username)});
-                    
-                    //If the N/S and E/W coords mod 10 are both 5 then it's a center room, otherwise if they're both in the range 4-6 then it's an SK room. 
-                    //Maybe use this instead of saving room type
-                    global.heap.scoutData[roomName] = {
-                        lastRecord : Game.time,
-                        roomType: roomType,
-                        ownerType: ownerType,
-                        owner: ownerType ?  owner : null,
-                        controller: room.controller ? {x:room.controller.pos.x,y:room.controller.pos.y} : null,
-                        controllerLevel: roomType == 'fief' ? room.controller.level : null,
-                        towers: towerPositions,
-                        sources: sources,
-                        mineral: mineral ? {x:mineral.pos.x,y:mineral.pos.y,type:mineral.mineralType} : null,
-                        exits: Game.map.describeExits(roomName),
-                    }
-                    global.heap.newScoutData = true;
-                }
-            })
-    
+        else{    
             //If scout data changed,record it to the segment. Check every 100 ticks
             if(Game.time % 100 == 0 && global.heap.newScoutData){
                 //console.log("Updating scout data")
@@ -100,6 +77,7 @@ module.exports.loop = function () {
         if(myRoom.controller && myRoom.controller.my){
             if(!Memory.kingdom.fiefs[myRoom.name]){
                 Memory.kingdom.fiefs[myRoom.name] = {};
+                
             }
             if(!global.heap.fiefs[myRoom.name]){
                 global.heap.fiefs[myRoom.name] = {};
@@ -462,7 +440,25 @@ global.clearQueue = function clearQueue(room='all'){
     }
 }
 global.getDistance = function getDistance(pos1,pos2){
-    let route = PathFinder.search(pos1,{pos:pos2,range:1});
+    let route = PathFinder.search(pos1,{pos:pos2,range:1,
+        roomCallback: function(roomName) {
+      
+            let room = Game.rooms[roomName];
+            let costs = new PathFinder.CostMatrix;    
+            if (room){
+              room.find(FIND_STRUCTURES).forEach(function(struct) {
+                  if (struct.structureType === STRUCTURE_ROAD) {
+                    costs.set(struct.pos.x, struct.pos.y, 1);
+                  } else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                             (struct.structureType !== STRUCTURE_RAMPART ||
+                              !struct.my)) {
+                    costs.set(struct.pos.x, struct.pos.y, 255);
+                  }
+                });
+            }
+            return costs;
+          },
+    });
     let dist = route.path.length;
     let incomp = route.incomplete;
     return [dist,incomp]

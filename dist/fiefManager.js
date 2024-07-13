@@ -128,7 +128,7 @@ const fiefManager = {
         }
 
         if(Game.time % 100 == 0 && fief.roomPlan && !cSites.length){
-            console.log("Checking for new constructions.")
+            //console.log("Checking for new constructions.")
             let plan = fief.roomPlan
             for(let rcl = 1;rcl <= roomLevel;rcl++){
                 for(let building in plan[rcl]){
@@ -162,12 +162,12 @@ const fiefManager = {
                                 };
                                 let name = ''
                                 if(!keepSpawn){
-                                    name = helper.getName(3)+' Keep';
+                                    name = helper.getName({isSpawn:true})+' Keep';
                                 }
                                 else if(!manorSpawn){
-                                    name = helper.getName(3)+' Manor';
+                                    name = helper.getName({isSpawn:true})+' Manor';
                                 }else if(!hallSpawn){
-                                    name = helper.getName(3)+' Hall';
+                                    name = helper.getName({isSpawn:true})+' Hall';
                                 }else{
                                     console.log(room.name,"unable to name spawn, all types found")
                                 }
@@ -378,7 +378,7 @@ const fiefManager = {
         combinedSpawnUse = combinedSpawnUse/spawns.length;
         //#region Room Operation
         //#endregion
-        console.log("Spawn use:",combinedSpawnUse)
+        //console.log("Spawn use:",combinedSpawnUse)
         //Every 100 ticks (likely increase later) grab all closest remote sources and see if we should open any up
         if(Game.time % 100 == 0){
             let holdingCount = 0;
@@ -442,7 +442,10 @@ const fiefManager = {
                     creepSource = creep.memory.target;
                     targetSources[creepSource].harvs++;
                     targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
-                    if(storagePos && creep.ticksToLive < storagePos.getRangeTo(Game.getObjectById(creepSource)) + (CREEP_SPAWN_TIME*creep.body.length)) targetSources[creepSource].ttlFlag = true;
+                    if(storagePos && creep.ticksToLive < storagePos.getRangeTo(Game.getObjectById(creepSource)) + (CREEP_SPAWN_TIME*creep.body.length) && !creep.memory.respawn){
+                        targetSources[creepSource].ttlFlag = creep.id;
+
+                    };
                 })
             }
             else{
@@ -458,8 +461,10 @@ const fiefManager = {
                 //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
                 let sev = noHarvs == true ? 80 : 50;
                 if(source.closest) sev+= 15
+                let opts = {sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}}
+                if(targetSources[sourceID].ttlFlag) opts.respawn = targetSources[sourceID].ttlFlag
                 //console.log("Adding harv to spawnQueue")
-                registry.requestCreep({sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}})
+                registry.requestCreep(opts)
                 
             });
 
@@ -469,13 +474,18 @@ const fiefManager = {
 
 
             if(room.storage){
-                if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length <MAX_STARTERS){
-                    //Make sure the spawn is nearly full
-                    if(Game.getObjectById(spawns[0]).store[RESOURCE_ENERGY] < 250) return;
-                    //Make sure we're good on energy
-                    if(plannedNet<=0 || averageNet<=0) return;
-                    //If we passed all, request an upgrader
-                    registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
+                let upgradersNeeded;
+                if(room.storage.store[RESOURCE_ENERGY] < 50000){
+                    upgradersNeeded = 0;
+                }
+                else{
+                    upgradersNeeded = Math.ceil(room.storage.store[RESOURCE_ENERGY]/200000);
+                }
+                if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded){
+                    registry.requestCreep({sev:35,memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
+                }
+                if(cSites.length && !fiefCreeps.builder){
+                    registry.requestCreep({sev:45,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false}})
                 }
             }
             //Pre storage logic - always make sure we have harvesters before spawning upgraders

@@ -106,7 +106,7 @@ var holdingManager = {
             }
             //Else log an error, once we have proper scouting we can submit a request to intelManager
             else{
-                console.log(`Holding ${holdingName} has no scout data or vision to find sources`)
+              //  console.log(`Holding ${holdingName} has no scout data or vision to find sources`)
                 return;
             }
 
@@ -145,7 +145,13 @@ var holdingManager = {
 
                 if(route.incomplete){
                     //LOGGING
-                    console.log("Incomplete route in",holdingName);
+                   // console.log("Incomplete route in",holdingName);
+                    if(!holding.routeFlag){
+                        holding.routeFlag = Game.time;
+                    }
+                    else if(Game.time - holding.routeFlag > 50){
+                        delete holding.homeFief
+                    }
                     return;
                 }
                 //Save the path to the source and distance to the fief data
@@ -370,10 +376,10 @@ var holdingManager = {
                         }
                     }
                 }
-                if(Game.rooms[fief].energyCapacityAvailable >= 650){
+                if(Game.rooms[fief].energyCapacityAvailable >= 1300){
                     let spots = helper.getOpenSpots(remote.controller.pos,true);
-                    console.log("Reserver checks")
-                    console.log(`For remote: ${remote.name}. Reserver set:${reserverSet},fiefCreep role:${fiefCreeps.claimer},isReserved:${isReserved},spots:${spots}`)
+                   // console.log("Reserver checks")
+                   // console.log(`For remote: ${remote.name}. Reserver set:${reserverSet},fiefCreep role:${fiefCreeps.claimer},isReserved:${isReserved},spots:${spots}`)
                     if((!(isReserved) || remote.controller.reservation.ticksToEnd <= CONTROLLER_RESERVE_MAX/2) && !reserverSet && spots.length){
                         registry.requestCreep({sev:20,memory:{role:'claimer',job:'reserver',fief:fief,target:{x:remote.controller.pos.x,y:remote.controller.pos.y,id:remote.controller.id},holding:holdingName,status:'spawning',preflight:false}})
                     }
@@ -385,7 +391,7 @@ var holdingManager = {
         //Check for dropped resources and submit tasks as needed
         if(remote){
             let droppedResources = remote.find(FIND_DROPPED_RESOURCES);
-            console.log("Checking drops in",remote.name,"and found",droppedResources.length)
+            //console.log("Checking drops in",remote.name,"and found",droppedResources.length)
             //Retrieve current tasks to check against
             droppedResources.forEach(resource => {
                 const { id, amount, resourceType } = resource;
@@ -399,9 +405,9 @@ var holdingManager = {
                     international : true,
                     priority: 5
                 };
-                console.log("Attempting to add",JSON.stringify(details))
+                //console.log("Attempting to add",JSON.stringify(details))
                 const taskID = supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
-                console.log('Holding added new task:', taskID);
+                //console.log('Holding added new task:', taskID);
             });
         }
         
@@ -757,6 +763,515 @@ var holdingManager = {
 
         //Do something with room status, for now console
         //console.log(roomStatus)
+    },
+    findPathCenterpoint: function(positions,entryPoint){
+        let keySites = positions
+        keySites.push(entryPoint)
+        //Assignments
+        let orbitPaths = [];
+        let newOrbit = []
+        let midPoints = []
+        let targetFlag = false;
+        let orbitCount = 0;
+        let safetyCatch = 0;
+        let pathOpts = {
+            // Same cost for everything because we're finding a centerpoint
+            plainCost: 1,
+            swampCost: 1,
+      
+            roomCallback: function(roomName) {
+      
+              let room = Game.rooms[roomName];
+              let costs = new PathFinder.CostMatrix;    
+              if (room){
+                room.find(FIND_STRUCTURES).forEach(function(struct) {
+                    if (struct.structureType === STRUCTURE_ROAD) {
+                      // Set roads the same as plain tiles for now
+                      costs.set(struct.pos.x, struct.pos.y, 1);
+                    } else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                               (struct.structureType !== STRUCTURE_RAMPART ||
+                                !struct.my)) {
+                      // Can't walk through non-walkable buildings
+                      costs.set(struct.pos.x, struct.pos.y, 255);
+                    }
+                  });
+              }
+              return costs;
+            },
+        }
+
+
+
+
+        //Get initial paths between all key sites and store them in the newOrbit array
+        for(let i = 0; i < keySites.length ; i++){
+            if(i+1 == keySites.length){
+                newOrbit.push(PathFinder.search(keySites[i], {pos:keySites[0],range:1},pathOpts).path)
+            }
+            else{
+                newOrbit.push(PathFinder.search(keySites[i], {pos:keySites[i+1],range:1},pathOpts).path)
+            }
+            
+        }
+        //Push this orbit to the main array
+        orbitPaths.push(newOrbit)
+        //Loop around making more paths until we are close enough to find a target
+        while(!targetFlag){
+            //Clear old midpoints of the paths and get new ones
+            midPoints = [];
+            orbitPaths[safetyCatch].forEach(path => {
+                midPoints.push(path[Math.floor(path.length/2)]);
+            })
+            //Check to see if ranges are good. If any one isn't, flip the flag back to false
+            targetFlag = true;
+            //Remove duplicate midpoints first
+            const seen = new Set();
+            //console.log("POS",JSON.stringify(pos))
+            let bar = midPoints.filter(pos => {
+                
+                const serialized = pos.x + ',' + pos.y + ',' + pos.roomName;
+                if (seen.has(serialized)) {
+                    return false;
+                }
+                seen.add(serialized);
+                return true;
+            });
+            midPoints = bar;
+            midPoints.forEach(spot1 => {
+                midPoints.forEach(spot2 => {
+                    try{
+                        if(!spot1.inRangeTo(spot2,1)){
+                            targetFlag = false;
+                        }
+                        //console.log(spot1,spot2)
+                    }
+                    catch(e){
+                        console.log('Error',e)
+                        console.log(midPoints)
+                        console.log(spot1)
+                        console.log(spot2)
+                        targetFlag = true
+                    }
+                })
+            })
+
+            //Safety catch so we don't loop infinitely and serves as an index for orbitPaths above
+            if(targetFlag || safetyCatch == 10) break;
+            safetyCatch++;
+
+            //At this point ranges aren't good and we're still in the safe loop count, so we path another set
+            //Clear the newOrbit array
+            newOrbit = []
+            for(let i = 0; i < midPoints.length ; i++){
+                if(i+1 == midPoints.length){
+                    newOrbit.push(PathFinder.search(midPoints[i],midPoints[0],pathOpts).path);
+                }
+                else{
+                    newOrbit.push(PathFinder.search(midPoints[i],midPoints[i+1],pathOpts).path);
+                }
+                
+            }
+            //Push the new round of paths to the main array
+            orbitPaths.push(newOrbit)
+        }
+        //Now we have the midpoints within an acceptable range, so we average the coordinates to get the center point.
+        let sumX = 0;
+        let sumY = 0;
+        for (const pos of midPoints) {
+            sumX += pos.x;
+            sumY += pos.y;
+        }
+        return {
+            paths:orbitPaths,
+            centerX:Math.floor(sumX / midPoints.length),
+            centerY:Math.floor(sumY / midPoints.length)
+        };
+
+    },
+    interpolateColors: function(start, end, progress) {
+        // Interpolate each RGB component separately
+        const r = Math.round(start.r + (end.r - start.r) * progress);
+        const g = Math.round(start.g + (end.g - start.g) * progress);
+        const b = Math.round(start.b + (end.b - start.b) * progress);
+
+        return { r, g, b };
+    },
+    routeRemoteRoad: function(holdingPositions,entryPoint){
+        let startCPU = Game.cpu.getUsed();
+        let roomName = holdingPositions.controller.roomName;
+        let keySites = holdingPositions.sources;
+        keySites.push(holdingPositions.controller)
+        let sources = holdingPositions.sources;
+        //console.log(keySites[1] instanceof RoomPosition)
+        //Assignments
+        //All routes
+        let totalRoutes = []
+        //Current route we're working on
+        let thisRoute = []
+        //Array of targets for this run
+        let thisTargets = []        
+        let midRoute = []
+        /*return {
+            room:room,
+            paths:orbitPaths,
+            centerX:Math.floor(sumX / midPoints.length),
+            centerY:Math.floor(sumY / midPoints.length)
+            };*/
+            //Midpoint pathfind
+            let midpoint = this.findPathCenterpoint(keySites,entryPoint)
+            //console.log(JSON.stringify(midpoint))
+            let midTarget = new RoomPosition(midpoint.centerX,midpoint.centerY,roomName)
+            
+            //If midpoint isn't in terrain, run its check
+            let terrain = Game.map.getRoomTerrain(roomName)
+            let tile = terrain.get(midpoint.centerX,midpoint.centerY);
+            if(tile != TERRAIN_MASK_WALL){
+                midRoute = PathFinder.search(entryPoint,midTarget,{
+                    plainCost: 10,
+                    swampCost: 11,
+                    maxOps:10000,
+                    roomCallback: function(roomName) {
+                      let room = Game.rooms[roomName];
+                      let isFief = false
+                      let costs;
+                      if(Memory.kingdom.fiefs[roomName]){
+                        costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[roomName].costMatrix) || new PathFinder.CostMatrix;
+                        isFief = true;
+                      }
+                      else if(Memory.kingdom.holdings[roomName]){
+                        costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[roomName].costMatrix) || new PathFinder.CostMatrix;
+                      }
+                      else{
+                        costs = new PathFinder.CostMatrix;
+                      }
+                      if (room && !isFief){
+                        room.find(FIND_STRUCTURES).forEach(function(struct) {
+                            if (struct.structureType === STRUCTURE_ROAD) {
+                              costs.set(struct.pos.x, struct.pos.y, 1);
+                            }else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                                (struct.structureType !== STRUCTURE_RAMPART ||
+                                 !struct.my)) {
+                            // Can't walk through non-walkable buildings
+                            costs.set(struct.pos.x, struct.pos.y, 255);
+                            }
+                          });
+                      };
+                      return costs;
+                    },
+                }).path;
+            }
+        
+        
+        
+        keySites.forEach(site => {
+            //For each key site position
+            //Clear list of targets for this site
+            thisTargets = [];
+            //Clear route for this site
+            thisRoute = []
+
+            //If we have a valid midpoint, run a second set based on those checks
+            if(midRoute.length){
+                    //Get all secondary targets for this site
+                keySites.forEach(target=>{
+                    //If it isn't the current main site, add it to targets
+                    if(!site.isEqualTo(target)){
+                        thisTargets.push(target);
+                    }
+                })
+                //Initial pathfind for this site
+                //Range 4 from controller so we try to keep from blocking traffic and don't pull too hard on pathfinding
+                //Range 2 from sources so we try not to plan roads under cans.
+                //let range = site.structureType === STRUCTURE_CONTROLLER ? 4 : 2;
+                thisRoute.push(PathFinder.search(entryPoint, {pos:site,range:1},{
+                    // Minor plains preference
+                    plainCost: 10,
+                    swampCost: 11,
+                    maxOps:5000,
+                    roomCallback: function(roomName) {
+                    let isFief = false;
+                    let room = Game.rooms[roomName];
+                    let costs;
+                    if(Memory.kingdom.fiefs[roomName]){
+                        costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[roomName].costMatrix) || new PathFinder.CostMatrix;
+                        isFief = true;
+                    }
+                    else if(Memory.kingdom.holdings[roomName]){
+                        costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[roomName].costMatrix) || new PathFinder.CostMatrix;
+                    }
+                    else{
+                        costs = new PathFinder.CostMatrix;
+                    }
+                    //console.log("Calculating cost matrix for room",roomName)
+                    if (room && !isFief){                        
+                        room.find(FIND_STRUCTURES).forEach(function(struct) {
+                            if (struct.structureType === STRUCTURE_ROAD) {
+                            // Strong roads preference
+                            costs.set(struct.pos.x, struct.pos.y, 1);
+                            }else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                                (struct.structureType !== STRUCTURE_RAMPART ||
+                                 !struct.my)) {
+                            // Can't walk through non-walkable buildings
+                            costs.set(struct.pos.x, struct.pos.y, 0xff);
+                            }
+                        });
+                    };
+                    midRoute.forEach(spot =>{
+                        if(spot.roomName == roomName){
+                            costs.set(spot.x, spot.y, 1);
+                        }
+                    })
+                    return costs;
+                    },
+                }).path);
+
+                //All other secondary pathfinds
+                thisTargets.forEach(target =>{
+                    //let tRange = target.structureType === STRUCTURE_CONTROLLER ? 4 : 2;
+                    thisRoute.push(PathFinder.search(entryPoint, {pos:target,range:1},{
+                        // Minor plains preference
+                        plainCost: 10,
+                        swampCost: 11,
+                        maxOps:5000,
+                        roomCallback: function(roomName) {
+                        let isFief = false;
+                        let room = Game.rooms[roomName];
+                        let costs;
+                        if(Memory.kingdom.fiefs[roomName]){
+                            costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[roomName].costMatrix) || new PathFinder.CostMatrix;
+                            isFief = true;
+                        }
+                        else if(Memory.kingdom.holdings[roomName]){
+                            costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[roomName].costMatrix) || new PathFinder.CostMatrix;
+                        }
+                        else{
+                            costs = new PathFinder.CostMatrix;
+                        }
+                        if (room && !isFief){
+                            room.find(FIND_STRUCTURES).forEach(function(struct) {
+                                if (struct.structureType === STRUCTURE_ROAD) {
+                                // Strong roads preference
+                                costs.set(struct.pos.x, struct.pos.y, 1);
+                                }else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                                    (struct.structureType !== STRUCTURE_RAMPART ||
+                                     !struct.my)) {
+                                // Can't walk through non-walkable buildings
+                                costs.set(struct.pos.x, struct.pos.y, 255);
+                                }
+                            });
+                        };
+                        
+                        
+
+                        //Add previously planned roads to route
+                        thisRoute.forEach(route => {
+                            route.forEach(spot =>{
+                                if(spot.roomName == roomName){
+                                    costs.set(spot.x, spot.y, 1);
+                                }
+                                
+                            })
+                        })
+                        midRoute.forEach(spot =>{
+                            if(spot.roomName == roomName){
+                                costs.set(spot.x, spot.y, 1);
+                            } 
+                        })
+                        return costs;
+                        },
+                    }).path);
+                })
+
+
+                //Add to total routes
+                totalRoutes.push(thisRoute)
+                thisTargets = [];
+                //Clear route for this site
+                thisRoute = []
+            }
+            
+            //Get all secondary targets for this site
+            keySites.forEach(target=>{
+                //If it isn't the current main site, add it to targets
+                if(!site.isEqualTo(target)){
+                    thisTargets.push(target);
+                }
+            })
+            //console.log(site,"targeting",thisTargets)
+            //Initial pathfind for this site
+            //console.log("Routing from",entryPoint,"to",site.pos)
+            thisRoute.push(PathFinder.search(entryPoint, {pos:site,range:1},{
+                // Minor plains preference
+                plainCost: 10,
+                swampCost: 11,
+                maxOps:5000,
+                roomCallback: function(roomName) {
+                let isFief = false;
+                let room = Game.rooms[roomName];
+                let costs;
+                if(Memory.kingdom.fiefs[roomName]){
+                    costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[roomName].costMatrix) || new PathFinder.CostMatrix;
+                    isFief = true;
+                }
+                else if(Memory.kingdom.holdings[roomName]){
+                    costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[roomName].costMatrix) || new PathFinder.CostMatrix;
+                }
+                else{
+                    costs = new PathFinder.CostMatrix;
+                }
+                //console.log("Calculating cost matrix for room",roomName)
+                if (room && !isFief){
+                    room.find(FIND_STRUCTURES).forEach(function(struct) {
+                        if (struct.structureType === STRUCTURE_ROAD) {
+                          // Strong roads preference
+                          costs.set(struct.pos.x, struct.pos.y, 1);
+                        }else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                            (struct.structureType !== STRUCTURE_RAMPART ||
+                             !struct.my)) {
+                        // Can't walk through non-walkable buildings
+                        costs.set(struct.pos.x, struct.pos.y, 255);
+                        }
+                    });
+                };
+                return costs;
+                },
+            }).path);
+
+            //All other secondary pathfinds
+            thisTargets.forEach(target =>{
+                thisRoute.push(PathFinder.search(entryPoint, {pos:target,range:1},{
+                    // Minor plains preference
+                    plainCost: 10,
+                    swampCost: 11,
+                    maxOps:5000,
+                    roomCallback: function(roomName) {
+                      let isFief = false;
+                      let room = Game.rooms[roomName];
+                      let costs;
+                    if(Memory.kingdom.fiefs[roomName]){
+                        costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[roomName].costMatrix) || new PathFinder.CostMatrix;
+                        isFief = true;
+                    }
+                    else if(Memory.kingdom.holdings[roomName]){
+                        costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[roomName].costMatrix) || new PathFinder.CostMatrix;
+                    }
+                    else{
+                        costs = new PathFinder.CostMatrix;
+                    }
+                      if (room && !isFief){
+                        room.find(FIND_STRUCTURES).forEach(function(struct) {
+                            if (struct.structureType === STRUCTURE_ROAD) {
+                              // Strong roads preference
+                              costs.set(struct.pos.x, struct.pos.y, 1);
+                            }else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                                (struct.structureType !== STRUCTURE_RAMPART ||
+                                 !struct.my)) {
+                            // Can't walk through non-walkable buildings
+                            costs.set(struct.pos.x, struct.pos.y, 255);
+                            }
+                          });
+                      };
+                      //Add previously planned roads to route
+                      thisRoute.forEach(route => {
+                        route.forEach(spot =>{
+                            if(spot.roomName == roomName){
+                                costs.set(spot.x, spot.y, 1);
+                            }
+                        })
+                      })
+                      return costs;
+                    },
+                }).path);
+            })
+
+
+            //Add to total routes
+            totalRoutes.push(thisRoute)
+            
+        });
+
+        //Tracking total shortest route
+        let totalShortest = 999;
+        let totalShortestRoute;
+        //Tracking shortest to sources
+        let sourceShortest = 999;
+        let sourceShortestRoute;
+        //Tracking shortest total of all in case of multiple shortest for sources
+        let combinedShortest = 999;
+        let combinedShortestRoute;
+        //console.log("TOTALROUTES",JSON.stringify(totalRoutes))
+        //Calculate shortest route
+        totalRoutes.forEach(set =>{
+            //console.log("SET",JSON.stringify(set))
+            let thisLength = 0;
+            let thisSourceLength = 0;
+            let short = false;
+            //Set of sources that we have paths to
+            let sourceSet = new Set()
+            set.forEach(route =>{
+                //Add length to total
+                thisLength+= route.length;
+                //If source path, add length to total. Also count sources and make sure we're hitting all of them
+                sources.forEach(source =>{
+                    //console.log("SOURCE IS POS",source instanceof RoomPosition)
+                    //console.log("ROUTE PIECE",route[route.length-1])
+                    //console.log("ROUTE",JSON.stringify(route))
+                   if(route.length && source.inRangeTo(route[route.length-1],1)){
+                    thisSourceLength+= route.length;
+                    sourceSet.add(source)
+                   }
+                })
+            })
+            //If shortest, record it
+            if(thisLength < totalShortest && sourceSet.size == sources.length){
+                totalShortest = thisLength;
+                totalShortestRoute = set;
+                short = true;
+            }
+            //console.log("SOURCE LENGTH",thisSourceLength)
+            //If shortest source route and it includes all sources, record it
+            if(thisSourceLength < sourceShortest && sourceSet.size == sources.length){
+                sourceShortest = thisSourceLength;
+                sourceShortestRoute = set;
+                //If also the shortest total route
+                if(short){
+                    combinedShortest = thisLength;
+                    combinedShortestRoute = set;
+                }
+            }
+        })
+        let mLength=0;
+        if(false && midRoute.length){
+            midRoute.forEach(route =>{
+                mLength += route.length;
+            })
+        }
+        let endCPU = Game.cpu.getUsed() - startCPU;
+        console.log("CPU Used",endCPU)
+        
+
+        let returnArray = []
+        //Each route in full array
+        combinedShortestRoute.forEach(route =>{
+            //Each spot in the route
+            route.forEach(spot =>{
+                returnArray.push(spot);
+            })
+
+        })
+        return returnArray;
+        /*Memory.testModule.routeRoad = {
+            totalRoutes:totalRoutes,
+            shortest:totalShortestRoute,
+            sourceShortest:sourceShortestRoute,
+            combinedShortest:combinedShortestRoute,
+            shortestLength:combinedShortest,
+            midRoute:midRoute,
+            midLength:mLength,
+            midpoint:midTarget
+        }*/
+        //Why
+
     }
 };
 

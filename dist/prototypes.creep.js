@@ -108,8 +108,16 @@ Creep.prototype.goGet = function (target,resourceType, amount) {
 Creep.prototype.emptyStore = function () {
     let storage = this.room.storage;
     let terminal = this.room.terminal;
-
-    if(storage && storage.store.getFreeCapacity() > 0){
+    let fief = Game.rooms[this.memory.fief];
+    if(!Memory.kingdom.fiefs[this.room.name] && (fief.storage || fief.terminal)){
+        if(fief.storage){
+            this.travelTo(fief.storage)
+        }
+        else if(fief.storage){
+            this.travelTo(fief.storage)
+        }
+    }
+    else if(storage && storage.store.getFreeCapacity() > 0){
         if(this.pos.getRangeTo(storage) > 1){
             this.travelTo(storage);
         }
@@ -136,7 +144,7 @@ Creep.prototype.emptyStore = function () {
         this.travelTo(new RoomPosition(25,25,this.memory.fief))
     }
     else{
-
+        if(this.store.getUsedCapacity(RESOURCE_ENERGY) == 0) return;
         let fills = this.room.find(FIND_MY_STRUCTURES,{filter: 
             (structure) => [STRUCTURE_SPAWN,STRUCTURE_EXTENSION].includes(structure.structureType) && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
         });

@@ -28,6 +28,13 @@ const kingdomManager = {
     run:function(){
         // - Assignments -
         //Status object for room visuals
+
+        //Military Management
+        //Lance - S of creeps with the same task (quad, duo, hauler convoy, etc.)
+        //Troupe - Group of Lances with the same objective but different tasks (melee duo + ranged support, duo + hauler convoy for power banks, etc.)
+        //ArmyManager - Strategic logic vs tactical for Lances/Troupes, mission management level. Handles strength calculations, Lance/Troupe requests/assignments, attack/retreat, etc.
+        //SiegeManager - Handles room defense in the event of a siege. Takes control of all room elements, including army units.
+
         let kingdomStatus = {fiefs:{},holdings:{}}
         //Assign creeps to their fiefs and sort by role
         kingdomCreeps = sortCreeps();

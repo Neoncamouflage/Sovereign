@@ -10,6 +10,7 @@ const painter = {
         for(let fief in fiefs){
             if(visuals.drawFiefCM) this.drawFiefCM(fief)
             if(visuals.drawFiefPlan) this.drawFiefPlan(fief)
+            if(visuals.drawLoot) this.drawLoot(fief)
         }
         if(visuals.drawIntel) this.drawIntel()
     },
@@ -46,8 +47,44 @@ const painter = {
         if(!scoutData) return;
         Object.entries(scoutData).forEach(([roomName,data])=>{
             //Scout data markings
-            Game.map.visual.text(roomName+"👁"+(Game.time-data.lastRecord), new RoomPosition(25,6,roomName), {color: '#FFFFF', fontSize: 6});
+            Game.map.visual.text("👁"+(Game.time-data.lastRecord), new RoomPosition(0,6,roomName), {color: '#ffa500 ', fontSize: 6, fontFamily: 'Bridgnorth',align:'left'});
+            if(Memory.kingdom.fiefs[roomName]){
+                Game.map.visual.text("🏰", new RoomPosition(49,6,roomName), {color: '#FFFFF', fontSize: 6,align:'right'});
+            }
         });
+        for([holdingName,holding] of Object.entries(Memory.kingdom.holdings)){
+            if(holding.sources){
+                for(source of Object.values(holding.sources)){
+                    if(source.path){
+                        Game.map.visual.poly(source.path)
+                        Game.map.visual.text(source.path.length, new RoomPosition(source.path[source.path.length-1].x,source.path[source.path.length-1].y,holdingName), {color: '#FFFFF', fontSize: 6});
+                    }
+                }
+                if(!holding.standby){
+                    Game.map.visual.text("🌾", new RoomPosition(49,6,holdingName), {color: '#FFFFF', fontSize: 6,align:'right'});
+                }
+            }
+        }
+    },
+    drawLoot(){
+        for(let room of Object.values(Game.rooms)){
+            if(!room.memory.loot) continue;
+            let loot = room.memory.loot;
+            //console.log("LOOT"+JSON.stringify(room.memory.loot))
+            let corePos = {x:room.controller.pos.x,y:room.controller.pos.y}
+            new RoomVisual(room.name).text(`¤${(loot.totalCredit/1000).toFixed(2)}`,corePos.x,corePos.y-1, {color:'#5AF414',font:'1 Comic Sans MS'});
+            
+            for(let [structID,resources] of Object.entries(loot.structures)){
+                //console.log(structID,resources)
+                let building = Game.getObjectById(structID);
+                let total = 0;
+                for(let [resType,details] of Object.entries(resources)){
+                    //console.log(resType,details.amount)
+                    total += Number(details.credits)
+                }
+                if(total !=0) new RoomVisual(room.name).text('¤'+(total/1000).toFixed(0),building.pos.x,building.pos.y-1.2, {color:'#5AF414',font:'0.5 Comic Sans MS'});
+            }
+        }
     }
 }
 

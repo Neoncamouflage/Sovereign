@@ -3,6 +3,7 @@
  * Example: var Traveler = require('Traveler.js');
  */
 const profiler = require('screeps-profiler');
+const helper = require('functions.helper');
 "use strict";
 //Object.defineProperty(exports, "__esModule", { value: true });
 class Traveler {
@@ -107,8 +108,11 @@ class Traveler {
             }
             let color = "orange";
             if (ret.incomplete) {
-                // uncommenting this is a great way to diagnose creep behavior issues
-                // console.log(`TRAVELER: incomplete path for ${creep.name}`);
+                //Incomplete path handling for creeps.
+                if(creep.memory.role == 'scout'){
+                    delete creep.memory.exitTarget;
+                    delete creep.memory.lastRoom;
+                }
                 color = "red";
             }
             if (options.returnData) {
@@ -255,8 +259,8 @@ class Traveler {
                 if (!allowedRooms[roomName]) {
                     return false;
                 }
-            }
-            else if (!options.allowHostile && Traveler.checkAvoid(roomName)
+            }   //!options.allowHostile && 
+            else if (Traveler.checkAvoid(roomName)
                 && roomName !== destRoomName && roomName !== originRoomName) {
                 return false;
             }
@@ -285,6 +289,17 @@ class Traveler {
                         matrix.set(obstacle.pos.x, obstacle.pos.y, 0xff);
                     }
                 }
+                let hostiles = room.find(FIND_HOSTILE_CREEPS);
+                if(hostiles.length){
+                    for(let badCreep of hostiles){
+                        if(!helper.isSoldier(badCreep)) continue;
+                        for(let x = -3;x<=3;x++){
+                            for(let y = -3;y<=3;y++){
+                                matrix.set(badCreep.pos.x+x,badCreep.pos.y+y,60) //High score to try and avoid if at all possible
+                            }
+                        }
+                    }
+                }
             }
             if (options.roomCallback) {
                 if (!matrix) {
@@ -295,6 +310,7 @@ class Traveler {
                     return outcome;
                 }
             }
+            
             return matrix;
         };
         let ret = PathFinder.search(origin, { pos: destination, range: options.range }, {

@@ -24,7 +24,8 @@ var roleClaimer = {
                         creep.travelTo(creep.room.controller)
                     }else if(attempt == OK){
                         if(!creep.memory.signed){
-                            creep.memory.signController(targetText)
+                            creep.signController(creep.room.controller,targetText)
+                            creep.memory.signed = true;
                         }
                         //console.log(attempt)
                     }
