@@ -153,7 +153,7 @@ const statusManager = {
             let tradeFlagLength = 0
 
             //Get trade flag content
-            let fiefShipping = global.heap.shipping[fief];
+            let fiefShipping = global.heap.shipping[fief].requests;
             //Text array
             let tradeText = []
             let tradeVis = [];
@@ -310,7 +310,7 @@ const statusManager = {
                     //console.log(details.spawnUse[spawn])
                 }else{
                     fiefStatus += eachSpawn.name+' ';
-                    fiefStatus += details.spawnUse[spawn]+'%'
+                    fiefStatus += details.spawnUse[spawn].toFixed(2)+'%'
                     spawnStatus.push(fiefStatus)
                 }
                 //If spawning, push the relevant icon to queue status
@@ -336,7 +336,7 @@ const statusManager = {
                 //console.log(useTotal)
                 //console.log(Object.keys(details.spawnUse))
                 //console.log(Object.keys(details.spawnUse).length)
-                fiefStatus += Math.round(useTotal/Object.keys(details.spawnUse).length)+'%';
+                fiefStatus += Math.round(useTotal/Object.keys(details.spawnUse).length).toFixed(2)+'%';
                 spawnStatus.push(fiefStatus)
             }
             if(fiefQueue.length){

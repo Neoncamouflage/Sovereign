@@ -3,6 +3,7 @@
  * Example: var Traveler = require('Traveler.js');
  */
 const profiler = require('screeps-profiler');
+const helper = require('functions.helper');
 "use strict";
 //Object.defineProperty(exports, "__esModule", { value: true });
 class Traveler {
@@ -16,7 +17,7 @@ class Traveler {
     static travelTo(creep, destination, options = {}) {
         if(options == 25)console.log(JSON.stringify(creep))
         // uncomment if you would like to register hostile rooms entered
-        // this.updateRoomStatus(creep.room);
+        this.updateRoomStatus(creep.room);
         if (!destination) {
             return ERR_INVALID_ARGS;
         }
@@ -107,8 +108,11 @@ class Traveler {
             }
             let color = "orange";
             if (ret.incomplete) {
-                // uncommenting this is a great way to diagnose creep behavior issues
-                // console.log(`TRAVELER: incomplete path for ${creep.name}`);
+                //Incomplete path handling for creeps.
+                if(creep.memory.role == 'scout'){
+                    delete creep.memory.exitTarget;
+                    delete creep.memory.lastRoom;
+                }
                 color = "red";
             }
             if (options.returnData) {
@@ -211,11 +215,12 @@ class Traveler {
             return;
         }
         if (room.controller) {
-            if (room.controller.owner && !room.controller.my) {
-                room.memory.avoid = 1;
+            Memory.avoidRooms = Memory.avoidRooms || [];
+            if (room.controller.owner && !room.controller.my && !Memory.avoidRooms.includes(room.name)) {
+                Memory.avoidRooms.push(room.name)
             }
-            else {
-                delete room.memory.avoid;
+            else if(Memory.avoidRooms && Memory.avoidRooms.includes(room.name)){
+                Memory.avoidRooms = Memory.avoidRooms.filter(rm => rm != room.name)
             }
         }
     }
@@ -254,8 +259,8 @@ class Traveler {
                 if (!allowedRooms[roomName]) {
                     return false;
                 }
-            }
-            else if (!options.allowHostile && Traveler.checkAvoid(roomName)
+            }   //!options.allowHostile && 
+            else if (Traveler.checkAvoid(roomName)
                 && roomName !== destRoomName && roomName !== originRoomName) {
                 return false;
             }
@@ -284,6 +289,17 @@ class Traveler {
                         matrix.set(obstacle.pos.x, obstacle.pos.y, 0xff);
                     }
                 }
+                let hostiles = room.find(FIND_HOSTILE_CREEPS);
+                if(hostiles.length){
+                    for(let badCreep of hostiles){
+                        if(!helper.isSoldier(badCreep)) continue;
+                        for(let x = -3;x<=3;x++){
+                            for(let y = -3;y<=3;y++){
+                                matrix.set(badCreep.pos.x+x,badCreep.pos.y+y,60) //High score to try and avoid if at all possible
+                            }
+                        }
+                    }
+                }
             }
             if (options.roomCallback) {
                 if (!matrix) {
@@ -294,6 +310,7 @@ class Traveler {
                     return outcome;
                 }
             }
+            
             return matrix;
         };
         let ret = PathFinder.search(origin, { pos: destination, range: options.range }, {
@@ -473,6 +490,24 @@ class Traveler {
         for (let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
+        if(Memory.kingdom.fiefs[room.name] && Memory.kingdom.fiefs[room.name].sources){
+            for (let source of Object.values(Memory.kingdom.fiefs[room.name].sources)) {
+                for(let x = -1;x<=1;x++){
+                    for(let y = -1;y<=1;y++){
+                        if(x!=0 && y!=0) matrix.set(source.x+x, source.y+y, 25);
+                    }
+                }
+            }
+        }
+        else if(Memory.kingdom.holdings[room.name] && Memory.kingdom.holdings[room.name].sources){
+            for (let source of Object.values(Memory.kingdom.holdings[room.name].sources)) {
+                for(let x = -1;x<=1;x++){
+                    for(let y = -1;y<=1;y++){
+                        if(x!=0 && y!=0) matrix.set(source.x+x, source.y+y, 25);
+                    }
+                }
+            }
+        }
         return matrix;
     }
     /**
@@ -550,14 +585,14 @@ class Traveler {
             if(blocker){
                 if(!this.movementIntents[blocker.name] && blocker.fatigue == 0 && blocker.memory && !blocker.memory.stay){
                     //Log it for test
-                    blocker.say("🔄",true);
-                    Game.creeps[creep].say("🔄",true)
+                    //blocker.say("🔄",true);
+                    //Game.creeps[creep].say("🔄",true)
                     //Attempt swapping to the current creep
                     let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
                     if(bMove != 0){
-                        blocker.say("ERR -",bMove);
+                        //blocker.say("ERR -",bMove);
                     }else{
-                        blocker.say("🔄");
+                        //blocker.say("🔄");
                     }
                 }
                 //Fat creep check
@@ -568,10 +603,10 @@ class Traveler {
                     
                     if(!equalMove(blocker) && equalMove(Game.creeps[creep])){
                         //blocker.say("🐖🔄",true);
-                        Game.creeps[creep].say("🐖🔄",true)
+                        //Game.creeps[creep].say("🐖🔄",true)
                         let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
                         if(bMove != 0){
-                            blocker.say("ERR -",bMove);
+                            //blocker.say("ERR -",bMove);
                         }else{
                             //blocker.say("🔄");
                         }

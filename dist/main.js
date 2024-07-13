@@ -1,135 +1,67 @@
 //Imports
 const helper = require('functions.helper'); //Helper functions
-require('prototypes.room'); //Room prototype extensions
-//require('roomVisual');//RV prototypes
-//TestReGrunt
-const roomPlanner = require('roomPlanner');
+require('prototypes.room');
+require('prototypes.creep');
+require('prototypes.spawn');
+require('prototypes.roomposition');
+require('functions.global');
+const spinup = require('spinup')
 const kingdomManager = require('kingdomManager'); //Top level kingdom manager system
 const Traveler = require('Traveler');
-require('prototypes.creep')
 const profiler = require('screeps-profiler');
-const mapVisuals = require('mapVisuals');
 const fiefPlanner = require('fiefPlanner')
 profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
-Memory.roomPlanReference = {
-    100:STRUCTURE_RAMPART,
-    99:STRUCTURE_ROAD,
-    98:STRUCTURE_STORAGE,
-    97:STRUCTURE_FACTORY,
-    96:STRUCTURE_POWER_SPAWN,
-    95:STRUCTURE_LINK,
-    94:STRUCTURE_TERMINAL,
-    93:STRUCTURE_WALL,
-    88:STRUCTURE_TOWER,
-    87:STRUCTURE_EXTRACTOR,
-    76:STRUCTURE_LAB,
-    75:STRUCTURE_LAB,
-    60:STRUCTURE_EXTENSION,
-    45:STRUCTURE_OBSERVER,
-    44:STRUCTURE_NUKER,
-    33:STRUCTURE_SPAWN,
-    12:STRUCTURE_CONTAINER,
-};
 
-Memory.scoreWeights = {
-    rampTileWeight:2,
-    rampDistWeight:0.2,
-    controllerDistWeight:3,
-    sourceDistWeight:0.3,
-    extensionDistWeight:2,
-    extensionMaxWeight:1,
-    extensionMissingWeight:8,
-    controllerFoundWeight:100,
-    sourceFoundWeight:25,
-    structureFoundWeight:500
-}
-Memory.creepTalk = {
-    'idle':[
-        '💤',
+//Set Memory reference for building numbers
 
-    ]
-}
+
+//Set scoring weights for room planning
+
+Memory.globalReset = Game.time;
 module.exports.loop = function () {
     profiler.wrap(function() {
-    //Grunt test 2
-    //#ffba4b
     //return;  
+    if (hasRespawned()){
+        spinup.run();
+    }
+    
+
+    //Reset movement
     Traveler.resetMovementIntents();
-    //Confirm Memory setup
-    //console.log("UPDATE")
-        if(!Memory.me) Memory.me = 'NeonCamouflage';
-        if(!Memory.diplomacy) Memory.diplomacy = {allies:[],vassals:[],agents:{}}
-        if(!Memory.kingdom) Memory.kingdom = {};
-        if(!Memory.kingdom.holdings) Memory.kingdom.holdings = {};
-        if(!Memory.kingdom.settlements) Memory.kingdom.settlements = {};
-        if(!Memory.kingdom.fiefs || Object.keys(Memory.kingdom.fiefs).length === 0){
-            Memory.kingdom.fiefs = {};
-            for(const room in Game.rooms){
-                let myRoom = Game.rooms[room];
-                if(myRoom.controller && myRoom.controller.my){
-                    Memory.kingdom.fiefs[myRoom.name] = {};
-                }
+    //Check for global reset and action accordingly
+    if(Game.time == Memory.globalReset){
+        console.log("Global reset!")
+        global.reset = true;
+        //Segment 0 is for scout data
+        //Segment 1 is for room plans
+        //Segment 2 is for cached paths
+        //Segment 9 is for ad-hoc logging
+        RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
+        //Global heap
+        global.heap = {fiefs:{},granary:{},registry:{}};
+        /*for(let fief in Memory.kingdom.fiefs){
+            global.heap.fiefs[fief] = {};
+        }
+        for(let holding in Memory.kingdom.holdings){
+            global.heap.holdings[holding] = {}
+        }*/
+    }
+    //If no reset, do stuff with segments
+    else{
+        global.reset = false;
+        let roomData = RawMemory.segments[1]
+        if(roomData == "")  RawMemory.segments[1] = "{}"
+        if(!global.heap.scoutData){
+            let scoutData = RawMemory.segments[0];
+            if(scoutData == ""){
+                global.heap.scoutData = {}
+            }
+            else{
+                global.heap.scoutData = {} = JSON.parse(scoutData)
             }
         }
-        //Global reset
-        if(!global.reset){
-            global.reset = true;
-            global.resetTick = Game.time;
-            //Segment 0 is for scout data
-            //Segment 1 is for room plans
-            RawMemory.setActiveSegments([0,1])
-            //Global heap
-            global.heap = {fiefs:{},holdings:{}};
-            Object.keys(Memory.kingdom.fiefs).forEach(fief =>{
-                global.heap.fiefs[fief] = {};
-            })
-            Object.keys(Memory.kingdom.holdings).forEach(holding =>{
-                global.heap.holdings[holding] = {};
-            })
-            return;
-        }
-        //scoutSegment = RawMemory.segments[0];
-
-        //roomPlanSegment = RawMemory.segments[1];
-        //console.log(JSON.stringify(scoutSegment))
-        //Scout data gets pulled from the segment on reset, if no data in the segment, create a new one
-        //Scout data otherwise lives in heap and gets written to the segment every so often.
-        if(!global.heap.scoutData){
-            global.heap.scoutData = JSON.parse(RawMemory.segments[0]);
-        }
-        else{
-            //Record scout data if new
-            Object.entries(Game.rooms).forEach(([roomName,room])=>{
-                //Record every room at least once, update non-fief rooms only every 200 ticks
-                if(!global.heap.scoutData[roomName] || (global.heap.scoutData[roomName].lastRecord < Game.time - 200 && !Memory.kingdom.fiefs[roomName])){
-                    //console.log("AYE")
-                    let [roomType,ownerType,owner] = helper.getRoomType(room);
-                    let sources = room.find(FIND_SOURCES).map(src => {return {x:src.pos.x,y:src.pos.y,id:src.id}})
-                    let mineral = room.find(FIND_MINERALS)[0];
-                    let towerPositions = room.find(FIND_HOSTILE_STRUCTURES,{filter:{structureType:STRUCTURE_TOWER}}).map(tow => {return {x:tow.pos.x,y:tow.pos.y,id:tow.id}});
-                    let otherCreeps = room.find(FIND_HOSTILE_CREEPS);
-                    //let hostileCreeps = otherCreeps.filter(creep =>{!Memory.diplomacy.allies.includes(creep.owner.username)});
-                    //let allyCreeps = otherCreeps.filter(creep =>{Memory.diplomacy.allies.includes(creep.owner.username)});
-                    
-                    //If the N/S and E/W coords mod 10 are both 5 then it's a center room, otherwise if they're both in the range 4-6 then it's an SK room. 
-                    //Maybe use this instead of saving room type
-                    global.heap.scoutData[roomName] = {
-                        lastRecord : Game.time,
-                        roomType: roomType,
-                        ownerType: ownerType,
-                        owner: ownerType ?  owner : null,
-                        controller: room.controller ? {x:room.controller.pos.x,y:room.controller.pos.y} : null,
-                        controllerLevel: roomType == 'fief' ? room.controller.level : null,
-                        towers: towerPositions,
-                        sources: sources,
-                        mineral: mineral ? {x:mineral.pos.x,y:mineral.pos.y,type:mineral.mineralType} : null,
-                        exits: Game.map.describeExits(roomName),
-                    }
-                    global.heap.newScoutData = true;
-                }
-            })
-
+        else{    
             //If scout data changed,record it to the segment. Check every 100 ticks
             if(Game.time % 100 == 0 && global.heap.newScoutData){
                 //console.log("Updating scout data")
@@ -137,129 +69,51 @@ module.exports.loop = function () {
                 global.heap.newScoutData = false;
             }
         }
+    }
 
-
-
-        if(!Memory.icons){
-            console.log("MAKING ICONS")
-            Memory.icons = {
-                harvester: '⛏️',
-                soldier:'👮',
-                fastFiller:'✉️',
-                remoteDefender:'🛡️',
-                guard: '🛡️',
-                upgrader:'⏫',
-                gunner:'💥',
-                boost: '⏫',
-                runner: '🚚',
-                harvGrader:'⛏️',
-                starter:'👶',
-                builder:'👷',
-                marauder:'🏴‍☠️',
-                claimer:'📌',
-                dualHarv:'⛏️',
-                hauler:'📦',
-                lowHauler:'📦',
-                trucker:'🛢️',
-                generalist:'🚚',
-                hunter:'⚔️',
-                ranger:'🏹',
-                miner:'⛏️',
-                diver:'☢️',
-                bait:'☢️',
-                duo:'👮',
-                settler:'🚚',
-                manager:'🗃️',
-                extractor:'👮',
-                scout:'🧭'
-            };
-        }
-        //Check fiefs 
-        for(const room in Game.rooms){
-            let myRoom = Game.rooms[room];
-            if(myRoom.controller && myRoom.controller.my && !Memory.kingdom.fiefs[myRoom.name]){
+    //Check fiefs 
+    for(const room in Game.rooms){
+        let myRoom = Game.rooms[room];
+        if(myRoom.controller && myRoom.controller.my){
+            if(!Memory.kingdom.fiefs[myRoom.name]){
                 Memory.kingdom.fiefs[myRoom.name] = {};
+                
+            }
+            if(!global.heap.fiefs[myRoom.name]){
+                global.heap.fiefs[myRoom.name] = {};
             }
         }
-        //No Return
-        //Garbage collection
-        if(Game.time % 100 === 0){
-            //Every 100 ticks clear creep memory
-            for(var name in Memory.creeps) {
-                if(!Game.creeps[name]) {
-                    delete Memory.creeps[name];
-                }
-            }
-        }
-        
-        if(Game.time % 1000 === 0){
-            //Every 1000 ticks clear room memory
-            //Compile list of rooms to keep
-            let keepRooms = [
-                ...Object.keys(Memory.kingdom.fiefs),
-                ...Object.keys(Memory.kingdom.holdings),
-                ...Object.keys(Memory.kingdom.settlements)
-            ];
-            let deadRooms = [];
-            for(var name in Memory.rooms) {
-                if(!keepRooms.includes(name)){
-                    delete Memory.rooms[name];
-                    deadRooms.push(name);
-                }
-            }
-            if(deadRooms.length > 0) console.log('Clearing unneeded room data:',deadRooms);
-        }
-        //Code separation by shards, for the future
-        //console.log(Game.shard.name)
-        /*if(Game.shard.name == '8451eb340322' || Game.shard.name == 'shard3'){
-            //High level manager runs first
-            kingdomManager.run();
-            //console.log("Shard3 CPU Used");
-            //console.log(Game.cpu.getUsed());
-        }*/
-        
+    }
 
-        //Function calling
-        /*
-        //--Memory Structure
-        //Memory > bunkerPlan
-        //Memory > roomPlanning > room#s >  terrainMatrix/roomPlan
-        //Memory > kingdom > fiefs/holdings
-        //  fiefs > room#s  / holdings > Room#s 
-        */
-        
-        /*
-        Managers:
-        
-        link management inside fief
-        militaryManager
-        scienceManager
-        tradeManager
-        trafficManager
-        */
-        if(Memory.intelVisuals){
-            mapVisuals.intel();
-        }
-
-        if(Memory.testStruct){
-            let roomVis =  new RoomVisual();
-            let testStructureBlobCM = PathFinder.CostMatrix.deserialize(Memory.testStructureBlobCM);
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = testStructureBlobCM.get(x,y);
-                    if(weight == 0) continue;
-                    //new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        //fill: `hsl(${200}${testStructureBlobCM.get(x, y) * 10}, 100%, 60%)`,
-                        //opacity: 0.4,
-                    //})
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
+    //Garbage collection
+    if(Game.time % 100 === 0){
+        //Every 100 ticks clear creep memory
+        for(var name in Memory.creeps) {
+            if(!Game.creeps[name]) {
+                delete Memory.creeps[name];
             }
         }
+    }
+        
+    if(Game.time % 1000 === 0){
+        //Every 1000 ticks clear room memory
+        //Compile list of rooms to keep
+        let keepRooms = [
+            ...Object.keys(Memory.kingdom.fiefs),
+            ...Object.keys(Memory.kingdom.holdings),
+        ];
+        let deadRooms = [];
+        for(var name in Memory.rooms) {
+            if(!keepRooms.includes(name)){
+                delete Memory.rooms[name];
+                deadRooms.push(name);
+            }
+        }
+        if(deadRooms.length > 0) console.log('Clearing unneeded room data:',deadRooms);
+    }
 
 
         if(Memory.testRPVisuals){
-            let startCPU = Game.cpu.getUsed()
             //Flood Fill Section
             //Wall Groups
             /*let groups = Object.keys(Memory.test4)
@@ -296,100 +150,6 @@ module.exports.loop = function () {
             }*/
             //Core location selection
             //new RoomVisual().circle(Memory.test10.x,Memory.test10.y,{fill:'red',radius:0.5});
-
-
-
-
-
-            //Convex hulls
-            /*let hulls = Object.keys(Memory.test5);
-            hulls.forEach(hull =>{
-                let hullPoints = Memory.test5[hull];
-                for(let i = 0; i < hullPoints.length ; i++){
-                    if(i+1 == hullPoints.length){
-                        new RoomVisual().line(hullPoints[i].x,hullPoints[i].y,hullPoints[0].x,hullPoints[0].y)
-                    }
-                    else{
-                        new RoomVisual().line(hullPoints[i].x,hullPoints[i].y,hullPoints[i+1].x,hullPoints[i+1].y)
-                    }
-                }
-            })*/
-
-            //Defect tiles
-            /*let defectGroups = Object.keys(Memory.test7)
-            defectGroups.forEach(each =>{
-                if(each!=Memory.testPick)return;
-                let defectTiles = Memory.test7[each];
-                defectTiles.forEach(spot =>{
-                    new RoomVisual().circle(spot.x,spot.y,{fill:'white',radius:0.4});
-                    new RoomVisual().text(spot.distance,spot.x,spot.y+0.25)
-                })
-           })*/
-
-           /*let exitCM = PathFinder.CostMatrix.deserialize(Memory.test7);
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = exitCM.get(x,y);
-                    new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        fill: `hsl(${200}${exitCM.get(x, y) * 10}, 100%, 60%)`,
-                        opacity: 0.4,
-                    })
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }*/
-
-
-
-            /*let regionCM = PathFinder.CostMatrix.deserialize(Memory.test4);
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = regionCM.get(x,y);
-                    new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        fill: `hsl(${200}${regionCM.get(x, y) * 10}, 100%, 60%)`,
-                        opacity: 0.4,
-                    })
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }*/
-
-
-
-            /*let rampCM = PathFinder.CostMatrix.deserialize(Memory.rampartTestCM)
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = rampCM.get(x,y);
-                    new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        fill: `hsl(${200}${rampCM.get(x, y) * 10}, 100%, 60%)`,
-                        opacity: 0.4,
-                    })
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }*/
-
-            /*let sourceCM = PathFinder.CostMatrix.deserialize(Memory.sourceMatrix)
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = sourceCM.get(x,y);
-                    new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        fill: `hsl(${200}${sourceCM.get(x, y) * 10}, 100%, 60%)`,
-                        opacity: 0.4,
-                    })
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }*/
-
-            //Room plan visualization, with structure blob and actual building structures
-            /*let testStructureBlobCM = PathFinder.CostMatrix.deserialize(Memory.testStructureBlobCM);
-
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = testStructureBlobCM.get(x,y);
-                    if(weight == 0) continue;
-                    //if(Memory.testStructureBlobCM[weight]) new RoomVisual().text(weight,x,y+0.25)
-                    new RoomVisual().text(weight,x,y+0.25)
-                    
-                }
-            }*/
             let roomVis =  new RoomVisual();
             let basePlanCM = PathFinder.CostMatrix.deserialize(Memory.testBasePlanCM);
             //let mnCM = PathFinder.CostMatrix.deserialize(Memory.minCutCM);
@@ -408,7 +168,7 @@ module.exports.loop = function () {
                         //opacity: 0.4,
                     //})
                     
-                    if(Memory.testRoomPlanReference[weight] && weight == 99) roomVis.structure(x,y,Memory.testRoomPlanReference[weight]);
+                    if(Memory.roomPlanReference[weight] && weight == 99) roomVis.structure(x,y,Memory.roomPlanReference[weight]);
                     //new RoomVisual().text(basePlanCM.get(x,y),x,y+0.25)
                     //new RoomVisual().text(weight,x,y+0.25);
                 }
@@ -433,7 +193,7 @@ module.exports.loop = function () {
                         //opacity: 0.4,
                     //})
                     
-                    if(Memory.testRoomPlanReference[weight] && weight != 99) roomVis.structure(x,y,Memory.testRoomPlanReference[weight]);
+                    if(Memory.roomPlanReference[weight] && weight != 99) roomVis.structure(x,y,Memory.roomPlanReference[weight]);
                     //new RoomVisual().text(basePlanCM.get(x,y),x,y+0.25)
                     //new RoomVisual().text(weight,x,y+0.25);
                 }
@@ -488,115 +248,6 @@ module.exports.loop = function () {
                 }
                 new RoomVisual().text('Total: '+totalScore,42,3+tLine,{font:1});
             }
-            /*for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = mnCM.get(x,y);
-                    //if(weight == 0) continue;
-                    //new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        //fill: `hsl(${200}${mnCM.get(x, y) * 10}, 100%, 60%)`,
-                        //opacity: 0.4,
-                    //})
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }*/
-            //Distance Transfor Visual
-            /*for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = mnCM.get(x,y);
-                    //if(weight == 0) continue;
-                    new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        fill: `hsl(${200}${mnCM.get(x, y) * 10}, 100%, 60%)`,
-                        opacity: 0.4,
-                    })
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }*/
-
-            /*let baseCM = PathFinder.CostMatrix.deserialize(Memory.test8);
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = baseCM.get(x,y);
-                    if(weight == 0) continue;
-                    new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        fill: `hsl(${200}${baseCM.get(x, y) * 10}, 100%, 60%)`,
-                        opacity: 0.4,
-                    })
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }*/
-            //new RoomVisual().circle(midPoint.x,midPoint.y,{fill:'red',radius:0.5});
-
-            //console.log('CPU Used',Game.cpu.getUsed() - startCPU)
-        }
-        /*let mincutCM = PathFinder.CostMatrix.deserialize(Memory.saturatedTilesCM);
-        for (let x = 0; x <= 49; x += 1) {
-            for (let y = 0; y <= 49; y += 1) {
-                let weight = mincutCM.get(x,y);
-                if(weight == 0) continue;
-                new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                    fill: `hsl(${200}${mincutCM.get(x, y) * 10}, 100%, 60%)`,
-                    opacity: 0.4,
-                })
-                new RoomVisual().text(weight,x,y+0.25)
-            }
-        }*/
-
-        if(Memory.testOn && Memory.testRoom && Memory.testRoomId){
-            //console.log("YES")
-            //Pull plan and split into array
-            let plan = Memory.testRoom
-            let testRoom = Memory.testRoomId
-            for(let building in plan){
-                if(Array.isArray(plan[building])){
-                    plan[building].forEach(coordinate => {
-                        new RoomVisual(testRoom).structure(coordinate.x,coordinate.y,building);
-                    });
-                }
-            }
-        }
-
-        if(Memory.testMincutVisuals){
-            let mincutCM;
-            switch(Memory.mincutVisual){
-                case 1:
-                    mincutCM = PathFinder.CostMatrix.deserialize(Memory.mincutLevelCM);
-                    break;
-                case 2:
-                    mincutCM = PathFinder.CostMatrix.deserialize(Memory.mincutCapacityCM);
-                    break;
-                case 3:
-                    mincutCM = PathFinder.CostMatrix.deserialize(Memory.mincutFlowCM);
-                    break;
-                case 4:
-                    mincutCM = PathFinder.CostMatrix.deserialize(Memory.saturatedTilesCM);
-                    break;
-                default:
-                    mincutCM = PathFinder.CostMatrix.deserialize(Memory.mincutLevelCM);
-                    break;
-            }
-
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = mincutCM.get(x,y);
-                    if(weight == 0) continue;
-                    new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        fill: `hsl(${200}${mincutCM.get(x, y) * 10}, 100%, 60%)`,
-                        opacity: 0.4,
-                    })
-                    new RoomVisual().text(weight,x,y+0.25)
-                }
-            }
-
-            let memConnections = Memory.memConnections;
-            memConnections.forEach(node=>{
-                if(node.targets.length){
-                    node.targets.forEach(target =>{
-                        new RoomVisual().line(node.x,node.y,target[0],target[1])
-                    })
-                }
-            })
-
-            
             
         }
 
@@ -651,17 +302,6 @@ module.exports.loop = function () {
                     }
                 });
             }
-
-
-
-
-
-
-
-
-
-
-
             //Orbit Path Visuals
             /*const startColor = { r: 255, g: 0, b: 0 }; // Red
             const endColor = { r: 0, g: 255, b: 0 }; // Green
@@ -690,10 +330,6 @@ module.exports.loop = function () {
             new RoomVisual(Memory.testModule.room).circle(Memory.testModule.centerX,Memory.testModule.centerY,{color:'blue',radius:0.9})*/
         }
 
-        
-
-
-        //Run as close to last as possible for accurate CPU count
         kingdomManager.run();
         //console.log("CPU Used:",Game.cpu.getUsed().toFixed(2),'/',Game.cpu.limit);
 
@@ -714,43 +350,60 @@ module.exports.loop = function () {
 
         if (Game.cpu.bucket == 10000) {
             Game.cpu.generatePixel()
-            console.log("Shiny coin!")
+            console.log("<font color='green'>", Game.shard.name, "generated pixel.</font>")
         }
     });
 }
 
-//Global functions
-//Spawn creep   - Grunt test
-global.addCreep = addCreep;
-//Add holding
-global.addHolding = addHolding;
-//Room testing visuals
-global.testRoom = testRoom;
-global.testVis = testVis;
-//Distance
-global.getDistance = getDistance;
-//Clear spawn queue
-global.clearQueue = clearQueue;
-//Flip holding standby
-global.standby = standby;
+//Respawn checker by @SemperRabbit
+global.hasRespawned = function hasRespawned(){
+    // check for multiple calls on same tick    
+    if(Memory.respawnTick && Memory.respawnTick === Game.time) {
+        return true;
+    }
 
+    // server reset or sim
+    if(Game.time === 0) {
+        Memory.respawnTick = Game.time;
+        return true;
+    }
 
+    // check for 0 creeps
+    for(const creepName in Game.creeps) {
+        return false;
+    }
 
+    // check for only 1 room
+    const rNames = Object.keys(Game.rooms);
+    if(rNames.length !== 1) {
+        return false;
+    }
 
-//Global functions
-function testRoom(room,x,y){
-    let mTest = roomPlanner.getPlan(x,y);
-    Memory.testRoom = mTest;
-    Memory.testRoomId = room;
-};
-function testVis(){
-    Memory.testOn = !Memory.testOn;
+    // check for controller, progress and safe mode
+    const room = Game.rooms[rNames[0]];
+    if(!room.controller || !room.controller.my || room.controller.level !== 1 || room.controller.progress ||
+       !room.controller.safeMode || room.controller.safeMode < SAFE_MODE_DURATION-1) {
+        return false;
+    }
+
+    // check for 1 spawn
+    if(Object.keys(Game.spawns).length !== 1) {
+        return false;
+    }
+
+    // if all cases point to a respawn, you've respawned
+    console.log("True due to passing all checks")
+    Memory.respawnTick = Game.time;
+    return true;
 }
-function addCreep(room,name,body,memory,severity = 3){
+
+//Global functions
+//Spawn creep
+global.addCreep = function addCreep(room,name,body,memory,severity = 3){
     let newName = name+' '+helper.getName()+' of House '+room;
     Memory.kingdom.fiefs[room].spawnQueue[newName] = {sev:severity,body:body,memory:memory}
 }
-function addHolding(room,standby=false,homeRoom=null){
+global.addHolding = function addHolding(room,standby=false,homeRoom=null){
     //Reject if I've screwed up and set a fief or doubled up a holding
     if(Memory.kingdom.fiefs[room] || Memory.kingdom.holdings[room]) return -1;
     let pick;
@@ -771,13 +424,13 @@ function addHolding(room,standby=false,homeRoom=null){
     }
     
 }
-function standby(holding){
+global.standby = function standby(holding){
     //Flip standby flag
     Memory.kingdom.holdings[holding].standby = !Memory.kingdom.holdings[holding].standby
     //Clear spawn queue of homeroom to remove holding creeps
     clearQueue(Memory.kingdom.holdings[holding].homeRoom);
 }
-function clearQueue(room='all'){
+global.clearQueue = function clearQueue(room='all'){
     if(room == 'all'){
         Object.keys(Memory.kingdom.fiefs).forEach(fief =>{
             Memory.kingdom.fiefs[fief].spawnQueue = {};
@@ -786,10 +439,51 @@ function clearQueue(room='all'){
         Memory.kingdom.fiefs[room].spawnQueue = {};
     }
 }
-function getDistance(pos1,pos2){
-    let route = PathFinder.search(pos1,{pos:pos2,range:1});
+global.getDistance = function getDistance(pos1,pos2){
+    let route = PathFinder.search(pos1,{pos:pos2,range:1,
+        roomCallback: function(roomName) {
+      
+            let room = Game.rooms[roomName];
+            let costs = new PathFinder.CostMatrix;    
+            if (room){
+              room.find(FIND_STRUCTURES).forEach(function(struct) {
+                  if (struct.structureType === STRUCTURE_ROAD) {
+                    costs.set(struct.pos.x, struct.pos.y, 1);
+                  } else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                             (struct.structureType !== STRUCTURE_RAMPART ||
+                              !struct.my)) {
+                    costs.set(struct.pos.x, struct.pos.y, 255);
+                  }
+                });
+            }
+            return costs;
+          },
+    });
     let dist = route.path.length;
     let incomp = route.incomplete;
     return [dist,incomp]
 }
+
+function recursiveMemoryProfile(memoryObject, sizes, currentDepth) {
+    for (const key in memoryObject) {
+        if (currentDepth == 0 || !_.keys(memoryObject[key]) || _.keys(memoryObject[key]).length == 0) {
+            sizes[key] = JSON.stringify(memoryObject[key]).length;
+        } else {
+            sizes[key] = {};
+            recursiveMemoryProfile(memoryObject[key], sizes[key], currentDepth - 1);
+        }
+    }
+}
+
+function profileMemory(root = Memory, depth = 1) {
+    const sizes = {};
+    console.log(`Profiling memory...`);
+    const start = Game.cpu.getUsed();
+    recursiveMemoryProfile(root, sizes, depth);
+    console.log(`Time elapsed: ${Game.cpu.getUsed() - start}`);
+    RawMemory.segments[9] = JSON.stringify(sizes, undefined, '\t');
+}
+
+global.profileMemory = profileMemory;
+//#endregion
 addHolding = profiler.registerFN(addHolding, 'addHolding');

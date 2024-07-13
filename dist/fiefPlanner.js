@@ -180,32 +180,32 @@ const fiefPlanner = {
                     console.log("Plan evolution complete. Generated",fiefPlanner.iterations*fiefPlanner.population.length,"plans over",fiefPlanner.iterations,"generations in",Game.time-fiefPlanner.startTick,"ticks\nTotalCPU:",fiefPlanner.totalCPU,"\nBest score:",fiefPlanner.bestScore,"\n2nd Place:",fiefPlanner.secondScore,"\n3rd Place:",fiefPlanner.thirdScore)
                     //Set the best plan to memory
                     let rclPlan = this.getRCLPlan();
-                    Memory.testBasePlan = fiefPlanner.bestPlan;
-                    Memory.testBasePlanCM = fiefPlanner.bestPlanCM;
-                    Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
+                    //Memory.testBasePlan = fiefPlanner.bestPlan;
+                    //Memory.testBasePlanCM = fiefPlanner.bestPlanCM;
+                    //Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
                     //Save the plan in our segment and room
                     global.heap.roomPlans = JSON.parse(RawMemory.segments[1]);
                     global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlanCM];
                     RawMemory.segments[1] = JSON.stringify(global.heap.roomPlans)
                     //Save the RCL plan
-                    Memory.testRCLPlan = rclPlan;
+                    //Memory.testRCLPlan = rclPlan;
                 }
                 //Else we move to the next generation
                 else{
-                    //Check if all 3 top scores are the same. If so, we've converged.
-                    if(fiefPlanner.bestScore == fiefPlanner.secondScore && fiefPlanner.secondScore == fiefPlanner.thirdScore){
+                    //Check if all 3 top scores are within 1%. If so, we've converged.
+                    if(fiefPlanner.bestScore - fiefPlanner.secondScore <= fiefPlanner.bestScore *0.01 && fiefPlanner.secondScore - fiefPlanner.thirdScore <= fiefPlanner.thirdScore * 0.01){
                         console.log("Plan evolution complete due to score convergence. Generated",fiefPlanner.iterations*fiefPlanner.population.length,"plans over",fiefPlanner.iterations,"generations in",Game.time-fiefPlanner.startTick,"ticks\nTotalCPU:",fiefPlanner.totalCPU,"\nBest score:",fiefPlanner.bestScore,"\n2nd Place:",fiefPlanner.secondScore,"\n3rd Place:",fiefPlanner.thirdScore)
                         fiefPlanner.stage = 0;
                         let rclPlan = this.getRCLPlan();
-                        Memory.testBasePlan = fiefPlanner.bestPlan;
-                        Memory.testBasePlanCM = fiefPlanner.bestPlanCM;
-                        Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
+                        //Memory.testBasePlan = fiefPlanner.bestPlan;
+                        //Memory.testBasePlanCM = fiefPlanner.bestPlanCM;
+                        //Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
                         //Save the plan in our segment
                         global.heap.roomPlans = JSON.parse(RawMemory.segments[1]);
                         global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlanCM];
                         RawMemory.segments[1] = JSON.stringify(global.heap.roomPlans)
                         //Save the RCL plan
-                        Memory.testRCLPlan = rclPlan;
+                        //Memory.testRCLPlan = rclPlan;
                         return;
                     }
                     console.log("Generation",fiefPlanner.stage,"complete. Breeding population for generation",fiefPlanner.stage+1+".")
@@ -419,6 +419,11 @@ const fiefPlanner = {
         const SOURCE_WEIGHT = opts.sWeight;
         const DISTANCE_WEIGHT = opts.dWeight;
         let roomData = global.heap.scoutData[roomName];
+        //If no room data, we're likely in spinup. Log and return
+        if(!roomData){
+            console.log("No room data for the room planner");
+            return;
+        }
         let sources = roomData.sources;
         let mineral = roomData.mineral;
         let exits = [];
@@ -456,7 +461,7 @@ const fiefPlanner = {
 
         //Record wall groups
         let wallGroups = this.getWallGroups(roomName);
-        Memory.test4 = wallGroups
+        //Memory.test4 = wallGroups
         //Record convex hulls for all groups
         //let hulls = test.getConvexHulls(wallGroups)
         //Memory.test5 = hulls
@@ -465,7 +470,7 @@ const fiefPlanner = {
         Object.keys(wallGroups).forEach(key=>{
             perimeterGroups[key] = this.findPerimeterTiles(wallGroups[key])
         });
-        Memory.test6 = perimeterGroups;
+        //Memory.test6 = perimeterGroups;
         //Exit tile exclusion
         exits.forEach(exit =>{
             let pos = exit
@@ -512,11 +517,11 @@ const fiefPlanner = {
 
         //Exit flood fill
         let [exitMatrix,exitHighest,exitLowest] = fiefPlanner.generateDistanceFloodFill(roomName,terrain,exits)
-        Memory.test7 = exitMatrix.serialize();
+        //Memory.test7 = exitMatrix.serialize();
 
         //Controller flood fill
         let [controllerMatrix,controllerHighest,controllerLowest] = fiefPlanner.generateDistanceFloodFill(roomName,terrain,[roomData.controller]);
-        Memory.test8 = controllerMatrix.serialize();
+        //Memory.test8 = controllerMatrix.serialize();
 
         //Source flood fill
         let [sourceMatrix,sourceHighest,sourceLowest] = fiefPlanner.generateDistanceFloodFill(roomName,terrain,sources);
@@ -770,9 +775,9 @@ const fiefPlanner = {
         //Array of RoomPosition objects for the flood fill
         let coreRoomPositions = [];
 
-        Memory.testBasePlan = basePlan;
-        Memory.test9 = combinedScoreMatrix.serialize();
-        Memory.test10 = coreLocation;
+        //Memory.testBasePlan = basePlan;
+        //Memory.test9 = combinedScoreMatrix.serialize();
+        //Memory.test10 = coreLocation;
 
         let secondDist = new PathFinder.CostMatrix();
         for(let y = 0; y < 50; y++) {
@@ -946,7 +951,7 @@ const fiefPlanner = {
         for(let ramp of trimmedRamps){
             basePlanCM.set(ramp.x,ramp.y,100)
         }
-        Memory.testStructureBlobCM = structureBlobCM.serialize();
+        //Memory.testStructureBlobCM = structureBlobCM.serialize();
         //Now assign structures
         fiefPlanner.assignStructures(roomName,terrain,basePlanCM,structureBlobCM,basePlan,exitMatrix,0,opts.assnEWeight,opts.assnCWeight);
         //Assign labs
@@ -995,12 +1000,12 @@ const fiefPlanner = {
             return [-1,-1,-1]
         }
 
-        Memory.testBasePlanCM = basePlanCM.serialize();
+        //Memory.testBasePlanCM = basePlanCM.serialize();
         
 
         basePlan.ramparts = trimmedRamps
         Memory.minCutResult = trimmedRamps;
-        [Memory.testScore,Memory.testScoreTracker] = this.scoreFiefPlan(basePlan,basePlanCM);
+        //[Memory.testScore,Memory.testScoreTracker] = this.scoreFiefPlan(basePlan,basePlanCM);
         return [basePlanCM,basePlan,Game.cpu.getUsed()-startCPU+rampartCPU]
 
     },
@@ -1866,7 +1871,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
             };
             return tiles;
         }
-        Memory.testScoreFloodCM = testCM.serialize();
+        //Memory.testScoreFloodCM = testCM.serialize();
         return [controllerFound,sourceFound,structureFound];
     },
     getRCLPlan: function(){
@@ -2104,7 +2109,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
 }
 
 module.exports = fiefPlanner;
-global.testGetFiefPlan = fiefPlanner.getFiefPlan;
-global.testGenerateRoomPlan = fiefPlanner.generateRoomPlan.bind(fiefPlanner);
-global.testRampartGroups = fiefPlanner.getRampartGroups;
-global.testFill = fiefPlanner.testFill;
+//global.testGetFiefPlan = fiefPlanner.getFiefPlan;
+//global.testGenerateRoomPlan = fiefPlanner.generateRoomPlan.bind(fiefPlanner);
+//global.testRampartGroups = fiefPlanner.getRampartGroups;
+//global.testFill = fiefPlanner.testFill;
