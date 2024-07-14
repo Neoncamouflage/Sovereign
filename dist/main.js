@@ -4,6 +4,7 @@ require('prototypes.room');
 require('prototypes.creep');
 require('prototypes.spawn');
 require('prototypes.roomposition');
+require('prototypes.military');
 require('functions.global');
 const spinup = require('spinup')
 const kingdomManager = require('kingdomManager'); //Top level kingdom manager system
@@ -39,7 +40,7 @@ module.exports.loop = function () {
         //Segment 9 is for ad-hoc logging
         RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
-        global.heap = {fiefs:{},granary:{},registry:{}};
+        global.heap = {fiefs:{},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]}};
         /*for(let fief in Memory.kingdom.fiefs){
             global.heap.fiefs[fief] = {};
         }

@@ -24,6 +24,7 @@ const registry = require('registry');
 const granary = require('granary');
 const intelManager = require('intelManager');
 const painter = require('painter');
+const marshal = require('marshal');
 const kingdomManager = {
     run:function(){
         // - Assignments -
@@ -38,11 +39,15 @@ const kingdomManager = {
         let kingdomStatus = {fiefs:{},holdings:{}}
         //Assign creeps to their fiefs and sort by role
         kingdomCreeps = sortCreeps();
+        global.heap.army.reserve = kingdomCreeps.reserve || [];
+        //console.log("Kingdom creeps!")
+        //console.log(JSON.stringify(kingdomCreeps))
         // - Actions - 
         //Run scouting
         intelManager.run(kingdomCreeps.scouts ? kingdomCreeps.scouts : [],Object.keys(Memory.kingdom.fiefs))
         //Loop through all fiefs and holdings and run their respective manager
         //Holdings first so we can run the registry for each fief in the same loop
+        marshal.run(kingdomCreeps);
         kingdomStatus.holdings = holdingManager.run(kingdomCreeps);
         for(const fief in Memory.kingdom.fiefs){
             supplyDemand.prepShipping(fief);
@@ -79,7 +84,7 @@ const kingdomManager = {
         
         //Run the painter for visuals if we have the cpu - Use painter estimate if we've recorded one, otherwise default 2
         if(Game.cpu.limit-Game.cpu.getUsed() > Memory.painterEstimate ? Memory.painterEstimate : 2){
-            painter.run();
+            painter.run(kingdomCreeps);
         }
 
         //Run status manager to draw room visuals
@@ -207,7 +212,10 @@ function runRoles(kingdomCreeps){
 }
 
 function sortCreeps(){
-    let kingdomCreeps={}
+    let kingdomCreeps={reserve:[],}
+    let milRoles = [
+        'sapper'
+    ]
     for(let creepName in Game.creeps){
         let creep = Game.creeps[creepName];
         let fief = creep.memory.fief;
@@ -215,6 +223,19 @@ function sortCreeps(){
         if(role == 'scout'){
             kingdomCreeps.scouts = kingdomCreeps.scouts || []
             kingdomCreeps.scouts.push(creep);
+        }
+        //If we find a military creep with a bad lance
+        else if(milRoles.includes(role)){
+
+            //If military and no existing lance, you go in the reserve
+            if(!global.heap.army.lances[creep.memory.lance]){
+                kingdomCreeps.reserve.push(creep.id);
+            }
+            //If your lance does exist, you go to it
+            else{
+                kingdomCreeps[creep.memory.lance] = kingdomCreeps[creep.memory.lance] || [];
+                kingdomCreeps[creep.memory.lance].push(creep)
+            }
         }
         else{
             if (!kingdomCreeps[fief]) {

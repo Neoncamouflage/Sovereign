@@ -7,6 +7,8 @@ const spinup = {
         Memory.kingdom = {};
         Memory.kingdom.holdings = {};
         Memory.kingdom.fiefs = {};
+        Memory.kingdom;
+        Memory.kingdom.army = {troupes:[],missions:{},reserve:[]};
         for(const room in Game.rooms){
             let myRoom = Game.rooms[room];
             if(myRoom.controller && myRoom.controller.my){

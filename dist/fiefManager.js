@@ -604,7 +604,7 @@ const fiefManager = {
         } 
 
         //RCL 5 checks - Link control
-        if(roomLevel >= 5){
+        if(false && roomLevel >= 5){
             //Get the links set up if they aren't
             
             //Links are set up manually for now. Write automated link placement later.
@@ -709,14 +709,14 @@ const fiefManager = {
             
             
             //Set up manager spot if we have established at least a core link
-            if(coreLink && !fief.managerSpot){
+            if(false && coreLink && !fief.managerSpot){
                 newPos = roomPlanner.getManagerPos(room);
                 fief.managerSpot = {x:newPos.x,y:newPos.y}
             }
 
            
             //If uplink is ready to receive
-            if(upLink && upLink.store[RESOURCE_ENERGY] == 0){
+            if(false &&upLink && upLink.store[RESOURCE_ENERGY] == 0){
                 //Prioritize remote link
                 if(remoteLinks.length){
                     for(link of remoteLinks){
@@ -777,7 +777,7 @@ const fiefManager = {
                 
             }
             //Else if uplink isn't ready
-            else{
+            else if(false){
                 //Flag if we need to empty coreLink
                 fief.links.sourceLinks.forEach(linkID =>{
                     let link = Game.getObjectById(linkID);
@@ -841,7 +841,7 @@ const fiefManager = {
             }
 
             //Transfer and logistics check
-            if(manager && !managerBusy){
+            if(false && manager && !managerBusy){
                 //Primary amount in storage
                 let energyMinimum = 50000;
                 let energyTermMax = 200000;
@@ -955,7 +955,7 @@ const fiefManager = {
 
             
             //Periodic RCL5+ Check
-            if(Game.time % 70 == 0){
+            if(false && Game.time % 70 == 0){
                 //Linked harvester spots should destroy their cans
                 fiefSources.forEach(source =>{
                     let thisSource = fief.sources[source]
@@ -979,7 +979,7 @@ const fiefManager = {
 
         }
         //RCL 6 checks
-        if(roomLevel >= 6){
+        if(false && roomLevel >= 6){
             let mineMineral = false;
             let mineral = Game.getObjectById(fief.mineral.id);
             let mineralTotal = 0;
@@ -1027,7 +1027,7 @@ const fiefManager = {
             //Check if we need to find a spot and can
 
             
-            if(!fief.mineral.can){
+            if(false && !fief.mineral.can){
                 //Can only build once we have a free can, so check sources.
                 let freeCan = false;
                 fiefSources.forEach(source =>{

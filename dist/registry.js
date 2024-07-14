@@ -11,7 +11,8 @@ const registry = {
         'claimer'  :'Baron',
         'builder'  :'Mason',
         'diver'    :'Reaver',
-        'bait'     :'Rogue'
+        'bait'     :'Rogue',
+        'sapper'   :'Sapper'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -165,6 +166,9 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             break;
         case 'upgrader':
             return getUpgrader(room,fiefCreeps,job);
+            break;
+        case 'sapper':
+            return getSapper(room);
             break;
         case 'builder':
             return getBuilder(room,fiefCreeps);
@@ -411,6 +415,27 @@ function getMiner(holding){
     return [newBody,partsCost];
 }
 
+//Military Sapper
+function getSapper(room){
+    let parts = [MOVE,WORK]
+    let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+    let energyAvailable = room.energyCapacityAvailable
+
+    let maxParts = Math.floor(energyAvailable / setCost);
+    let newBody = [];
+    let totalCost = 0;
+
+    newBody.push(...parts);
+    totalCost += setCost;
+
+    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+        newBody.push(...parts);
+        totalCost += setCost;
+    }
+
+    return [newBody,totalCost];
+}
+
 //General hauler - Porter
 function getHauler(room,fiefCreeps){
     //console.log("Firing Hauler")
@@ -467,7 +492,7 @@ function getUpgrader(room,fiefCreeps,job){
 
 function getScout(room,fiefCreeps){
     //Make sure we have harvesters and haulers before we do any scouts
-    if(!fiefCreeps.harvester || !fiefCreeps.hauler) return ['BABY_FIEF',-1];
+    if(!fiefCreeps.harvester || !fiefCreeps.hauler) return ['REGISTRY_BABY_FIEF',-1];
     
     return [[MOVE],50]
 }

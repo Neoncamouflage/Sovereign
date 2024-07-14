@@ -34,6 +34,53 @@ const helper = {
         let last = lastNameLetters[Math.floor(Math.random() * lastNameLetters.length)]
         return first+last;
     },
+    getWarName: function(){
+        const adjectives = [
+            "Iron", "Golden", "Mystic", "Silent", "Crimson",
+            "Fierce", "Shadow", "Noble", "Savage", "Royal",
+            "Frozen", "Ancient", "Twilight", "Valiant", "Sacred",
+            "Rogue", "Elite", "Phantom", "Wild", "Brave",
+            "Wandering", "Lost", "Forgotten", "Hidden", "Dark",
+            "Light", "Radiant", "Dread", "Stormy", "Fiery" ,
+            "Gallant", "Stalwart", "Vigilant", "Sturdy", "Pious",
+            "Venerable", "Stout", "Grizzled", "Hallowed", "Revered",
+            "Steadfast", "Wise", "Prudent", "Bold", "Chivalrous",
+            "Loyal", "Stern", "Zealous", "Blessed", "Virtuous",
+            "Devout", "Just", "Honorable", "Valorous", "Learned",
+            "Knightly", "Archaic", "Regal", "Sacrosanct", "Exalted",
+            "Mystical", "Arcane", "Enchanted", "Ethereal", "Invincible",
+            "Mythical", "Celestial", "Infernal", "Primeval", "Barbaric",
+            "Feudal", "Nefarious", "Fabled", "Foreboding", "Formidable",
+            "Spectral", "Ominous", "Impenetrable", "Immutable", "Boundless",
+            "Timeless", "Perilous", "Unyielding", "Unseen", "Ascendant",
+            "Ancestral", "Haunted", "Grim", "Turbulent", "Bewitched"
+        ];
+
+        const nouns = [
+            "Guardians", "Wolves", "Swords", "Legends", "Knights",
+            "Eagles", "Riders", "Kings", "Spirits", "Warriors",
+            "Hunters", "Axes", "Banners", "Dragons", "Shadows",
+            "Watchers", "Ghosts", "Serpents", "Giants", "Mages",
+            "Archers", "Seers", "Paladins", "Ravens", "Lancers",
+            "Crusaders", "Champions", "Sentinels", "Forgers", "Rogues",
+            "Defenders", "Monks", "Sentinels", "Squires", "Templars",
+            "Barons", "Clerics", "Prophets", "Heralds", "Guard",
+            "Vassals", "Thanes", "Priests", "Paladins", "Sages",
+            "Bishops", "Champions", "Pages", "Druids", "Smiths",
+            "Archers", "Jesters", "Alchemists", "Minstrels", "Peasants",
+            "Acolytes", "Friars", "Crusaders", "Vikings", "Warlocks",
+            "Conquerors", "Mystics", "Fortresses", "Oracles", "Enchanters",
+            "Rebels", "Tyrants", "Courts", "Dungeons", "Battalions",
+            "Castles", "Realms", "Garrisons", "Fortunes", "Catacombs",
+            "Tribes", "Sanctuaries", "Dominions", "Thrones", "Armies",
+            "Healers", "Scouts", "Prophecies", "Keepers", "Artifacts",
+            "Embers", "Tales", "Ghosts", "Voyagers", "Rituals"
+        ];
+
+        const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+        const noun = nouns[Math.floor(Math.random() * nouns.length)];
+        return `${adjective} ${noun}`;
+    },
     //Returns a phrase for a room sign based on the room
     getSign: function(room){
         const MAX_NEAR_RANGE = 4;
@@ -65,7 +112,7 @@ const helper = {
             "Beware, for the Sovereign's scouts mark your every move.",
             "The royal will extends even here. None are beyond reach.",
             "These distant shores are touched by whispers of the Throne's might.",
-            "In these outer realms, the Sovereign's presence is felt.",
+            "In these outer realms, the Sovereign's presence is still felt.",
         ]
         let occupied =[
             "The Throne's justice will soon restore order to this land.",

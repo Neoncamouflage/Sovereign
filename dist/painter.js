@@ -1,17 +1,20 @@
 if(!Memory.visuals) Memory.visuals = {};
 const painter = {
     //Paints visuals based on flags set in memory
-    run: function(){
+    run: function(kingdomCreeps){
         let visuals = Memory.visuals;
         let fiefs = Memory.kingdom.fiefs;
         let holdings = Memory.kingdom.holdings;
 
         //Loop through fiefs and holdings since some visuals are specific to those
-        for(let fief in fiefs){
-            if(visuals.drawFiefCM) this.drawFiefCM(fief)
-            if(visuals.drawFiefPlan) this.drawFiefPlan(fief)
-            if(visuals.drawLoot) this.drawLoot(fief)
+        if(visuals.drawFiefCM || visuals.drawFiefPlan){
+            for(let fief in fiefs){
+                if(visuals.drawFiefCM) this.drawFiefCM(fief)
+                if(visuals.drawFiefPlan) this.drawFiefPlan(fief)
+            }
         }
+        if(visuals.drawLoot) this.drawLoot()
+        if(visuals.drawMilitary) this.drawMilitary(kingdomCreeps)
         if(visuals.drawIntel) this.drawIntel()
     },
     setVisual: function(vis,setting='default'){
@@ -85,6 +88,39 @@ const painter = {
                 if(total !=0) new RoomVisual(room.name).text('¤'+(total/1000).toFixed(0),building.pos.x,building.pos.y-1.2, {color:'#5AF414',font:'0.5 Comic Sans MS'});
             }
         }
+    },
+    drawMilitary(kingdomCreeps){
+        let reserve = global.heap.army.reserve;
+        //Label Troupe mission targets
+        for(let troupe of global.heap.army.troupes){
+            if(troupe.mission && troupe.mission.targets){
+                console.log("Painting targets",JSON.stringify(troupe.mission.targets))
+                for(let target of troupe.mission.targets){
+                    let targetObj = Game.getObjectById(target);
+                    if(targetObj){
+                        new RoomVisual(targetObj.room.name).text(troupe.name,targetObj.pos.x,targetObj.pos.y-0.5, {color:'#ffa500',font:'0.3 Bridgnorth',align:'left'});
+                        new RoomVisual(targetObj.room.name).circle(targetObj.pos.x,targetObj.pos.y,{fill: 'transparent', radius: 0.5, stroke: 'red'});
+                        new RoomVisual(targetObj.room.name).line(targetObj.pos.x-0.4,targetObj.pos.y-0.4, targetObj.pos.x+0.4,targetObj.pos.y+0.4,{color: 'red'});
+                        new RoomVisual(targetObj.room.name).line(targetObj.pos.x+0.4,targetObj.pos.y-0.4, targetObj.pos.x-0.4,targetObj.pos.y+0.4,{color: 'red'});
+                    }
+                    //new RoomVisual(target.room.name)
+                }
+            }
+        }
+        //Label reserve creeps
+        for(let crpID of reserve){
+            let creep = Game.getObjectById(crpID)
+            new RoomVisual(creep.room.name).text("Reserve",creep.pos.x,creep.pos.y-0.5, {color:'#ffa500',font:'0.5 Bridgnorth'})
+        }
+        //Label active duty creeps
+        for(let lance of Object.keys(global.heap.army.lances)){
+            if(!kingdomCreeps[lance]) continue;
+            for(let creep of kingdomCreeps[lance]){
+                new RoomVisual(creep.room.name).text(creep.memory.lance,creep.pos.x,creep.pos.y-1, {color:'#ffa500',font:'0.5 Bridgnorth'})
+                new RoomVisual(creep.room.name).text(creep.memory.role[0].toUpperCase() + creep.memory.role.slice(1),creep.pos.x,creep.pos.y-0.5, {color:'#ffa500',font:'0.5 Bridgnorth'})
+            }
+        }
+
     }
 }
 

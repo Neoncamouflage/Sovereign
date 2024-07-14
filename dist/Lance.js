@@ -1,11 +1,13 @@
-function Lance(name,type){
-    this.name = name;
-    this.type = type;
-    this.creeps = [];
-    //target keys are creep IDs, values are gameobject IDs to attack
-    //targetPos keys are creep IDs, values are positions to be at
-    this.target = {}
-    this.targetPos = {}
+const helper = require('functions.helper');
+
+//Base Lance prototype and functions
+function Lance(name){
+    this.name = name || helper.getWarName();
+    this.target = {};
+    this.targetPos = {};
+
+    global.heap.army.lances[this.name] = this;
+
 }
 
 //Sets a target for the creep.
@@ -43,12 +45,17 @@ Lance.prototype.removeTargetPos = function(creep) {
 
 //Adds a creep to the Lance
 Lance.prototype.addCreep = function(creep) {
-    this.creeps.push(creep.id);
+    creep.memory.lance = this.name;
+};
+
+//Disbands the lance
+Lance.prototype.disband = function() {
+    delete this.troupe[this.name]
+    delete global.heap.army.lances[this.name]
 };
 
 //Removes a creep as well as their target and targetPos assignments
 Lance.prototype.removeCreep = function(creep) {
-    this.creeps = this.creeps.filter(creepId => creepId !== creep.id);
     if (this.target && this.target[creep.id]) {
         delete this.target[creep.id];
     }
