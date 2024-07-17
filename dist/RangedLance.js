@@ -1,24 +1,23 @@
 const Lance = require('Lance')
 const registry = require('registry')
 
-const MAX_DEMOS = 3;
-
 //Demo specialist Lance
-function DemoLance(name,details){
+function RangedLance(name,details){
     //Inherit from lance
     Lance.call(this,name,details);
     this.details = details || {};
-    this.lanceType = 'demo';
-    //Total units intended for this lance, max 3
-    console.log("DLance details:",JSON.stringify(details))
-    this.unitsNeeded = (details && details.targetHits && details.targetHits > 0) ? Math.min(Math.ceil(details.targetHits / 500000), MAX_DEMOS) : 0;
+    this.lanceType = 'ranged';
+    //Body size starts small when not otherwise specified, can be changed later.
+    this.bodySize = details.bodySize || 2;
+    //Total units intended for this lance
+    this.unitsNeeded = details.unitsNeeded || 1;
 }
 
-DemoLance.prototype = Object.create(Lance.prototype);
-DemoLance.prototype.constructor = DemoLance;
+RangedLance.prototype = Object.create(Lance.prototype);
+RangedLance.prototype.constructor = RangedLance;
 
 //Orders a creep for the lance
-DemoLance.prototype.populate = function(fief,kingdomCreeps,role = 'sapper',sev=60){
+RangedLance.prototype.populate = function(fief,kingdomCreeps,role = 'archer',sev=60){
     let reserve = kingdomCreeps.reserve;
     let foundReserve = false;
     let takeaway = [];
@@ -47,36 +46,39 @@ DemoLance.prototype.populate = function(fief,kingdomCreeps,role = 'sapper',sev=6
     }
     //If we didn't find enough to fill, order a creep
     if(!foundReserve){
-        registry.requestCreep({sev:sev,memory:{role:role,lance:this.name,fief:fief,status:'spawning',preflight:false}});
+        registry.requestCreep({sev:sev,bodySize:this.bodySize,memory:{role:role,job:'archer',lance:this.name,fief:fief,status:'spawning',preflight:false}});
     }
     
 
 }
 
 //Executes creep orders. Moving to target positions and demolishing target objects
-DemoLance.prototype.runCreeps = function(myCreeps){
+RangedLance.prototype.runCreeps = function(myCreeps){
     for(let creep of myCreeps){
         let creepID = creep.id;
         let targetPos = this.targetPos[creepID];
         let target = Game.getObjectById(this.target[creepID]);
+        console.log(creep.name,"has target",target,"and pos",JSON.stringify(targetPos))
         //If no target or position, do nothing
         if(!target && !targetPos) return;
         //If we have a target position, we travel
         if(targetPos){
-            creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName));
+            console.log(creep,"travelling")
+            let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{range:targetPos.range});
+            console.log(JSON.stringify(x))
         }
         //If the target is in range, we dismantle
         if(target){
-            if(creep.pos.getRangeTo(target) == 1){
-                creep.dismantle(target);
+            if(creep.pos.getRangeTo(target) <=3){
+                creep.rangedAttack(target);
             }
-            //If target but no specific place to stand, just travel towards it
+            //If target but no specific place to stand, just travel towards it until range 3
             else if(!targetPos){
-                creep.travelTo(target)
+                creep.travelTo(target,{range:3})
             }
         }
     }
 }
 
-global.DemoLance = DemoLance;
-module.exports = DemoLance;
+global.RangedLance = RangedLance;
+module.exports = RangedLance;

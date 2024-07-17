@@ -1,24 +1,22 @@
 const Lance = require('Lance')
 const registry = require('registry')
 
-const MAX_DEMOS = 3;
-
 //Demo specialist Lance
-function DemoLance(name,details){
+function MeleeDuoLance(name,details){
     //Inherit from lance
     Lance.call(this,name,details);
     this.details = details || {};
-    this.lanceType = 'demo';
+    this.lanceType = 'ranged';
     //Total units intended for this lance, max 3
     console.log("DLance details:",JSON.stringify(details))
-    this.unitsNeeded = (details && details.targetHits && details.targetHits > 0) ? Math.min(Math.ceil(details.targetHits / 500000), MAX_DEMOS) : 0;
+    this.unitsNeeded = details.unitsNeeded || 1;
 }
 
-DemoLance.prototype = Object.create(Lance.prototype);
-DemoLance.prototype.constructor = DemoLance;
+MeleeDuoLance.prototype = Object.create(Lance.prototype);
+MeleeDuoLance.prototype.constructor = MeleeDuoLance;
 
 //Orders a creep for the lance
-DemoLance.prototype.populate = function(fief,kingdomCreeps,role = 'sapper',sev=60){
+MeleeDuoLance.prototype.populate = function(fief,kingdomCreeps,role = 'sapper',sev=60){
     let reserve = kingdomCreeps.reserve;
     let foundReserve = false;
     let takeaway = [];
@@ -54,7 +52,7 @@ DemoLance.prototype.populate = function(fief,kingdomCreeps,role = 'sapper',sev=6
 }
 
 //Executes creep orders. Moving to target positions and demolishing target objects
-DemoLance.prototype.runCreeps = function(myCreeps){
+MeleeDuoLance.prototype.runCreeps = function(myCreeps){
     for(let creep of myCreeps){
         let creepID = creep.id;
         let targetPos = this.targetPos[creepID];
@@ -78,5 +76,5 @@ DemoLance.prototype.runCreeps = function(myCreeps){
     }
 }
 
-global.DemoLance = DemoLance;
-module.exports = DemoLance;
+global.MeleeDuoLance = MeleeDuoLance;
+module.exports = MeleeDuoLance;

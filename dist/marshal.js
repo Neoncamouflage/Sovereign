@@ -3,7 +3,8 @@ const DEFAULT_MISSION_PRIORITY = 5;
 const MISSION_TYPES = [
     'demo',
     'cleanup',
-]
+];
+const DEFAULT_SCOPE = 'broad';
 
 const marshal = {
     //Assign missions to troupes and run them
@@ -20,15 +21,17 @@ const marshal = {
     },
     //Mission types: Demo/Attack/Defend/Harass
     //Adds a mission, requirements depend on mission type
-    //Preferable attributes are roomName, priority, type, targets
+    //Preferable attributes are roomName, priority, type, targets, scop
     addMission: function(options){
         let missionMap = global.heap.missionMap || setupMissionMap();
         let details = {};
-
+        
         details.roomName = options.roomName; //Room is the target or requester room, depending on mission
         details.priority = options.priority || DEFAULT_MISSION_PRIORITY;
+        details.scope = options.scope || DEFAULT_SCOPE;
         if(options.type) details.type = options.type;
-        if(options.targets) details.targets = options.targets;
+        if(options.targets) details.targets = options.targets || [];
+        
 
         missionMap[details.roomName] = missionMap[details.roomName] || [];
         let newMission = new Mission(details);
@@ -44,7 +47,7 @@ function Mission(details) {
     this.priority = details.priority
     this.room = details.roomName;
     this.tick = Game.time;
-    this.targets = details.targets
+    this.targets = details.targets || [];
     this.assigned = null;
 }
 

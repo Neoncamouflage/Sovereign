@@ -27,7 +27,7 @@ if (!Creep.prototype._harvest) {
     Creep.prototype.harvest = function(target) {
         //Store whatever is lower, total energy of target or our total harvest
         let tEnergy = 0;
-        if(target.energy) tEnergy= Math.min(target.energy,(this.getActiveBodyparts(WORK) * HARVEST_POWER))
+        if(target.energy) tEnergy= Math.min(target.hits,(this.getActiveBodyparts(RANGED_ATTACK) * HARVEST_POWER))
 
         //Call the actual harvest
         let harvCall = this._harvest(target);

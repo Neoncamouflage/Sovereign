@@ -94,17 +94,19 @@ const painter = {
         //Label Troupe mission targets
         for(let troupe of global.heap.army.troupes){
             if(troupe.mission && troupe.mission.targets){
-                console.log("Painting targets",JSON.stringify(troupe.mission.targets))
+                //console.log("Painting targets",JSON.stringify(troupe.mission.targets))
+                let liveTargets = [];
                 for(let target of troupe.mission.targets){
                     let targetObj = Game.getObjectById(target);
                     if(targetObj){
-                        new RoomVisual(targetObj.room.name).text(troupe.name,targetObj.pos.x,targetObj.pos.y-0.5, {color:'#ffa500',font:'0.3 Bridgnorth',align:'left'});
+                        liveTargets.push(targetObj)
                         new RoomVisual(targetObj.room.name).circle(targetObj.pos.x,targetObj.pos.y,{fill: 'transparent', radius: 0.5, stroke: 'red'});
                         new RoomVisual(targetObj.room.name).line(targetObj.pos.x-0.4,targetObj.pos.y-0.4, targetObj.pos.x+0.4,targetObj.pos.y+0.4,{color: 'red'});
                         new RoomVisual(targetObj.room.name).line(targetObj.pos.x+0.4,targetObj.pos.y-0.4, targetObj.pos.x-0.4,targetObj.pos.y+0.4,{color: 'red'});
                     }
-                    //new RoomVisual(target.room.name)
                 }
+                let objCentroid = calculateCentroid(liveTargets);
+                new RoomVisual(troupe.mission.room).text(troupe.name,objCentroid.x,objCentroid.y-0.5, {color:'#ffa500',font:'0.5 Bridgnorth'});
             }
         }
         //Label reserve creeps
@@ -122,6 +124,20 @@ const painter = {
         }
 
     }
+}
+
+function calculateCentroid(targets) {
+    const sum = targets.reduce((acc, target) => {
+        acc.x += target.pos.x;
+        acc.y += target.pos.y;
+        return acc;
+    }, {x: 0, y: 0});
+
+    const count = targets.length;
+    return {
+        x: sum.x / count,
+        y: sum.y / count
+    };
 }
 
 module.exports = painter;    

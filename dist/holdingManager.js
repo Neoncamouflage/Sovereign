@@ -1,9 +1,8 @@
 const helper = require('functions.helper');
-const roomPlanner = require('roomPlanner');
-const missionManager = require('missionManager')
 const profiler = require('screeps-profiler');
 const registry = require('registry');
 const supplyDemand = require('supplyDemand');
+const marshal = require('marshal');
 var holdingManager = {
     /** @param {Room} room **/
     run: function(kingdomCreeps){
@@ -376,11 +375,56 @@ var holdingManager = {
                         }
                     }
                 }
-                if(Game.rooms[fief].energyCapacityAvailable >= 1300){
+                
+                if(!reserverSet && Game.rooms[fief].energyCapacityAvailable >= 1300){
                     let spots = helper.getOpenSpots(remote.controller.pos,true);
+                    //See if we have a mission already
+
+                    if(!spots.length){
+                        let hasMission = false;
+                        if(global.heap.missionMap && global.heap.missionMap[holdingName]){
+                            for(let mission of global.heap.missionMap[holdingName]){
+                                if(mission.type == 'demo') hasMission = true;
+                                break;
+                            }
+                        }
+                        //If no open spots, get a path from a source to the controller(just so we know it won't take a lot of CPU) and clear it out.
+                        if(!hasMission){
+                            let spotsPath = PathFinder.search(Game.getObjectById(Object.keys(holding.sources)[0]).pos,{pos:remote.controller.pos,range:1},{
+                                plainCost:1,
+                                swampCost:2,
+                                maxRooms:1,
+                                roomCallback: function(roomName){
+                                    console.log(roomName)
+                                    let room = Game.rooms[roomName];
+                                    let costs = new PathFinder.CostMatrix;
+                                    room.find(FIND_STRUCTURES).forEach(function(struct) {
+                                        //Find unwalkable structures in the room, set their cost to 30 so it doesn't want to path through them but we still find the controller
+                                        if (struct.structureType !== STRUCTURE_CONTAINER && struct.structureType !== STRUCTURE_ROAD) {
+                                          costs.set(struct.pos.x, struct.pos.y, 30);
+                                        }
+                                      });
+                                      
+                                    return costs;
+                                }
+                            });
+                            let structs = [];
+                            for(let spot of spotsPath.path){
+                                //Get the first index because only one unwalkable can be on each spot
+                                let find = spot.look().filter(item => item.type == 'structure' && OBSTACLE_OBJECT_TYPES.includes(item.structure.structureType));
+                                if(!find.length) continue;
+                                structs = structs.concat(find[0]['structure']);
+                                //Now we submit a mission for our list of structures
+                                //roomName, priority, type, targets
+                                
+                            }
+                            marshal.addMission({roomName:holdingName,type:'demo',targets:structs.map(st => st.id)});
+                        }
+                    }
+                    
                    // console.log("Reserver checks")
                    // console.log(`For remote: ${remote.name}. Reserver set:${reserverSet},fiefCreep role:${fiefCreeps.claimer},isReserved:${isReserved},spots:${spots}`)
-                    if((!(isReserved) || remote.controller.reservation.ticksToEnd <= CONTROLLER_RESERVE_MAX/2) && !reserverSet && spots.length){
+                    if((!(isReserved) || remote.controller.reservation.ticksToEnd <= CONTROLLER_RESERVE_MAX/2) && spots.length){
                         registry.requestCreep({sev:20,memory:{role:'claimer',job:'reserver',fief:fief,target:{x:remote.controller.pos.x,y:remote.controller.pos.y,id:remote.controller.id},holding:holdingName,status:'spawning',preflight:false}})
                     }
                 }

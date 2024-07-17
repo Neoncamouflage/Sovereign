@@ -1,8 +1,9 @@
 const helper = require('functions.helper');
 
 //Base Lance prototype and functions
-function Lance(name){
-    this.name = name || helper.getWarName();
+function Lance(name,details){
+    this.name = name;
+    this.details = details || {};
     this.target = {};
     this.targetPos = {};
 

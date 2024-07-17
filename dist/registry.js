@@ -12,7 +12,8 @@ const registry = {
         'builder'  :'Mason',
         'diver'    :'Reaver',
         'bait'     :'Rogue',
-        'sapper'   :'Sapper'
+        'sapper'   :'Sapper',
+        'archer'   :'Archer'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -169,6 +170,9 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             break;
         case 'sapper':
             return getSapper(room);
+            break;
+        case 'archer':
+            return getArcher(room,plan);
             break;
         case 'builder':
             return getBuilder(room,fiefCreeps);
@@ -415,7 +419,7 @@ function getMiner(holding){
     return [newBody,partsCost];
 }
 
-//Military Sapper
+//Military Creeps
 function getSapper(room){
     let parts = [MOVE,WORK]
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
@@ -435,16 +439,34 @@ function getSapper(room){
 
     return [newBody,totalCost];
 }
+function getArcher(room,plan){
+    let parts = [MOVE,RANGED_ATTACK]
+    let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+    let energyAvailable = room.energyCapacityAvailable
+    //Max size is the set body size or energy cap, whichever is less
+    let maxParts = Math.min(plan.bodySize,Math.floor(energyAvailable / setCost));
+    let newBody = [];
+    let totalCost = 0;
+
+    newBody.push(...parts);
+    totalCost += setCost;
+
+    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+        newBody.push(...parts);
+        totalCost += setCost;
+    }
+
+    return [newBody,totalCost];
+}
 
 //General hauler - Porter
 function getHauler(room,fiefCreeps){
     //console.log("Firing Hauler")
     let parts = room.controller.level > 3 && room.storage ? [MOVE, CARRY] : [MOVE,CARRY];
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
-    let [tickNet,avgNet] = granary.getIncome(room.name)
     //If we have 0 average and planned, and no haulers, the energy is what we have now, otherwise we wait for at least half of max
     //console.log("Hauler spawning: Ticknet",tickNet,"AvgNet",avgNet,"Hauler creeps?",fiefCreeps['hauler'])
-    let energyAvailable = (tickNet > 0 || avgNet > 0) && (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? Math.max(room.energyCapacityAvailable/2,room.energyAvailable) : room.energyAvailable;
+    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? Math.max(room.energyCapacityAvailable/2,room.energyAvailable) : room.energyAvailable;
     //console.log("Available energy",energyAvailable)
     let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
     let maxParts = Math.floor(cap / setCost);

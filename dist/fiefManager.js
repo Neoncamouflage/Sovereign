@@ -1,10 +1,8 @@
 //const roomPlanner = require('roomPlanner');
 const helper = require('functions.helper');
 const fiefPlanner = require('fiefPlanner');
-const roleStarters = require('role.starters');
 require('roomVisual');
 const profiler = require('screeps-profiler');
-const missionManager = require('missionManager');
 const supplyDemand = require('supplyDemand');
 const granary = require('granary');
 const registry = require('registry');
@@ -1192,7 +1190,7 @@ const fiefManager = {
 
         //#endregion
         //Set defense mission if hostile creeps are detected and they're not scouts
-        if(roomBaddies.some(creep => !helper.isScout(creep)&& !Memory.diplomacy.allies.includes(creep.owner.username))){
+        if(roomBaddies.some(creep => (!helper.isScout(creep)&& (!Memory.diplomacy.allies.includes(creep.owner.username)) || (creep.pos.getRangeTo(room.controller == 2) && helper.isScout(creep))))){
             //Create defend mission if one isn't already active
             //if(!Memory.kingdom.missions.defend[room.name]){
                 //missionManager.createMission('defend',room.name,{hostileCreeps:roomBaddies.filter(creep =>{!Memory.diplomacy.allies.includes(creep.owner.username)})})
@@ -1267,7 +1265,9 @@ const fiefManager = {
         damagedStructures.sort((a, b) => a.hits - b.hits);
         damagedCreeps.sort((a, b) => a.hits - b.hits);
         //console.log(room.name)
-        var closestHostile = tower.pos.findClosestByRange(FIND_HOSTILE_CREEPS);
+        
+        var closestHostile = tower.pos.findClosestByRange(FIND_HOSTILE_CREEPS,{filter:(creep) => (!Memory.diplomacy.allies.includes(creep.owner.username) || (helper.isScout(creep) && creep.pos.getRangeTo(creep.room.controller <=5)))})
+
         if (closestHostile != null && closestHostile != undefined) {
                 //console.log(closestHostile)
                 tower.attack(closestHostile);

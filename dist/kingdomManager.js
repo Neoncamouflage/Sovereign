@@ -1,16 +1,12 @@
 const fiefManager = require('fiefManager');
-const missionManager = require('missionManager')
 const holdingManager = require('holdingManager');
 const roleGeneralist = require('role.generalist');
 const roleHarvester = require('role.harvester');
 const roleUpgrader = require('role.upgrader');
 const roleBuilder = require('role.builder');
-const roleFiller = require('role.filler');
 const roleClaimer = require('role.claimer');
 const roleMiner = require('role.miner')
 const roleRemotedefender = require('role.remoteDefender');
-const roleTrucker = require('role.trucker');
-const roleManager = require('role.manager');
 const roleGuard = require('role.guard');
 const roleDiver = require('role.diver');
 const roleRaider =  require('role.raider')
@@ -96,7 +92,6 @@ const kingdomManager = {
 module.exports = kingdomManager;
 
 function runRoles(kingdomCreeps){
-    let milCreeps = [];
     let cRoles = {};
     for(creep in kingdomCreeps){
         let myCreep = Game.creeps[creep];
@@ -208,13 +203,14 @@ function runRoles(kingdomCreeps){
         }
         cRoles[Game.creeps[creep].memory.role] = creepRole
     }
-    missionManager.run(milCreeps);
 }
 
 function sortCreeps(){
     let kingdomCreeps={reserve:[],}
     let milRoles = [
-        'sapper'
+        'sapper',
+        'archer',
+        'pikeman'
     ]
     for(let creepName in Game.creeps){
         let creep = Game.creeps[creepName];
