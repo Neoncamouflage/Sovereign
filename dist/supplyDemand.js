@@ -19,8 +19,8 @@ const supplyDemand = {
         let poolHaulers = fiefCreeps;
         //No nuker because it takes so much energy. Only fill upon explicit request
         let fillStructures = [
-            STRUCTURE_SPAWN,
-            STRUCTURE_EXTENSION,
+            //STRUCTURE_SPAWN,
+            //STRUCTURE_EXTENSION,
             STRUCTURE_LAB,
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_TOWER
@@ -33,16 +33,19 @@ const supplyDemand = {
 
         //Manage imports/exports
 
+
+        
         //Process infrastructure energy demands (extensions,spawns,towers,labs)
         let energyStructures = [];
-
-
         energyStructures = room.find(FIND_MY_STRUCTURES,{filter: 
             (structure) => fillStructures.includes(structure.structureType) && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
         });
 
-        //If any need energy, set up tasks
+
+
+
         if(energyStructures.length){
+            
             energyStructures.forEach(struct =>{
                 let structNeed = struct.store.getFreeCapacity(RESOURCE_ENERGY);
                 //console.log("Structure need for",struct.structureType,"is",struct.store.getFreeCapacity(RESOURCE_ENERGY))
@@ -112,7 +115,6 @@ const supplyDemand = {
             });
 
         };
-
         //Handle in-room haulers, get idle count in return
         if(poolHaulers && poolHaulers.length){
             this.assignTasks(poolHaulers,room)

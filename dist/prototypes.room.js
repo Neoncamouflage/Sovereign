@@ -1,4 +1,3 @@
-
 //Gets the value of all lootable resources in a room
 //Can optionally split the results based on rampart protection
 Room.prototype.getLoot = function (consideRamparts=false) {

@@ -1,4 +1,5 @@
 /.screeps.json
-
-
+test.js
+.VS*
+/node_modules
 dist/oldMinCut.js

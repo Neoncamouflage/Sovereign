@@ -1,4 +1,5 @@
 const granary = require('granary');
+const registry = require('registry');
 /*
 Prototype ToDO
 take - Withdraws a resource from a structure, defaults to all
@@ -83,6 +84,12 @@ if (!Creep.prototype._upgradeController) {
 //#region New Prototypes
 
 //#endregion
+//Respawns creep
+Creep.prototype.respawn = function({ticks=200,sev=30} = {}){
+    if(Game.time % 3 == 0 && this.ticksToLive <= ticks && !this.memory.respawn){
+        registry.requestCreep({sev:sev,body:this.body.map(part => part.type),memory:{role:this.memory.role,fief:this.memory.fief,preflight:false},respawn:this.id})
+    }
+}
 //Gets a resource up to a target amount
 //If unspecified, resource is energy, amount is full carry
 Creep.prototype.goGet = function (target,resourceType, amount) {
@@ -109,6 +116,21 @@ Creep.prototype.emptyStore = function () {
     let storage = this.room.storage;
     let terminal = this.room.terminal;
     let fief = Game.rooms[this.memory.fief];
+    if(Memory.kingdom.fiefs[this.room.name] && this.store.getUsedCapacity(RESOURCE_ENERGY) > 0){
+        let fills = this.room.find(FIND_MY_STRUCTURES,{filter: 
+            (structure) => [STRUCTURE_SPAWN,STRUCTURE_EXTENSION].includes(structure.structureType) && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        });
+        let target = this.pos.getClosestByTileDistance(fills);
+        if(target){
+            if(this.pos.getRangeTo(target) == 1){
+                this.transfer(target,RESOURCE_ENERGY)
+            }
+            else{
+                this.travelTo(target)
+            }
+            return;
+        }
+    }
     if(!Memory.kingdom.fiefs[this.room.name] && (fief.storage || fief.terminal)){
         if(fief.storage){
             this.travelTo(fief.storage)
@@ -142,19 +164,6 @@ Creep.prototype.emptyStore = function () {
     //If we're just chilling with energy, see what we can fill
     else if(this.room.name != this.memory.fief){
         this.travelTo(new RoomPosition(25,25,this.memory.fief))
-    }
-    else{
-        if(this.store.getUsedCapacity(RESOURCE_ENERGY) == 0) return;
-        let fills = this.room.find(FIND_MY_STRUCTURES,{filter: 
-            (structure) => [STRUCTURE_SPAWN,STRUCTURE_EXTENSION].includes(structure.structureType) && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-        });
-        let target = this.pos.getClosestByTileDistance(fills);
-        if(this.pos.getRangeTo(target) == 1){
-            this.transfer(target,RESOURCE_ENERGY)
-        }
-        else{
-            this.moveTo(target)
-        }
     }
 };
 

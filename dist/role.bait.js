@@ -164,15 +164,11 @@ var roleBait = {
        };
        if(creep.memory.job == 'sapper'){
             if(!creep.memory.targetRoom){
-                creep.memory.targetRoom = 'W59N12'
+                creep.memory.targetRoom = 'E49N34'
             }
-            if(!creep.memory.spawned && creep.ticksToLive < 600){
-                addCreep('W56N12','Sapper',[MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,WORK,RANGED_ATTACK],{role:'bait',job:'sapper'})
-                creep.memory.spawned = true;
-            }
-            if(!creep.memory.boosted && creep.room.name == 'W56N12'){
-                lab = Game.getObjectById('65ec08e381284a13d36fe235')
-                if(!lab.mineralType || lab.store[lab.mineralType] < 30){
+            if(!creep.memory.boosted && creep.room.name == 'E49N34'){
+                lab = Game.getObjectById('636ae74447527103a415085a')
+                /*if(!lab.mineralType || lab.store[lab.mineralType] < 30){
                     creep.memory.boosted = true;
                 }
                 else{
@@ -183,17 +179,14 @@ var roleBait = {
                     }else if(x == OK){
                         creep.memory.boosted = true;
                     }
-                }
+                }*/
     
             }
 
             if(creep.room.name != creep.memory.targetRoom){
-                creep.travelTo(new RoomPosition(24,46,creep.memory.targetRoom))
+                creep.travelTo(new RoomPosition(9,41,creep.memory.targetRoom))
             }else{
-                let structTargets = creep.room.find(FIND_STRUCTURES, {
-                    filter: (structure) => structure.structureType == STRUCTURE_TOWER || structure.structureType == STRUCTURE_EXTENSION
-                });
-                let targetStruct = Game.getObjectById('63fa24e6245b4f7e5b5dbb90')
+                let targetStruct = Game.getObjectById('636ae74447527103a415085a')
                 let nimbleFlag = false;
                 if(!targetStruct){
                     targetStruct = creep.pos.findClosestByRange(structTargets);
@@ -211,11 +204,11 @@ var roleBait = {
                 else{
                     creep.travelTo(targetStruct,{ignoreCreeps:nimbleFlag});
                 }
-                const targets = creep.pos.findInRange(FIND_HOSTILE_CREEPS,3);
-                for(each of targets){
-                    creep.rangedAttack(each);
-                    break;
-                }
+                //const targets = creep.pos.findInRange(FIND_HOSTILE_CREEPS,3);
+                //for(each of targets){
+                    //creep.rangedAttack(each);
+                   // break;
+               // }
             }
         }
 

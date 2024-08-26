@@ -15,7 +15,7 @@ var roleUpgrader = {
             if(range > 2){
                 creep.travelTo(target)
             }
-            if(creep.store.getFreeCapacity() > creep.store.getCapacity()*0.2 && range <=5){
+            if(creep.store.getFreeCapacity() > creep.store.getCapacity()*0.2 && range <=5 && creep.room.energyAvailable > creep.room.energyCapacityAvailable/2){
                 let x = supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
             return;
@@ -29,9 +29,9 @@ var roleUpgrader = {
         if(range < 4){
             creep.upgradeController(creep.room.controller)
         }
-        if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
+        if(creep.store.getUsedCapacity() < creep.store.getCapacity() ){
             if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
-                supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
             else if(creep.store.getUsedCapacity() == 0){
                 if(creep.room.storage){

@@ -368,7 +368,7 @@ const fiefManager = {
                 totalSpawn += 3*item.bodySize
             });
             //Record spawn utilization
-            let ute = ((totalSpawn / 3000) * 100);
+            let ute = ((totalSpawn / fief.spawnUptime[spawn].length) * 100);
             spawnUse[spawn] = ute;
             combinedSpawnUse += ute;
             //console.log("Spawn Utilization for",Game.getObjectById(spawn).name+':\n',((totalSpawn / 3000) * 100).toFixed(2)+'%');
@@ -377,45 +377,31 @@ const fiefManager = {
         //#region Room Operation
         //#endregion
         //console.log("Spawn use:",combinedSpawnUse)
-        //Every 100 ticks (likely increase later) grab all closest remote sources and see if we should open any up
+        //Every 100 ticks add any scouted domain rooms to holdings
         if(Game.time % 100 == 0){
-            let holdingCount = 0;
-            let roomRange = 2;
-            let neighbors = getNeighboringRooms(room.name,roomRange);
-            //For each neighbor, see if it's scouted and not already a holding. Add holding if so, set to standby initially
-            //Neutral and enemy rooms are both considered
-            for(let neighbor of neighbors){
-                if(global.heap.scoutData[neighbor] && (global.heap.scoutData[neighbor].roomType == 'neutral' || (global.heap.scoutData[neighbor].roomType == 'holding' && global.heap.scoutData[neighbor].ownerType == 'enemy')) && !Memory.kingdom.holdings[neighbor]){
-                    Memory.kingdom.holdings[neighbor] = {homeFief:room.name,standby:true};
-                }
+            //Get scouted domain rooms, exclude SK for now
+            let domainRooms = getDomainRooms(room.name).filter(dRoom => dRoom.scouted == true && dRoom.type != ROOM_SOURCE_KEEPER);
+            for(let room of domainRooms){
+                if(!Memory.kingdom.holdings[room.roomName]) Memory.kingdom.holdings[roomName] = {standby:true,homeFief:room.name};
             }
-            //console.log("Checking closests sources for remotes")
-            //Run through the closest sources and see if we should use any
-            let closestSources = global.heap.fiefs[room.name].closestSources;
-            if(closestSources.length){
-                for(let source of closestSources){
-                    if(holdingCount >= roomLevel){
-                        Memory.kingdom.holdings[source.holding].sources[source.id].standby = false;
-                        continue;
-                    }
-                    //If either the holding or the source is still on standby, add it unless the distance is too much
-                    //console.log("Source",source,"json source",JSON.stringify(source))
-                    //console.log(`Holding? ${source.holding} Memory Holding? ${Memory.kingdom.holdings[source.holding]}`)
-                    //console.log(`Room standby? ${Memory.kingdom.holdings[source.holding].standby}. Source standby? ${Memory.kingdom.holdings[source.holding].sources[source.id].standby}`)
-                    if((Memory.kingdom.holdings[source.holding].standby || Memory.kingdom.holdings[source.holding].sources[source.id].standby) && !Memory.kingdom.holdings[source.holding].override){
-                        //Stupid math using spawn utilization right now, definitely need to improve later
-                        console.log(`Source distance ${source.distance}, Combined spawn use: ${combinedSpawnUse}, math: ${source.distance/10 < 100-combinedSpawnUse}`)
-                        if(source.distance/10 < 100-combinedSpawnUse){
-                            Memory.kingdom.holdings[source.holding].standby = false;
-                            Memory.kingdom.holdings[source.holding].sources[source.id].standby = false;
-                            break;
-                        }
-                    }
-                    if(!Memory.kingdom.holdings[source.holding].standby){
-                        holdingCount++;
-                    }
+        }
+        //Every 150 ticks check for new holdings
+        if(Game.time % 150 == 0){
+            //If CPU and spawn utilization are low enough, try to add a holding
+            let cpuUte = Memory.trailingCPU.reduce((total,perTick) => {
+                return total += perTick;
+            },0);
+            let cpuAv = Math.ceil(cpuUte/Memory.trailingCPU.length);
+            if((cpuAv/Game.cpu.tickLImit)*100 < 80 && combinedSpawnUse < 80){
+                //Get eligible holdings
+                let goodHoldings = [];
+                for(let [name,holding] of Object.entries(Memory.kingdom.holdings)){
+                    if(holding.homeFief != room.name || !holding.score) continue;
                 }
+                //Sort based on score
+                goodHoldings.sort((a, b) => a.roomScore - b.roomScore);
             }
+            
         }
 
 
@@ -477,13 +463,13 @@ const fiefManager = {
                     upgradersNeeded = 0;
                 }
                 else{
-                    upgradersNeeded = Math.ceil(room.storage.store[RESOURCE_ENERGY]/200000);
+                    upgradersNeeded = Math.floor(room.storage.store[RESOURCE_ENERGY]/200000);
                 }
-                if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded){
+                if(upgradersNeeded > 0 && (!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded)){
                     registry.requestCreep({sev:35,memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
                 if(cSites.length && !fiefCreeps.builder){
-                    registry.requestCreep({sev:45,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false}})
+                    registry.requestCreep({sev:25,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false}})
                 }
             }
             //Pre storage logic - always make sure we have harvesters before spawning upgraders
@@ -1266,7 +1252,7 @@ const fiefManager = {
         damagedCreeps.sort((a, b) => a.hits - b.hits);
         //console.log(room.name)
         
-        var closestHostile = tower.pos.findClosestByRange(FIND_HOSTILE_CREEPS,{filter:(creep) => (!Memory.diplomacy.allies.includes(creep.owner.username) || (helper.isScout(creep) && creep.pos.getRangeTo(creep.room.controller <=5)))})
+        var closestHostile = tower.pos.findClosestByRange(FIND_HOSTILE_CREEPS,{filter:(creep) => (!Memory.diplomacy.allies.includes(creep.owner.username))})
 
         if (closestHostile != null && closestHostile != undefined) {
                 //console.log(closestHostile)
@@ -1413,9 +1399,48 @@ function manageResourceCollection(room) {
     });
 }
 
-function getNeighboringRooms(fief, range) {
-    //Check if neighbors are already calculated
-    if(Memory.kingdom.fiefs[fief].neighbors) return Memory.kingdom.fiefs[fief].neighbors;
+function getDomainRooms(fief) {
+    if(Memory.kingdom.fiefs[fief].domain) return Memory.kingdom.fiefs[fief].domain;
+    //BFS for rooms in range
+    const MAX_RANGE = 3;
+    let queue = [{roomName: fief, depth: 0}];
+    let visited = new Set();
+    let domainRooms = [];
+    console.log("Starting domain search")
+    
+    while (queue.length > 0){
+        let { roomName, depth } = queue.shift();
+        if(visited.has(roomName)) continue;
+        console.log(`Visiting ${roomName} at depth ${depth}`)
+        //If we're within range, save the room
+        if(depth <= MAX_RANGE) domainRooms.push({roomName:roomName,depth:depth});
+
+        //If we're at max range, continue. Otherwise add neighbors
+        if(depth == MAX_RANGE) continue;
+        console.log(`Depth is not at max of ${MAX_RANGE}, adding neighbors`)
+        let exits = Game.map.describeExits(roomName);
+        console.log("EXITS:")
+        console.log(JSON.stringify(exits))
+        for(let exitRoom of Object.values(exits)){
+            if(!visited.has(exitRoom)){
+                queue.push({roomName:exitRoom,depth:depth+1});
+            }
+        }
+        
+    }
+    let validRooms = []
+    //Dump highways and crossroads, then record the rest
+    for(let thisRoom of domainRooms){
+        let type = describeRoom(thisRoom.roomName);
+        if(type == ROOM_HIGHWAY || type == ROOM_CROSSROAD) continue;
+        validRooms.push({roomName:thisRoom.roomName,depth:thisRoom.depth,scouted:!!global.heap.scoutData[roomName],type:type})
+    }
+    Memory.kingdom.fiefs[fief].domain = validRooms;
+    return validRooms;
+}
+    /*let range = 3;
+    //Check if already calculated
+    if(Memory.kingdom.fiefs[fief].domain) return Memory.kingdom.fiefs[fief].domain;
 
     //Otherwise, calculate them, then save and return
     const match = fief.match(/([EW])(\d+)([NS])(\d+)/);
@@ -1449,7 +1474,4 @@ function getNeighboringRooms(fief, range) {
             const newRoomName = `${newHorizDir}${effectiveHorizNum}${newVertDir}${effectiveVertNum}`;
             rooms.push(newRoomName);
         }
-    }
-    Memory.kingdom.fiefs[fief].neighbors = rooms;
-    return rooms;
-}
+    }*/

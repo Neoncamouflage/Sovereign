@@ -85,7 +85,7 @@ const helper = {
     getSign: function(room){
         const MAX_NEAR_RANGE = 4;
         //No sign if it's one of my rooms or we've already marked it
-        if(Memory.kingdom.fiefs[room.name] || (Memory.kingdom.holdings[room.name] && !Memory.kingdom.holdings[room.name].standby) || !room.controller || (room.controller && room.controller.sign && room.controller.sign.username == Memory.me)){
+        if(Memory.kingdom.fiefs[room.name] || (Memory.kingdom.holdings[room.name] && !Memory.kingdom.holdings[room.name].standby) || !room.controller || (room.controller && room.controller.sign && (Memory.diplomacy.allies.includes(room.controller.sign.username) || room.controller.sign.username == Memory.me))){
             return false;
         }
 
@@ -191,13 +191,7 @@ const helper = {
         return false;
     },
     getRoomType: function(room){
-        //Returns room type and owner type
-        if(!room.controller){
-            let st = room.find(FIND_STRUCTURES,{filter:{structureType:STRUCTURE_KEEPER_LAIR}});
-            if(st) return['sourcekeeper','neutral']
-            
-            return ['hallway',null,null];
-        }
+        if(!room.controller) return ['neutral',null,null];
         if(room.controller.owner){
             if(Memory.diplomacy.allies.includes(room.controller.owner.username)){
                 return ['fief','ally',room.controller.owner.username]

@@ -22,11 +22,11 @@ Troupe.prototype.createLance = function(type) {
     switch(type){
         case 'demo':
             details.targetHits = getTargetHits(this.mission.targets);
-            console.log("Troupe create lance details:",JSON.stringify(details))
+            //console.log("Troupe create lance details:",JSON.stringify(details))
             this.lances.push(new DemoLance(`${this.name.split(' ')[1]} ${this.lances.length+1}`,details));
             break;
         case 'rangedHarass':
-            console.log("Troupe create lance details:",JSON.stringify(details))
+            //console.log("Troupe create lance details:",JSON.stringify(details))
             this.lances.push(new RangedLance(`${this.name.split(' ')[1]} ${this.lances.length+1}`,details));
             break;
     }
@@ -55,9 +55,9 @@ Troupe.prototype.run = function(kingdomCreeps) {
         }
     }
     let readyFlag = true;
-    console.log("Creeps in troupe",this.name)
+    //console.log("Creeps in troupe",this.name)
     for(let lance of this.lances){
-        console.log(kingdomCreeps[lance.name])
+        //console.log(kingdomCreeps[lance.name])
         //If understaffed, populate
         if(!kingdomCreeps[lance.name] || kingdomCreeps[lance.name].length < lance.unitsNeeded){
             lance.populate(this.baseFief,kingdomCreeps);
@@ -184,10 +184,10 @@ function rangedHarassLogic(troupe){
         else if(status == 'attack'){
             for(let crp of kingdomCreeps[lance.name]){
                 liveTargets = liveCreeps.map(cID => Game.getObjectById(cID));
-                console.log("Attack status for",crp,"with livecreeps",liveTargets)
+                //console.log("Attack status for",crp,"with livecreeps",liveTargets)
                 //let closest = crp.pos.findClosestByRange(liveTargets);
                 let closest = crp.pos.getClosestByTileDistance(liveTargets);
-                console.log("Closest is",closest)
+                //console.log("Closest is",closest)
                 if(!closest) continue;
                 
                 lance.target[crp.id] = closest.id;

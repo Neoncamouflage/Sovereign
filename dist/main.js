@@ -1,5 +1,6 @@
 //Imports
 const helper = require('functions.helper'); //Helper functions
+require('constants')
 require('prototypes.room');
 require('prototypes.creep');
 require('prototypes.spawn');
@@ -37,6 +38,7 @@ module.exports.loop = function () {
         //Segment 0 is for scout data
         //Segment 1 is for room plans
         //Segment 2 is for cached paths
+        //Segment 8 is for standardized logging
         //Segment 9 is for ad-hoc logging
         RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
@@ -335,7 +337,14 @@ module.exports.loop = function () {
         //console.log("CPU Used:",Game.cpu.getUsed().toFixed(2),'/',Game.cpu.limit);
 
         Traveler.resolveMovement();
-
+        let endCPU = Game.cpu.getUsed();
+        //Record CPU utilization over last 100 ticks
+        let trailingCPU = Memory.trailingCPU || [];
+        trailingCPU = trailingCPU.filter(item =>{
+            return Game.time - item.gameTime <= 100;
+        })
+        trailingCPU.push({cpu:endCPU,gameTime:Game.time});
+        Memory.trailingCPU = trailingCPU;
         //If we're room planning, trigger the rest
         //if(!Memory.roomPlanComplete && Memory.testStructureBlobCM){
             //test.generateRoomPlanStage2(Memory.roomPlanRoomName);

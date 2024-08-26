@@ -30,8 +30,8 @@ const roleBuilder = {
 
             //Submit order if not close to storage
             if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
-                if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
-                    supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                if((!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5)){
+                    if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2) supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
                 }
                 else if(creep.store.getUsedCapacity() == 0){
                     if(creep.room.storage){
