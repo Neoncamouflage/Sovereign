@@ -85,7 +85,7 @@ const helper = {
     getSign: function(room){
         const MAX_NEAR_RANGE = 4;
         //No sign if it's one of my rooms or we've already marked it
-        if(Memory.kingdom.fiefs[room.name] || (Memory.kingdom.holdings[room.name] && !Memory.kingdom.holdings[room.name].standby) || !room.controller || (room.controller && room.controller.sign && (Memory.diplomacy.allies.includes(room.controller.sign.username) || room.controller.sign.username == Memory.me))){
+        if(Memory.kingdom.fiefs[room.name] || (Memory.kingdom.holdings[room.name] && !Memory.kingdom.holdings[room.name].standby) || !room.controller || (room.controller && room.controller.sign && (Memory.diplomacy.allies.includes(room.controller.sign.username) || [Memory.me,"Screeps"].includes(room.controller.sign.username)))){
             return false;
         }
 

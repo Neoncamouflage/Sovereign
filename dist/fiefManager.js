@@ -37,6 +37,7 @@ const fiefManager = {
         fief.spawns = mySpawns
         let [plannedNet,averageNet] = granary.getIncome(room.name);
         //Create harvest spot if none exists
+        console.log(room.name,"income",plannedNet,averageNet)
         if(!fief.sources || !Object.keys(fief.sources).length){
             console.log("NO SOURCES")
             restartFlag = true;
@@ -380,13 +381,15 @@ const fiefManager = {
         //Every 100 ticks add any scouted domain rooms to holdings
         if(Game.time % 100 == 0){
             //Get scouted domain rooms, exclude SK for now
-            let domainRooms = getDomainRooms(room.name).filter(dRoom => dRoom.scouted == true && dRoom.type != ROOM_SOURCE_KEEPER);
-            for(let room of domainRooms){
-                if(!Memory.kingdom.holdings[room.roomName]) Memory.kingdom.holdings[roomName] = {standby:true,homeFief:room.name};
+            let domainRooms = getDomainRooms(room.name).filter(dRoom => dRoom.type != ROOM_SOURCE_KEEPER);
+            for(let dRoom of domainRooms){
+                if(!getScoutData(dRoom.roomName)) continue;
+                if(!Memory.kingdom.holdings[dRoom.roomName]) Memory.kingdom.holdings[dRoom.roomName] = {standby:true,homeFief:room.name};
             }
         }
         //Every 150 ticks check for new holdings
         if(Game.time % 150 == 0){
+
             //If CPU and spawn utilization are low enough, try to add a holding
             let cpuUte = Memory.trailingCPU.reduce((total,perTick) => {
                 return total += perTick;
@@ -443,7 +446,7 @@ const fiefManager = {
                 if((source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= SOURCE_ENERGY_CAPACITY/ENERGY_REGEN_TIME) && !targetSources[sourceID].ttlFlag) return;
 
                 //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
-                let sev = noHarvs == true ? 80 : 50;
+                let sev = noHarvs == true ? 80 : 55;
                 if(source.closest) sev+= 15
                 let opts = {sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}}
                 if(targetSources[sourceID].ttlFlag) opts.respawn = targetSources[sourceID].ttlFlag
@@ -472,9 +475,8 @@ const fiefManager = {
                     registry.requestCreep({sev:25,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false}})
                 }
             }
-            //Pre storage logic - always make sure we have harvesters before spawning upgraders
-            
-            else if(fiefCreeps.harvester && fiefCreeps.harvester.length == Object.keys(fief.sources).length){
+            //Don't need to check for harvesters because we use strict priorities now
+            else{
                 
                 //If no upgraders(who are also builders at this stage), and we're below a default cap
                 if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length <MAX_STARTERS){
@@ -1432,8 +1434,8 @@ function getDomainRooms(fief) {
     //Dump highways and crossroads, then record the rest
     for(let thisRoom of domainRooms){
         let type = describeRoom(thisRoom.roomName);
-        if(type == ROOM_HIGHWAY || type == ROOM_CROSSROAD) continue;
-        validRooms.push({roomName:thisRoom.roomName,depth:thisRoom.depth,scouted:!!global.heap.scoutData[roomName],type:type})
+        if(type == ROOM_HIGHWAY || type == ROOM_CROSSROAD || thisRoom.roomName == fief) continue;
+        validRooms.push({roomName:thisRoom.roomName,depth:thisRoom.depth,scouted:!!global.heap.scoutData[thisRoom.roomName],type:type})
     }
     Memory.kingdom.fiefs[fief].domain = validRooms;
     return validRooms;

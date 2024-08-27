@@ -69,6 +69,10 @@ const registry = {
                 //If we successfully spawned and this was a respawn request from a creep, update them
                 if (spawnTry == OK && newCreep.respawn) Game.getObjectById(newCreep.respawn).memory.respawn = true;
             }
+            else{
+                //Focusing on priority. If we can't build the top priority creep yet, break and we wait
+                break;
+            }
         }
         global.heap.registry[room.name] = [];
     },
@@ -466,7 +470,7 @@ function getHauler(room,fiefCreeps){
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     //If we have 0 average and planned, and no haulers, the energy is what we have now, otherwise we wait for at least half of max
     //console.log("Hauler spawning: Ticknet",tickNet,"AvgNet",avgNet,"Hauler creeps?",fiefCreeps['hauler'])
-    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? Math.max(room.energyCapacityAvailable/2,room.energyAvailable) : room.energyAvailable;
+    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? room.energyCapacityAvailable : room.energyAvailable;
     //console.log("Available energy",energyAvailable)
     let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
     let maxParts = Math.floor(cap / setCost);

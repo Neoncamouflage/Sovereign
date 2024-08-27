@@ -1,10 +1,17 @@
 module.exports = function(grunt) {
 
     grunt.loadNpmTasks('grunt-screeps');
-    var target = grunt.option('private') ? 'private' : 'official';
+    var target = grunt.option('config') || 'official'
     var config = require('./.screeps.json')
 
     var serverConfig = {
+        local: {
+            password: config.password,
+            email:config.localEmail,
+            server: {host: 'localhost',
+                port:21025,
+                http:true}
+        },
         private: {
             email: config.email,
             password: config.password,

@@ -96,7 +96,7 @@ const intelManager = {
             //console.log("Viable exits:",JSON.stringify(exits))
             let exitRooms = Object.values(exits).filter(roomName => {
                 //If it's on the no scout list, deny
-                if(Memory.noScout.includes(roomName)) return false;
+                if(Memory.noScout && Memory.noScout.includes(roomName)) return false;
                 let roomData = getScoutData(roomName);
                 //If it's our last room, deny
                 if(creep.memory.lastRoom == roomName) return false;

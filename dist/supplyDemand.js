@@ -25,7 +25,7 @@ const supplyDemand = {
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_TOWER
         ]
-        const MAX_IDLE = 0.2;
+        const MAX_IDLE = 0.15;
 
         //global.heap.shipping[roomName].forEach(task =>{
             //console.log(JSON.stringify(task));
@@ -125,7 +125,7 @@ const supplyDemand = {
             //If utilization is past our tracking length, trim
             if(global.heap.shipping[roomName].utilization.length > 50) global.heap.shipping[roomName].utilization.length = 50;
         }
-        //If no haulers, utilization is set to 0 by default
+        //If no haulers, utilization is set to 1 by default
         else{
             global.heap.shipping[roomName].utilization.unshift(0)
         }
@@ -135,7 +135,7 @@ const supplyDemand = {
             if(MAX_IDLE > utilization){
                 registry.requestCreep({sev:poolHaulers.length > 2 ? 20 : 60,memory:{role:'hauler',fief:roomName,preflight:false}})
             }
-            //console.log(`Hauler utilization: ${utilization}`)
+            console.log(`${roomName} hauler utilization: ${utilization}`)
         }
         
         //console.log(global.heap.shipping[roomName].utilization)
@@ -583,7 +583,10 @@ const supplyDemand = {
             let usedStore = creep.store.getUsedCapacity();
             //If state is idle, report any used parts as not idle, otherwise all idle
             if(state==IDLE){
-                isIdle += carryParts
+                if(usedStore == 0){
+                    isIdle += carryParts
+                }
+                
                 
 
                 if(creep.memory.fief == creep.room.name && creep.store.getUsedCapacity(RESOURCE_ENERGY) >0 && creep.store.getUsedCapacity(RESOURCE_ENERGY) < creep.store.getCapacity()){

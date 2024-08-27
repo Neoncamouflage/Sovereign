@@ -28,7 +28,7 @@ if (!Creep.prototype._harvest) {
     Creep.prototype.harvest = function(target) {
         //Store whatever is lower, total energy of target or our total harvest
         let tEnergy = 0;
-        if(target.energy) tEnergy= Math.min(target.hits,(this.getActiveBodyparts(RANGED_ATTACK) * HARVEST_POWER))
+        if(target.energy) tEnergy= Math.min(target.energy,(this.getActiveBodyparts(WORK) * HARVEST_POWER))
 
         //Call the actual harvest
         let harvCall = this._harvest(target);
@@ -51,7 +51,7 @@ if (!Creep.prototype._build) {
         let tEnergy = 0;
         if(target.progress) tEnergy= Math.min((target.progressTotal-target.progress),(this.getActiveBodyparts(WORK) * BUILD_POWER))
         tEnergy = tEnergy*-1
-        //Call the actual harvest
+        //Call the actual build
         let buildCall = this._build(target);
         //If success, register the expense
         if(buildCall == OK) granary.adjustIncome(this,tEnergy)
@@ -66,10 +66,10 @@ if (!Creep.prototype._upgradeController) {
 
     //Create our new function
     Creep.prototype.upgradeController = function(target) {
-        //Store whatever is lower, progress left to build or our build cost
+        //Store upgrade power
         let tEnergy = this.getActiveBodyparts(WORK) * UPGRADE_CONTROLLER_POWER
         tEnergy = tEnergy*-1
-        //Call the actual harvest
+        //Call the actual upgrade
         let upCall = this._upgradeController(target);
         //If success, register the expense
         if(upCall == OK) granary.adjustIncome(this,tEnergy)

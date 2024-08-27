@@ -418,11 +418,18 @@ const fiefPlanner = {
         const CONTROLLER_WEIGHT = opts.cWeight;
         const SOURCE_WEIGHT = opts.sWeight;
         const DISTANCE_WEIGHT = opts.dWeight;
-        let roomData = global.heap.scoutData[roomName];
-        //If no room data, we're likely in spinup. Log and return
+        let roomData = global.heap && global.heap.scoutData && global.heap.scoutData[roomName];
+        //If no room data, we're likely in spinup or no scout
         if(!roomData){
             console.log("No room data for the room planner");
-            return;
+            //If we have vision and not in spinup, get the room data
+            if(Game.rooms[roomName] && global.heap && global.heap.scoutData){
+                setScoutData(Game.rooms[roomName]);
+                roomData = global.heap && global.heap.scoutData && global.heap.scoutData[roomName];
+            }
+            else{
+                return [-1,-1,-1];
+            }
         }
         let sources = roomData.sources;
         let mineral = roomData.mineral;
