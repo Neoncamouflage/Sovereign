@@ -9,11 +9,13 @@ const registry = {
         'scout'    :'Pilgrim',
         'miner'    :'Yeoman',
         'claimer'  :'Baron',
-        'builder'  :'Mason',
+        'builder'  :'Carpenter',
+        'fortifier':'Mason',
         'diver'    :'Reaver',
         'bait'     :'Rogue',
         'sapper'   :'Sapper',
-        'archer'   :'Archer'
+        'archer'   :'Archer',
+        'generalist':'Settler'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -26,7 +28,11 @@ const registry = {
         for(each of spawns){
             if(!each.spawning) freeSpawns.push(each);
         }
-        console.log("Queue",JSON.stringify(spawnQueue))
+        let qprint = '';
+        for(let each of spawnQueue){
+            qprint+=`${each.memory.role} - ${each.sev}\n`
+        }
+        console.log(qprint)
         //Sort the queue's keys based on severity
         spawnQueue.sort((a, b) => b.sev - a.sev);
         
@@ -59,7 +65,9 @@ const registry = {
             console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
-                let newName = this.nameRef[newCreep.memory.role]+' '+helper.getName()+' of House '+room.name;
+                //If spawning, continue
+                if(!nextSpawn || nextSpawn.spawning) continue;
+                let newName = this.nameRef[newCreep.memory.job] ? this.nameRef[newCreep.memory.job]+' '+helper.getName()+' of House '+room.name : this.nameRef[newCreep.memory.role]+' '+helper.getName()+' of House '+room.name;
                 //Assign a fief if one isn't provided or is invalid
                 if(!newCreep.memory.fief || !Memory.kingdom.fiefs[newCreep.memory.fief]){
                     newCreep.memory.fief = room.name;
@@ -68,6 +76,11 @@ const registry = {
 
                 //If we successfully spawned and this was a respawn request from a creep, update them
                 if (spawnTry == OK && newCreep.respawn) Game.getObjectById(newCreep.respawn).memory.respawn = true;
+                if(spawnTry != OK){
+                    console.log("Bad spawn:",spawnTry)
+                }
+                //If no mre free spawns, break
+                if(!freeSpawns.length) break;
             }
             else{
                 //Focusing on priority. If we can't build the top priority creep yet, break and we wait
@@ -160,7 +173,6 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             }
             break;
         case 'claimer':
-            console.log("Get claimer")
             return getReserver(room,fiefCreeps);  
             break;
         case 'miner':
@@ -178,8 +190,15 @@ function getBody(role,room,job='default',fiefCreeps,plan){
         case 'archer':
             return getArcher(room,plan);
             break;
+        case 'generalist':
+            return getGeneralist(room);
         case 'builder':
-            return getBuilder(room,fiefCreeps);
+            switch(job){
+                case 'fortifier':
+                    return getFortifier(room,fiefCreeps);
+                default:
+                    return getBuilder(room,fiefCreeps);
+            }
             break;
     }
     console.log("GETBODY FAIL FOR",role,room,job,fiefCreeps,plan)
@@ -402,23 +421,51 @@ function getEHarvester(room,fiefCreeps){
     return [newBody,partsCost];
 }
 
+//Generalist - Settler
+function getGeneralist(room) {
+    const parts = [MOVE, CARRY, MOVE, WORK];
+    let partsCost = 0;
+    for (let each of parts) {
+        partsCost += BODYPART_COST[each];
+    }
+    const engAvail = room.energyCapacityAvailable;
+    const mult = Math.floor(engAvail / partsCost);
+    const newBod = Array(mult).fill(parts).flat();
+    const totalPartsCost = partsCost * mult;
+
+    return [newBod, totalPartsCost];
+}
+
 //Miner - Yeoman
 function getMiner(holding){
     let isReserved = Game.rooms[holding] && Game.rooms[holding].controller.reservation && Game.rooms[holding].controller.reservation.username == Memory.me;
-    let newBody = isReserved ? [MOVE,CARRY,WORK] : [MOVE,WORK];
+    let newBody = isReserved ? [MOVE,MOVE,CARRY,WORK,WORK] : [MOVE,WORK];
     let partsCost = 0
     let maxWorkParts = isReserved ? 6 : 3;
     let energyAvailable = Game.rooms[Memory.kingdom.holdings[holding].homeFief].energyCapacityAvailable;
+    let workPartsCount = newBody.filter(part => part === WORK).length;
 
     //Set costs
     newBody.forEach(part =>{
         partsCost += BODYPART_COST[part]
     })
     //Fill with work parts until we max out on energy or hit the cap
-    while (newBody.length < maxWorkParts+1 && partsCost + BODYPART_COST[WORK] <= energyAvailable) {
-        newBody.push(WORK);
-        partsCost += BODYPART_COST[WORK];
+    //Also move parts if we're below RCL 4 and thus remote roads
+    if(false && Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level >= 4 && Game.rooms[Memory.kingdom.holdings[holding].homeFief].storage ){
+        while (workPartsCount < maxWorkParts && partsCost + BODYPART_COST[WORK] <= energyAvailable) {
+            newBody.push(WORK);
+            partsCost += BODYPART_COST[WORK];
+            workPartsCount++;
+        }
+    } else {
+        while (workPartsCount < maxWorkParts && partsCost + BODYPART_COST[WORK] + BODYPART_COST[MOVE] <= energyAvailable) {
+            newBody.push(WORK);
+            newBody.push(MOVE);
+            partsCost += BODYPART_COST[WORK] + BODYPART_COST[MOVE];
+            workPartsCount++;
+        }
     }
+    
 
     return [newBody,partsCost];
 }
@@ -524,7 +571,7 @@ function getScout(room,fiefCreeps){
 }
 
 function getReserver(room,fiefCreeps){
-    let parts = [MOVE,MOVE,CLAIM,CLAIM];
+    let parts = [MOVE,CLAIM];
     let partsCost = 0;
     for(each of parts){
         partsCost += BODYPART_COST[each];
@@ -532,9 +579,7 @@ function getReserver(room,fiefCreeps){
     let engAvail = room.energyCapacityAvailable;
     let mult = Math.floor(engAvail/partsCost)
     let arrCap = Math.floor(MAX_CREEP_SIZE/parts.length)
-    //console.log(mult)
     let newBod = [].concat(...Array(Math.min(mult,arrCap)).fill(parts));
-    //If mult is 2 or more, stuff however many more work parts we can
     //Get the total cost of the body
     let totalCost = 0;
     newBod.forEach(b => {
@@ -545,7 +590,25 @@ function getReserver(room,fiefCreeps){
     //return[[],-1]
 }
 
-//Builder - Mason
+//Fortifier - Mason
+function getFortifier(room,fiefCreeps){
+    let parts = [MOVE,CARRY,WORK];
+    let partsCost = 0;
+    for(each of parts){
+        partsCost += BODYPART_COST[each];
+    }
+    let engAvail = room.energyCapacityAvailable;
+    let mult = Math.floor(engAvail/partsCost)
+    let arrCap = Math.floor(MAX_CREEP_SIZE/parts.length)
+    let newBod = [].concat(...Array(Math.min(mult,arrCap)).fill(parts));
+    let totalCost = 0;
+    newBod.forEach(b => {
+        totalCost += BODYPART_COST[b];
+    });
+    return [newBod,totalCost]
+}
+
+//Builder - Carpenter
 function getBuilder(room,fiefCreeps){
     let nonWork = [MOVE,CARRY]
     let fullSet = [MOVE,CARRY,WORK,WORK,WORK,WORK];

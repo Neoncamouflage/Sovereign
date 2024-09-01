@@ -4,8 +4,8 @@ var roleUpgrader = {
 
     /** @param {Creep} creep **/
     run: function(creep) {
-        let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES)
-        if(creep.memory.job = 'starterUpgrader' && cSites.length){
+        let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType != STRUCTURE_RAMPART)
+        if(creep.memory.job == 'starterUpgrader' && cSites.length){
            
             let target = cSites[0];
             let range = creep.pos.getRangeTo(target);
@@ -23,7 +23,8 @@ var roleUpgrader = {
         }
 
         let range = creep.pos.getRangeTo(creep.room.controller);
-        if(range > 3 && creep.store.getUsedCapacity() > 0){
+        
+        if(range > 2 && creep.store.getUsedCapacity() > 0){
             creep.travelTo(creep.room.controller,{range:1});
         }
         if(range < 4){

@@ -19,8 +19,8 @@ const supplyDemand = {
         let poolHaulers = fiefCreeps;
         //No nuker because it takes so much energy. Only fill upon explicit request
         let fillStructures = [
-            //STRUCTURE_SPAWN,
-            //STRUCTURE_EXTENSION,
+            STRUCTURE_SPAWN,
+            STRUCTURE_EXTENSION,
             STRUCTURE_LAB,
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_TOWER
@@ -133,7 +133,7 @@ const supplyDemand = {
         //Calculate utilization and request more haulers if needed
             let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length
             if(MAX_IDLE > utilization){
-                registry.requestCreep({sev:poolHaulers.length > 2 ? 20 : 60,memory:{role:'hauler',fief:roomName,preflight:false}})
+                registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : 60,memory:{role:'hauler',fief:roomName,preflight:false}})
             }
             console.log(`${roomName} hauler utilization: ${utilization}`)
         }
@@ -205,8 +205,7 @@ const supplyDemand = {
                 }
             }
         }
-        //console.log("Current supply/demand tasks",JSON.stringify(shippingTasks))
-        //console.log("Current unfilled supply/demand tasks",JSON.stringify(unassignedTasks))
+
         let unassignedTasks = Object.values(shippingTasks).filter(task => task.unassignedAmount() > 0);
         
 
@@ -243,7 +242,7 @@ const supplyDemand = {
         for (let task of unassignedTasks) {
             let taskTarget = Game.getObjectById(task.targetID);
             if (!taskTarget || !task.amount) {
-                //console.log("Removing task",task.taskID,"target:",task.targetID,"amount:",task.amount)
+
                 task.remove(room.name);
                 continue;
             }
@@ -258,15 +257,18 @@ const supplyDemand = {
             // Handle pickup tasks
             if (!assigned && task.type === 'pickup' && emptyHaulers.length) {
                 //Keep assigning haulers til we can't
-                do{
+                /*do{
                     assigned=false;
-                    //console.log("CHECKING PARAMS",task,taskTarget,emptyHaulers)
+
                     let thisvar = assignPickup(task, taskTarget, emptyHaulers);
                     if(thisvar[0] && thisvar[0] == true) assigned=true;
                     if(thisvar[1] && thisvar[1] instanceof Creep) emptyHaulers = emptyHaulers.filter(h => h.id !== thisvar[1].id);
-                   // console.log("THISVAR",thisvar)
-                    //console.log("EMPTYHAULERS:",emptyHaulers)
-                }while(assigned==true && task.unassignedAmount()>0)
+
+                }while(assigned==true && task.unassignedAmount()>0)*/
+                //Attempting to fix many haulers assigning to dropped resources. Now only assign one hauler per task per tick
+                let thisvar = assignPickup(task, taskTarget, emptyHaulers);
+                if(thisvar[0] && thisvar[0] == true) assigned=true;
+                if(thisvar[1] && thisvar[1] instanceof Creep) emptyHaulers = emptyHaulers.filter(h => h.id !== thisvar[1].id);
             }
         }
 
@@ -309,9 +311,7 @@ const supplyDemand = {
                 }
                 if (task.unassignedAmount() + (getTileDistance(nearestHauler.pos,taskTarget.pos) * decayCalcAmount) >= nearestHauler.store.getFreeCapacity(RESOURCE_ENERGY)) {
                     task.assignTo(nearestHauler);
-                    //console.log("Assignspot1,",nearestHauler)
-                    //emptyHaulers = emptyHaulers.filter(h => h.id !== nearestHauler.id);
-                   // console.log("Filtered empty",emptyHaulers)
+
                     return [true,nearestHauler];
                 }
                 else{
@@ -321,8 +321,7 @@ const supplyDemand = {
                 //Standard pickup
                 if (nearestHauler.ticksToLive > (getTileDistance(nearestHauler.pos,taskTarget.pos)*2)*1.3) {
                     task.assignTo(nearestHauler);
-                    //emptyHaulers = emptyHaulers.filter(h => h.id !== nearestHauler.id);
-                   // console.log("Assignspot2,",nearestHauler.id)
+
                     return [true,nearestHauler];
                 }
 
@@ -344,6 +343,24 @@ const supplyDemand = {
         let combos = [];
         let homeStore = room.storage;
         let homeTerm = room.terminal;
+        let [emptyHauls,energyHauls] = haulers.reduce((arr,hauler) => {
+            if(hauler.store[RESOURCE_ENERGY]) arr[1].push(hauler);
+            //Pushing to empty haulers goes here
+            //Need solid logic to only push on dropoffs (probably?) where they won't run into trouble
+            return arr
+        },[[],[]]);
+
+        //If a hauler is next to an empty spawn/extension, fill
+        let fills = room.find(FIND_MY_STRUCTURES).filter(struct => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(struct.structureType) && struct.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
+        for(let haul of energyHauls){
+            for(let fill of fills){
+                if(haul.pos.isNearTo(fill)){
+                    haul.transfer(fill,RESOURCE_ENERGY);
+                    break;
+                }
+            }
+        }
+
         haulers.forEach(creep => {
             let carryParts = creep.getActiveBodyparts(CARRY);
             //Add carry parts so we can track idle time
@@ -354,7 +371,7 @@ const supplyDemand = {
                 
                 //Check utilization to make sure we aren't respawning when not needed
                 if(utilization < 0.4){
-                    registry.requestCreep({sev:30,memory:{role:'hauler',fief:room.name,preflight:false},respawn:creep.id})
+                    registry.requestCreep({sev:35,memory:{role:'hauler',fief:room.name,preflight:false},respawn:creep.id})
                 }
             }
             let oldState = creep.memory.state;
@@ -583,9 +600,7 @@ const supplyDemand = {
             let usedStore = creep.store.getUsedCapacity();
             //If state is idle, report any used parts as not idle, otherwise all idle
             if(state==IDLE){
-                if(usedStore == 0){
-                    isIdle += carryParts
-                }
+                isIdle += carryParts
                 
                 
 
@@ -605,24 +620,10 @@ const supplyDemand = {
                     }
                     
                 }
-                //If not empty, use the amount stored
-                else{
-                    isIdle += (carryParts - Math.ceil(usedStore / CARRY_CAPACITY))
-                }
-            }
 
-            //If all of its space isn't reserved, pick up anything on the ground nearby
-            if(creep.memory.task){
-                let resTask =  getTaskByID(room.name,creep.memory.task);
-                let reserved = resTask.assignedHaulers[creep.id]
-                if(reserved<creep.store.getFreeCapacity()){
-                    let drops = room.lookForAtArea(LOOK_RESOURCES,creep.pos.y-1,creep.pos.x-1,creep.pos.y+1,creep.pos.x+1);
-                    //If drops
-                    //If a pickup task and the drop amount is less than our free space plus reserved
-                    //Or if a dropoff task and we already have enough on us for the drop
-                    if(drops.length && ((resTask.type == 'pickup' && drops[0].amount < creep.store.getFreeCapacity()-reserved) || (resTask.type == 'dropoff' && creep.store.getUsedCapacity(resTask.resourceType) >= reserved))){
-                        creep.pickup(drops[0])
-                    }
+                //If not empty, no idle
+                else{
+                    //isIdle += (carryParts - Math.ceil(usedStore / CARRY_CAPACITY))
                 }
             }
 

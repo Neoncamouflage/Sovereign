@@ -8,10 +8,10 @@ const intelManager = {
         //If we have no scouts, order one
         if(Game.time % 3 == 0){
             //1 scout per fief untl 3
-            if(scouts.length < Math.min(fiefs.length,SCOUT_MAX)){
+            if(scouts.length < Math.min(fiefs.length*2,SCOUT_MAX)){
                 let plan = {
+                    sev:!scouts.length ? 40 : 20,
                     memory:{
-                        sev:20,
                         role:'scout',
                         fief:fiefs[Math.floor(Math.random() * fiefs.length)],
                     }
@@ -28,12 +28,10 @@ const intelManager = {
             //If we're freshly spawned, get us an exit and set lastRoom
             if (!creep.memory.lastRoom || !creep.memory.exitTarget) {
                 creep.memory.lastRoom = creep.room.name;
-                setScoutData(creep.room);
                 getExit(creep);
             }
             //Else if we're in a new room, get a new exit or sign target
             else if (creep.room.name !== creep.memory.lastRoom) {
-                setScoutData(creep.room);
                 //Check to see if we need to sign the controller
                 if(!creep.memory.signMessage){
                     let sign = helper.getSign(creep.room);
@@ -113,8 +111,14 @@ const intelManager = {
             delete creep.memory.exitTarget
             //If the only exit is back the way we came, then add it back
             if (!exitRooms.length) {
-                //console.log("Only exit is back the way we came!")
-                exitRooms.push(creep.memory.lastRoom);
+                //if the exit room is the current room, just push all exits, probably trapped in the fief
+                if(creep.memory.lastroom == creep.room.name){
+                    exitRooms = exits;
+                }
+                else{
+                    exitRooms.push(creep.memory.lastRoom);
+                }
+                
             }
             //console.log("GETTING NEW EXIT")
             let roomPick;
@@ -126,14 +130,14 @@ const intelManager = {
             //Else, prefer unscouted rooms. If all scouted, prefer longest time since scouting.
             else{
                 let roomOpts = [];
+                let unscouted = [];
                 //Get scout data for all the room options, add their names since that isn't yet part of the object data
                 for(let roomOpt of exitRooms){
                     let scout = getScoutData(roomOpt);
                     //Unscouted means we pick you first
                     if(!scout){
                         //console.log(roomOpt,"is unscouted, picking that")
-                        roomPick = roomOpt;
-                        break;
+                        unscouted.push(roomOpt)
                     }
                     scout.roomName = roomOpt;
                     if(scout.owner && scout.owner == Memory.me){
@@ -142,6 +146,8 @@ const intelManager = {
                     //console.log("Pushing",scout.roomName,JSON.stringify(scout))
                     roomOpts.push(scout)
                 }
+                //If unscouted, get a random one or, if only 1, then the one option
+                if(unscouted.length) roomPick = unscouted[Math.floor(Math.random() * unscouted.length)];
                 //If we found one already, use that, otherwise continue
                 if(!roomPick){
                     //console.log("No roompick, finding oldest of",JSON.stringify(roomOpts))

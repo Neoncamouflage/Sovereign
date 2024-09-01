@@ -25,6 +25,12 @@ module.exports = function(grunt) {
             token: config.token,
             branch: 'Sovereign',
             //server: 'shard3'
+        },
+        season:{
+            email: config.email,
+            token: config.token,
+            branch: 'Sovereign',
+            server: 'season'
         }
     }
 

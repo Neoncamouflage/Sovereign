@@ -75,6 +75,7 @@ global.getScoutData = function getScoutData(roomName=false,single=false){
     return roomData[single];
 }
 global.setScoutData = function setScoutData(room,data={},force=false){
+    //console.log("Setting data for",room,JSON.stringify(data))
     let scoutData = global.heap.scoutData;
     //If first tick and no scout data, return
     if(!scoutData) return;
@@ -89,7 +90,7 @@ global.setScoutData = function setScoutData(room,data={},force=false){
     }
     //console.log(`Setting scout data, official. Room:${room.name},Last record:${scoutData[room.name].lastRecord}`)
     //If we already have the room logged and it's a fief or too soon, return
-    if(scoutData[room.name] && (scoutData[room.name].lastRecord > Game.time - 200 || Memory.kingdom.fiefs[room.name])) return;
+    //if(scoutData[room.name] && (scoutData[room.name].lastRecord > Game.time - 200 || Memory.kingdom.fiefs[room.name])) return;
 
     let [roomType,ownerType,owner] = helper.getRoomType(room);
     let sources = room.find(FIND_SOURCES).map(src => {return {x:src.pos.x,y:src.pos.y,id:src.id}})

@@ -85,7 +85,7 @@ if (!Creep.prototype._upgradeController) {
 
 //#endregion
 //Respawns creep
-Creep.prototype.respawn = function({ticks=200,sev=30} = {}){
+Creep.prototype.respawn = function({ticks=200,sev=50} = {}){
     if(Game.time % 3 == 0 && this.ticksToLive <= ticks && !this.memory.respawn){
         registry.requestCreep({sev:sev,body:this.body.map(part => part.type),memory:{role:this.memory.role,fief:this.memory.fief,preflight:false},respawn:this.id})
     }

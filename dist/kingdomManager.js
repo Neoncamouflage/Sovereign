@@ -141,10 +141,6 @@ function runRoles(kingdomCreeps){
                 roleHarvgrader.run(myCreep);
                 creepRole = '⛏️';
                 break;
-            case 'builder':
-                roleBuilder.run(myCreep);
-                creepRole = '👷';
-                break;
             case 'marauder':
                 roleMarauder.run(myCreep);
                 creepRole = '🏴‍☠️';

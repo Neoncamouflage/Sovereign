@@ -33,7 +33,10 @@ const painter = {
     },
     drawFiefPlan: function(fief){
         let plan = Memory.kingdom.fiefs[fief].roomPlan;
-        if(!plan) return;
+        if(!plan){
+            new RoomVisual(fief).text("NO FIEF PLAN",25,25, {color:'#ffa500',font:'3 Bridgnorth'});
+            return;
+        }
         let roomVis =  new RoomVisual(fief);
         let holdingArray = []
         for(let [rcl,buildings] of Object.entries(plan)){
@@ -52,6 +55,9 @@ const painter = {
         for(let ele of holdingArray){
             if(ele[2] != STRUCTURE_ROAD) roomVis.structure(ele[0],ele[1],ele[2]);
             roomVis.text(ele[3],ele[0],ele[1], {color:'#ffa500',font:'0.5 Bridgnorth'});
+        }
+        for(let ramp of Memory.kingdom.fiefs[fief].rampartPlan){
+            roomVis.circle(ramp.x,ramp.y,{fill:'green',radius:0.5});
         }
     },
     drawFiefCM: function(fief){
@@ -74,6 +80,9 @@ const painter = {
             //Scout data/fief markings
             if(Memory.kingdom.fiefs[roomName]){
                 Game.map.visual.text("🏰", new RoomPosition(49,6,roomName), {color: '#FFFFF', fontSize: 6,align:'right'});
+            }
+            if(Game.time-data.lastRecord == 0){
+                Game.map.visual.text("👁", new RoomPosition(0,6,roomName), {color: '#ffffff ', fontSize: 6, fontFamily: 'Bridgnorth',align:'left'});
             }
             else{
                 Game.map.visual.text("👁"+(Game.time-data.lastRecord), new RoomPosition(0,6,roomName), {color: '#ffa500 ', fontSize: 6, fontFamily: 'Bridgnorth',align:'left'});

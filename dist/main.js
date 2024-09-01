@@ -67,7 +67,7 @@ module.exports.loop = function () {
         else{    
             //If scout data changed,record it to the segment. Check every 100 ticks
             if(Game.time % 100 == 0 && global.heap.newScoutData){
-                //console.log("Updating scout data")
+                console.log("--!!!Updating scout data!!!--")
                 RawMemory.segments[0] = JSON.stringify(global.heap.scoutData)
                 global.heap.newScoutData = false;
             }
@@ -77,6 +77,7 @@ module.exports.loop = function () {
     //Check fiefs 
     for(const room in Game.rooms){
         let myRoom = Game.rooms[room];
+        if(myRoom)setScoutData(myRoom)
         if(myRoom.controller && myRoom.controller.my){
             if(!Memory.kingdom.fiefs[myRoom.name]){
                 Memory.kingdom.fiefs[myRoom.name] = {};
@@ -358,7 +359,7 @@ module.exports.loop = function () {
         }
 
 
-        if (Game.cpu.bucket == 10000) {
+        if (Game.cpu.bucket == 10000 && ['shard0','shard1','shard2','shard3'].includes(Game.shard.name)) {
             Game.cpu.generatePixel()
             console.log("<font color='green'>", Game.shard.name, "generated pixel.</font>")
         }

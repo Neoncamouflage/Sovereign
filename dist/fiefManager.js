@@ -6,6 +6,7 @@ const profiler = require('screeps-profiler');
 const supplyDemand = require('supplyDemand');
 const granary = require('granary');
 const registry = require('registry');
+const buildRole = require('role.builder');
 const fiefManager = {
     run:function(room,fiefCreeps){
         let cpuStart = Game.cpu.getUsed();
@@ -27,6 +28,7 @@ const fiefManager = {
         let roomLevel = room.controller.level;
         if(!fief.rclTimes[roomLevel]) fief.rclTimes[roomLevel] = Game.time - fief.rclTimes.tick
         if(!fief.rclTimes['storage'] && room.storage) fief.rclTimes['storage'] = Game.time - fief.rclTimes.tick
+        if(!fief.rampTarget) fief.rampTarget = 50000;
         let spawns = fief.spawns;
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let starterCreeps = []
@@ -99,8 +101,15 @@ const fiefManager = {
         if(!spawns || !spawns.length){
             console.log("NO SPAWNS")
             //Sanity check for a support room
-            if(!fief.support){
-                console.log(room.name,'has no supporting fief to provide settlers');
+            if(!fief.support || room.controller.level > 1){
+                let spawnSite = fief.roomPlan[1][STRUCTURE_SPAWN][0]
+                console.log("SPAWNSITE",JSON.stringify(spawnSite))
+                let spawnName = helper.getName({isSpawn:true})+' Keep';
+                console.log("Spawnname",spawnName)
+                console.log("X",spawnSite.x)
+                console.log("Y",spawnSite.y)
+                let y = room.createConstructionSite(spawnSite.x,spawnSite.y,STRUCTURE_SPAWN,spawnName);
+                console.log(y)
                 return;
             }
             if(!fief.settlers) fief.settlers = [];
@@ -188,64 +197,6 @@ const fiefManager = {
                     };
                 }
             }
-            
-
-            //Swamp road check
-            
-            if(false && (stage3 || stage4) && fief.paths){
-                Object.keys(fief.paths).forEach(path => {
-                    if(path != 'closest'){
-                        Object.keys(fief.paths[path]).forEach(spot => {
-                            //console.log(fief.paths[path][spot])
-                            let roadCheck = room.lookForAt(LOOK_STRUCTURES,fief.paths[path][spot].x,fief.paths[path][spot].y)
-                            let siteCheck = room.lookForAt(LOOK_CONSTRUCTION_SITES,fief.paths[path][spot].x,fief.paths[path][spot].y)
-                            let floor = room.lookForAt(LOOK_TERRAIN,fief.paths[path][spot].x,fief.paths[path][spot].y);
-                            //If we want a road, make sure there isn't a road already there and a cSite already there, and only build swamp roads
-                            if(floor == 'swamp'){
-                                if(!siteCheck.length){
-                                    if(!roadCheck.length){
-                                        //console.log(fief.paths[path][spot].x,fief.paths[path][spot].y)
-                                        //Mark flag if there's no road or site
-                                        swampNeed = true;
-                                        room.createConstructionSite(fief.paths[path][spot].x,fief.paths[path][spot].y,STRUCTURE_ROAD);
-                                        //console.log("SITEROAD")
-                                    }
-                                    
-                                }else if(siteCheck.length){
-                                    //Mark flag if we're still working on sites
-                                    //console.log(fief.paths[path][spot].x,fief.paths[path][spot].y)
-                                    swampNeed = true;
-                                }
-                            }
-                            
-                        })
-                    }
-                    
-                });
-                //If no swamp roads are needed
-                if(!swampNeed){
-                
-                    Object.keys(fief.paths).forEach(path => {
-                        if(path != 'closest'){
-                            Object.keys(fief.paths[path]).forEach(spot => {
-                                //console.log(fief.paths[path][spot])
-                                let roadCheck = room.lookForAt(LOOK_STRUCTURES,fief.paths[path][spot].x,fief.paths[path][spot].y)
-                                let siteCheck = room.lookForAt(LOOK_CONSTRUCTION_SITES,fief.paths[path][spot].x,fief.paths[path][spot].y)
-                                //If we want a road, make sure there isn't a road already there and a cSite already there, and also make sure we don't have 10 cSites already
-                                if(!roadCheck.length && !siteCheck.length & !(cSites.length > 10)){
-                                    room.createConstructionSite(fief.paths[path][spot].x,fief.paths[path][spot].y,STRUCTURE_ROAD);
-                                    //console.log("SITEROAD")
-                                }
-                                
-                            })
-                        }
-                        
-                    })
-                    //First step is to hit stage 3 and build swamp roads
-                }
-            }
-            
-            
         }
         
         //Create room plan, spawns, and spawn queue if none exists, then return
@@ -254,9 +205,8 @@ const fiefManager = {
         if(!fief.roomPlan || fief.roomPlan == 'null'){
             //restartFlag = true;
             let roomPlans = JSON.parse(RawMemory.segments[1]);
-            let toss = null;
             if(roomPlans[room.name]){
-                [fief.roomPlan, toss] = roomPlans[room.name]
+                [fief.roomPlan, fief.rampartPlan] = roomPlans[room.name]
             }
             else if(global && global.heap && (!global.heap.fiefPlanner || !global.heap.fiefPlanner.stage ||global.heap.fiefPlanner.stage == 0)){
                 fiefPlanner.getFiefPlan(room.name);
@@ -369,42 +319,25 @@ const fiefManager = {
                 totalSpawn += 3*item.bodySize
             });
             //Record spawn utilization
-            let ute = ((totalSpawn / fief.spawnUptime[spawn].length) * 100);
+            let ute = ((totalSpawn / 3000) * 100);
             spawnUse[spawn] = ute;
             combinedSpawnUse += ute;
             //console.log("Spawn Utilization for",Game.getObjectById(spawn).name+':\n',((totalSpawn / 3000) * 100).toFixed(2)+'%');
         });
-        combinedSpawnUse = combinedSpawnUse/spawns.length;
+        fief.combinedSpawnUse = combinedSpawnUse/spawns.length;
         //#region Room Operation
         //#endregion
         //console.log("Spawn use:",combinedSpawnUse)
-        //Every 100 ticks add any scouted domain rooms to holdings
-        if(Game.time % 100 == 0){
+        //Every 30 ticks add any scouted domain rooms to holdings
+        if(Game.time % 30 == 0){
             //Get scouted domain rooms, exclude SK for now
-            let domainRooms = getDomainRooms(room.name).filter(dRoom => dRoom.type != ROOM_SOURCE_KEEPER);
+            let domainRooms = getDomainRooms(room.name).filter(dRoom => !dRoom.scouted && dRoom.type != ROOM_SOURCE_KEEPER);
             for(let dRoom of domainRooms){
                 if(!getScoutData(dRoom.roomName)) continue;
+                //If scouted, add to holdings and mark scouted in the domain
+                dRoom.scouted = true;
                 if(!Memory.kingdom.holdings[dRoom.roomName]) Memory.kingdom.holdings[dRoom.roomName] = {standby:true,homeFief:room.name};
             }
-        }
-        //Every 150 ticks check for new holdings
-        if(Game.time % 150 == 0){
-
-            //If CPU and spawn utilization are low enough, try to add a holding
-            let cpuUte = Memory.trailingCPU.reduce((total,perTick) => {
-                return total += perTick;
-            },0);
-            let cpuAv = Math.ceil(cpuUte/Memory.trailingCPU.length);
-            if((cpuAv/Game.cpu.tickLImit)*100 < 80 && combinedSpawnUse < 80){
-                //Get eligible holdings
-                let goodHoldings = [];
-                for(let [name,holding] of Object.entries(Memory.kingdom.holdings)){
-                    if(holding.homeFief != room.name || !holding.score) continue;
-                }
-                //Sort based on score
-                goodHoldings.sort((a, b) => a.roomScore - b.roomScore);
-            }
-            
         }
 
 
@@ -447,7 +380,7 @@ const fiefManager = {
 
                 //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
                 let sev = noHarvs == true ? 80 : 55;
-                if(source.closest) sev+= 15
+                if(source.closest) sev+= 1
                 let opts = {sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}}
                 if(targetSources[sourceID].ttlFlag) opts.respawn = targetSources[sourceID].ttlFlag
                 //console.log("Adding harv to spawnQueue")
@@ -466,26 +399,47 @@ const fiefManager = {
                     upgradersNeeded = 0;
                 }
                 else{
-                    upgradersNeeded = Math.floor(room.storage.store[RESOURCE_ENERGY]/200000);
+                    upgradersNeeded = room.controller.level > 4 ? Math.floor(room.storage.store[RESOURCE_ENERGY]/200000) : Math.ceil(room.storage.store[RESOURCE_ENERGY]/200000);
                 }
                 if(upgradersNeeded > 0 && (!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded)){
                     registry.requestCreep({sev:35,memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
-                if(cSites.length && !fiefCreeps.builder){
-                    registry.requestCreep({sev:25,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false}})
+                let fortFlag = false;
+                //Builder logic
+                if(cSites.length){
+                    //Split sites into ramparts and others
+                    let [rampSites,buildings] = cSites.reduce((arr,site) => {
+                        site.structureType == STRUCTURE_RAMPART ? arr[0].push(site) : arr[1].push(site);
+                        return arr
+                    },[[],[]]);
+                    if(buildings.length && !fiefCreeps.builder){
+                        registry.requestCreep({sev:32,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false}})
+                    }
+                    if(rampSites.length) fortFlag = true;
                 }
+                let hurtRamps = room.find(FIND_MY_STRUCTURES).filter(st => st.structureType == STRUCTURE_RAMPART && st.hits < fief.rampTarget)
+                if(hurtRamps.length) fortFlag = true;
+                //Don't repair if we're below energy
+                if(fortFlag && room.storage && room.storage.store[RESOURCE_ENERGY] > 20000){
+                    let forts = fiefCreeps.builder || [];
+                    forts = forts.filter(crp => crp.memory.job == 'fortifier')
+                    if(forts.length < 2){
+                        registry.requestCreep({sev:31,memory:{role:'builder',job:'fortifier',fief:room.name,status:'spawning',preflight:false}})
+                    }
+                }              
+
             }
             //Don't need to check for harvesters because we use strict priorities now
             else{
                 
                 //If no upgraders(who are also builders at this stage), and we're below a default cap
-                if(!fiefCreeps.upgrader || fiefCreeps.upgrader.length <MAX_STARTERS){
+                if(!fiefCreeps.upgrader){
                     //Make sure we're good on energy
                     if(plannedNet<=0 || averageNet<=0) return;
                     //If we passed all, request an upgrader
                     registry.requestCreep({sev:(!fiefCreeps.upgrader || fiefCreeps.upgrader.length) ? 35 : 50,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
-                else if(fiefCreeps.upgrader.length >= MAX_STARTERS && plannedNet > 0 && averageNet > 0){
+                else if(plannedNet > 0 && averageNet > 0){
                     //Make sure they're all doing something. If so we can justify another
                     let workingUps = fiefCreeps.upgrader.filter(up => up.store.getUsedCapacity() > 0);
                     if(workingUps.length == fiefCreeps.upgrader.length){
@@ -496,8 +450,17 @@ const fiefManager = {
             }
         }
 
+        //Non-spawn room operations for after storage
+        if(room.storage){
+            //If no construction sites and positive income, start raising the ramp target as long as they're all at the last one
+            if(Game.time % 1000 == 0 && (averageNet > 0 || storage.store[RESOURCE_ENERGY > 100000])){
+                let ramps = room.find(FIND_MY_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_RAMPART && struct.hits < fief.rampTarget);
+                //Grow by 10% if there are none
+                if(!ramps.length) fief.rampTarget += fief.rampTarget*0.1;
+                
+            }
 
-        //Stage 4 - Once storage is set up. Standard room operations.
+        }
         if(false && room.storage && room.storage.store[RESOURCE_ENERGY] > 5000){
 
             roadReady = true;
@@ -1168,14 +1131,10 @@ const fiefManager = {
         if(roomLevel == 8){
 
         }
-        //console.log(JSON.stringify(spawnQueue))
         // -- Final Actions --
-        //If there are starters, run starter code
-        if(starterCreeps.length) roleStarters.run(starterCreeps,room);
         
         //Gather all idle spawns
         //#region Defense
-
         //#endregion
         //Set defense mission if hostile creeps are detected and they're not scouts
         if(roomBaddies.some(creep => (!helper.isScout(creep)&& (!Memory.diplomacy.allies.includes(creep.owner.username)) || (creep.pos.getRangeTo(room.controller == 2) && helper.isScout(creep))))){
@@ -1185,63 +1144,44 @@ const fiefManager = {
             //}
         }
 
-        //Military manager needed for this stuff
-        if(fief.rampsActive && Game.time % 50 == 0 && cSites.length < 10){
-            console.log("RAMPS?")
+        //If we have storage levels and safemode is over or low, run through rampart check every so often
+        if(Game.time % 200 == 0 && room.storage && room.storage.store[RESOURCE_ENERGY] > 20000 && (!room.controller.safeMode || room.controller.safeMode < 3000)){
             if(fief.rampartPlan){
-                console.log("RAMPS!")
-                let count = 0;
-                fief.rampartPlan.outer.forEach(ramp =>{
-                    let spot = room.lookForAt(LOOK_STRUCTURES,ramp.x,ramp.y);
-                    let spotSite = room.lookForAt(LOOK_CONSTRUCTION_SITES,ramp.x,ramp.y);
-                    let floor = room.lookForAt(LOOK_TERRAIN,ramp.x,ramp.y);
-                    //console.log('Ramp check',spot.some(element => element.structureType == STRUCTURE_RAMPART))
-                    //console.log('Floor check',floor)
-                    //console.log('site check',!spotSite.length)
-                    if(count >= 10-cSites.length) return;
-                    if((!spot.length || !spot.some(element => element.structureType == STRUCTURE_RAMPART)) && floor != 'wall' && !spotSite.length){
-                        let x = room.createConstructionSite(ramp.x,ramp.y,STRUCTURE_RAMPART);
-                        if(x == 0)count++
-                    }
+                //Count the current construction sites, no more than 10 for ramparts
+                let count = cSites.length;
+                for(let ramp of fief.rampartPlan){
+                    if(count >=10) return;
 
-                });
-                if(count == 0){
-                    fief.rampartPlan.inner.forEach(ramp =>{
-                        let spot = room.lookForAt(LOOK_STRUCTURES,ramp.x,ramp.y);
-                        let spotSite = room.lookForAt(LOOK_CONSTRUCTION_SITES,ramp.x,ramp.y);
-                        let floor = room.lookForAt(LOOK_TERRAIN,ramp.x,ramp.y);
-                        //console.log('Ramp check',spot.some(element => element.structureType == STRUCTURE_RAMPART))
-                        //console.log('Floor check',floor)
-                        //console.log('site check',!spotSite.length)
-                        if(count >= 10-cSites.length) return;
-                        if((!spot.length || !spot.some(element => element.structureType == STRUCTURE_RAMPART)) && floor != 'wall' && !spotSite.length){
-                            let x = room.createConstructionSite(ramp.x,ramp.y,STRUCTURE_RAMPART);
-                            if(x == 0)count++
+                    let spotInfo = room.lookAt(ramp.x, ramp.y);
+                    let hasRampart = spotInfo.some(s => s.structure && s.structure.structureType === STRUCTURE_RAMPART);
+                    let hasConstructionSite = spotInfo.some(s => s.constructionSite);
+                    let isWall = spotInfo.some(s => s.terrain === 'wall');
+                    if (!hasRampart && !hasConstructionSite && !isWall){
+                        if(room.createConstructionSite(ramp.x,ramp.y,STRUCTURE_RAMPART) == 0){
+                            count++
                         }
-    
-                    });
-                }
+                    }
+                };
             }
         }
-
-
-        /*let ramps = room.find(FIND_STRUCTURES, {
-            filter: (structure) => (structure.hits < fief.rampartPlan.outerMin && structure.structureType == STRUCTURE_RAMPART)
-        });
-        let babyRamps = ramps.filter(structure=> structure.hits <=1000);
-        if(ramps.length && !Game.creeps[fief.ramper] && !spawnQueue[fief.ramper]){
-            let newName = 'Fortifier '+helper.getName()+' of House '+room.name;
-                spawnQueue[newName] = {
-                    sev:getSev('homeBuilder',room.name),body:getBody('builder',room.name,'fortBuilder'),
-                    memory:{role:'builder',job:'fortBuilder',fief:room.name,homeRoom:room.name,preflight:false}}
-                fief.ramper = newName;
-        }*/
+        //Run fortifiers
+        
+        if(fiefCreeps.builder){
+            let fortifiers = [];
+            for(let builder of fiefCreeps.builder){
+                if(builder.memory.job == 'fortifier') fortifiers.push(builder);
+                else{
+                    buildRole.run(builder);
+                }
+            }
+            buildRole.runFortifiers(room,fortifiers);
+        }
 
 
         towers = room.find(FIND_MY_STRUCTURES, {
             filter: { structureType: STRUCTURE_TOWER }
         });
-    _.forEach(towers, function(tower) {
+    for(let tower of towers) {
         var damagedStructures = tower.room.find(FIND_STRUCTURES, {
             filter: (structure) => (structure.hits < structure.hitsMax*0.8 && (structure.structureType != STRUCTURE_WALL && structure.structureType != STRUCTURE_RAMPART))
         });
@@ -1268,7 +1208,7 @@ const fiefManager = {
                 tower.repair(damagedStructures[0]);
             }
         }
-    });
+    }
 
     //Guard
     if(false && towers.length == 0 && roomBaddies.length > 0 && (!Game.creeps[fief.guard])){

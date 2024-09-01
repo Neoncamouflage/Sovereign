@@ -185,7 +185,7 @@ const fiefPlanner = {
                     //Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
                     //Save the plan in our segment and room
                     global.heap.roomPlans = JSON.parse(RawMemory.segments[1]);
-                    global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlanCM];
+                    global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlan.ramparts];
                     RawMemory.segments[1] = JSON.stringify(global.heap.roomPlans)
                     //Save the RCL plan
                     //Memory.testRCLPlan = rclPlan;
@@ -202,7 +202,7 @@ const fiefPlanner = {
                         //Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
                         //Save the plan in our segment
                         global.heap.roomPlans = JSON.parse(RawMemory.segments[1]);
-                        global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlanCM];
+                        global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlan.ramparts];
                         RawMemory.segments[1] = JSON.stringify(global.heap.roomPlans)
                         //Save the RCL plan
                         //Memory.testRCLPlan = rclPlan;
@@ -424,7 +424,7 @@ const fiefPlanner = {
             console.log("No room data for the room planner");
             //If we have vision and not in spinup, get the room data
             if(Game.rooms[roomName] && global.heap && global.heap.scoutData){
-                setScoutData(Game.rooms[roomName]);
+                getScoutData(Game.rooms[roomName]);
                 roomData = global.heap && global.heap.scoutData && global.heap.scoutData[roomName];
             }
             else{
