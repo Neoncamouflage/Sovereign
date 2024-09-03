@@ -165,6 +165,12 @@ const fiefManager = {
 
         }
 
+        if(!fief.controllerSpots || (fief.controllerSpots && fief.controllerSpots.rcl < room.controller.level)){
+            if(!fief.roomPlan) return;
+            fief.controllerSpots = getControllerSpots(room,fief);
+            fief.controllerSpots.rcl = room.controller.level
+        }
+
         if(Game.time % 100 == 0 && fief.roomPlan && !cSites.length){
             //console.log("Checking for new constructions.")
             let cCount = 0;
@@ -524,7 +530,7 @@ const fiefManager = {
         //Non-spawn room operations for after storage
         if(room.storage){
             //If no construction sites and positive income, start raising the ramp target as long as they're all at the last one
-            if(Game.time % (3000) == 0){
+            if(Game.time % 3000 == 0){
                 //If we're below the minimum for our RCL, bump it up
                 fief.rampTarget = Math.max(fief.rampTarget,rampartMinimums[room.controller.level])
                 if(averageNet > 0 || room.storage.store[RESOURCE_ENERGY] > 100000){
@@ -1473,11 +1479,69 @@ function getDomainRooms(fief) {
     return validRooms;
 }
 
-function getControllerSpaces(room,fief){
-    //Get all blocks within range 3 of controller
-    let controller = room.controller.pos
-    
+function getControllerSpots(room, fief) {
+    let controller = room.controller.pos;
+    let planCM = new PathFinder.CostMatrix();
+
+    // Mark impassable spots from the room plan
+    for (let [rcl, buildings] of Object.entries(fief.roomPlan)) {
+        if (rcl > room.controller.level) break;
+        for (let [building, spot] of Object.entries(buildings)) {
+            if (building != STRUCTURE_ROAD) planCM.set(spot.x, spot.y, 255);
+        }
+    }
+
+    let controllerSpots = {
+        1: [],
+        2: [],
+        3: []
+    };
+
+    let terrain = new Room.Terrain(room.name);
+    let queue = [];
+    let visited = new Set();
+    let directions = [
+        { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+        { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+        { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }
+    ];
+
+    // Start BFS from the controller position, always include the controller's position itself
+    queue.push({ pos: controller, range: 0 });
+    visited.add(controller.x + ',' + controller.y);
+
+    while (queue.length > 0) {
+        let current = queue.shift();
+        let { pos, range } = current;
+
+        // Skip walls or blocked areas except for the controller position itself
+        let terrainType = terrain.get(pos.x, pos.y);
+        if (range > 0 && (terrainType === TERRAIN_MASK_WALL || planCM.get(pos.x, pos.y) === 255)) {
+            continue;
+        }
+
+        // If within range and not a wall, add to the appropriate range list
+        if (range > 0 && range <= 3) {
+            controllerSpots[range].push(pos);
+        }
+
+        // Explore neighboring positions if within range 3
+        if (range < 3) {
+            for (let dir of directions) {
+                let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
+                let posKey = newPos.x + ',' + newPos.y;
+
+                if (!visited.has(posKey)) {
+                    visited.add(posKey);
+                    queue.push({ pos: newPos, range: range + 1 });
+                }
+            }
+        }
+    }
+
+    return controllerSpots;
 }
+
     /*let range = 3;
     //Check if already calculated
     if(Memory.kingdom.fiefs[fief].domain) return Memory.kingdom.fiefs[fief].domain;

@@ -1,10 +1,11 @@
 const helper = require('functions.helper');
-
+const registry = require('registry')
 //Base Lance prototype and functions
 function Lance(name,details){
     this.name = name;
     this.details = details || {};
     this.target = {};
+    this.targetRoom = details.targetRoom
     this.targetPos = {};
 
     global.heap.army.lances[this.name] = this;
@@ -64,5 +65,54 @@ Lance.prototype.removeCreep = function(creep) {
         delete this.targetPos[creep.id];
     }
 };
+
+Lance.prototype.populate = function(fief,kingdomCreeps,role,sev=60){
+    let roleRef = {
+        'blinky':'skirmisher',
+        'demo'  :'sapper',
+        'melee' :'pikeman'
+    }
+    let rolePick = role || roleRef[this.lanceType] || 'generic'
+    let reserve = kingdomCreeps.reserve;
+    let foundReserve = false;
+    let takeaway = [];
+    kingdomCreeps[this.name] = kingdomCreeps[this.name] || [];
+    //First check to see if there are any reserves
+    console.log(kingdomCreeps[this.name])
+    if(reserve.length){
+        //Convert to creeps and sort by linear distance
+        reserve = reserve.map(crpID => Game.getObjectById(crpID)).filter(crp => crp.memory.role == rolePick && crp.ticksToLive > 200).sort((a, b) => {
+            let distanceA = Game.map.getRoomLinearDistance(a.room.name, this.targetRoom);
+            let distanceB = Game.map.getRoomLinearDistance(b.room.name, this.targetRoom);
+            return distanceA - distanceB;
+        });
+
+        for(let crp of reserve){
+            let crpID = crp.id
+            //If so, add to the lance, mark that we found them, and push the ID to be removed from reserves
+            if(crp.memory.role == rolePick){
+                this.addCreep(crp);
+                kingdomCreeps[this.name].push(crp)
+                crp.memory.lance = this.name;
+                takeaway.push(crpID)
+            }
+            if(kingdomCreeps[this.name].length >= this.unitsNeeded){
+                foundReserve = true;
+                break;
+            }
+        }
+    }
+
+    //Update reserve units if we found them.
+    if(takeaway.length){
+        global.heap.army.reserve = global.heap.army.reserve.filter(resID => !takeaway.includes(resID));
+    }
+    //If we didn't find enough to fill, order a creep
+    if(!foundReserve){
+        registry.requestCreep({sev:sev,memory:{role:rolePick,lance:this.name,fief:fief,status:'spawning',preflight:false}});
+    }
+    
+
+}
 
 module.exports = Lance;

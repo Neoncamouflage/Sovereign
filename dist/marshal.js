@@ -1,10 +1,5 @@
 const Troupe = require('Troupe');
 const DEFAULT_MISSION_PRIORITY = 5;
-const MISSION_TYPES = [
-    'demo',
-    'cleanup',
-    'defend'
-];
 
 const marshal = {
     //Assign missions to troupes and run them
@@ -17,6 +12,18 @@ const marshal = {
         }
         for(let troupe of global.heap.army.troupes){
             troupe.run(kingdomCreeps);
+        }
+        //Order any reserves to wait in their fief
+        for(let crp of global.heap.army.reserve){
+            let creep = Game.getObjectById(crp)
+            let injured = creep.room.find(FIND_MY_CREEPS).filter(crp => crp.hits < crp.hitsMax)
+            if(injured.length){
+                creep.travelTo(injured[0])
+                creep.heal(injured[0])
+            }
+            if(creep.room.name != creep.memory.fief || creep.pos.getRangeTo(creep.room.controller) < 10){
+                creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
+            }
         }
     },
     //Mission types: Demo/Attack/Defend/Harass
@@ -43,6 +50,13 @@ const marshal = {
         marshal.addMission({
             type:'defend',
             roomName:roomName,
+        })
+    },
+    destroyCore(target){
+        marshal.addMission({
+            type:'destroyCore',
+            roomName:target.room.name,
+            targets:[target] || null
         })
     }
 }

@@ -4,7 +4,9 @@ var roleUpgrader = {
 
     /** @param {Creep} creep **/
     run: function(creep) {
+        let fief = Memory.kingdom.fiefs[creep.memory.fief]
         let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType != STRUCTURE_RAMPART)
+        if(creep.memory.status == 'spawning' && !creep.spawning) creep.memory.status = 'travel'
         if(cSites.length){
            
             let target = cSites[0];
@@ -23,63 +25,57 @@ var roleUpgrader = {
         }
 
         let range = creep.pos.getRangeTo(creep.room.controller);
-        
-        if(range > 3){
-            creep.travelTo(creep.room.controller,{range:1});
-            return;
+        if(range <=3) creep.upgradeController(creep.room.controller)
+        //If we're not at range one, see if we can move closer
+        if(range != 1){ //&& (creep.status == 'travel' || Game.time % 10 == 0)
+            rangeLoop:
+            for(i=1;i<range;i++){
+                for(let spot of fief.controllerSpots[i]){
+                    //No creep means move to that and break the loop
+                    if(!creep.room.lookForAt(LOOK_CREEPS,spot.x,spot.y).length){
+                        creep.travelTo(new RoomPosition(spot.x,spot.y,creep.room.name));
+                        break rangeLoop;
+                    }
+                }
+            }
         }
-        //If range 3 or less, check if another upgrader is in the path. If so, transfer them 
-        if(creep.store.getUsedCapacity() < creep.store.getCapacity() ){
+        if(creep.store.getUsedCapacity() < creep.store.getCapacity()*0.8){
+            let gotTransfer = false;
+            if(range < 3){
+                transferLoop:
+                for(i=range+1;i<3;i++){
+                    for(let spot of fief.controllerSpots[i]){
+                        //No creep means move to that and break the loop
+                        let search = creep.room.lookForAt(LOOK_CREEPS,spot.x,spot.y);
+                        if(search.length){
+                            let buddy = search[0]
+                            if((buddy.memory.role == 'upgrader' || buddy.memory.status == 'upgrading') && buddy.store.getUsedCapacity(RESOURCE_ENERGY) > 0 && !buddy.transferring){
+                                buddy.transfer(creep,RESOURCE_ENERGY);
+                                buddy.transferring = true;
+                                gotTransfer = true;
+                                break transferLoop;
+                            }
+                        }
+                    }
+                }
+            }
+            if(gotTransfer) return;
             if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
                 if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
             else if(creep.store.getUsedCapacity() == 0){
                 if(creep.room.storage){
-                    let range = creep.pos.getRangeTo(creep.room.storage);
-                    if(range == 1){
+                    let storageRange = creep.pos.getRangeTo(creep.room.storage);
+                    if(storageRange == 1){
                         creep.withdraw(creep.room.storage,RESOURCE_ENERGY);
                     }
-                    else if(range < 5){
+                    else if(storageRange < 5){
                         creep.travelTo(creep.room.storage)
                     }
                 }
             }
         }
         return;  
-        let fief = Memory.kingdom.fiefs[creep.room.name];
-        let upcan;
-        if(fief.upLink){
-            creep.memory.link = true;
-            upCan = Game.getObjectById(fief.upLink)
-        }else{
-            upCan = Game.getObjectById(fief.upCan)
-        }
-        let upLink;
-        if(fief.links && fief.links.upLink){
-            upLink = Game.getObjectById(fief.links.upLink);
-        }
-        if(creep.ticksToLive <= 10){
-            if(creep.pos.x == upCan.pos.x && creep.pos.y == upCan.pos.y){ 
-                creep.suicide()
-            }
-            else{
-                creep.travelTo(new RoomPosition(upCan.pos.x,upCan.pos.y,creep.room.name))
-            }
-        }
-        else{   
-            if(upLink && upLink.store[RESOURCE_ENERGY] > 0){
-                if(creep.withdraw(upLink, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE){
-                    creep.travelTo(upLink);
-                }
-            }
-            else if(creep.withdraw(upCan, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE){
-                creep.travelTo(upCan);
-            }
-            if(creep.pos.getRangeTo(creep.room.controller) > 1){
-                creep.travelTo(creep.room.controller,{range:1});
-            }
-            creep.upgradeController(creep.room.controller)
-        }
     }
 };
 

@@ -2,47 +2,31 @@ const Lance = require('Lance')
 const registry = require('registry')
 
 //Blinky Lance
-function BlinkyLance(name,details){
+function MeleeLance(name,details){
     //Inherit from lance
     Lance.call(this,name,details);
     //Why are we assigning the whole object? Remove this at some point
     this.details = details || {};
-    this.lanceType = 'blinky';
+    this.lanceType = 'melee';
     //Total units intended for this lance, max 3
     this.unitsNeeded = details.unitsNeeded || 1;
 }
 
-BlinkyLance.prototype = Object.create(Lance.prototype);
-BlinkyLance.prototype.constructor = BlinkyLance;
+MeleeLance.prototype = Object.create(Lance.prototype);
+MeleeLance.prototype.constructor = MeleeLance;
 
 //Executes creep orders.
-BlinkyLance.prototype.runCreeps = function(myCreeps){
-    let injured = myCreeps.filter(crp => crp.hits < crp.hitsMax);
+MeleeLance.prototype.runCreeps = function(myCreeps){
     for(let creep of myCreeps){
         let creepID = creep.id;
         let targetPos = this.targetPos[creepID];
         let target = Game.getObjectById(this.target[creepID]);
         console.log(creep.name,"has target",target,"and pos",JSON.stringify(targetPos))
-        let remoteHealing = false;
-        if(creep.hits == creep.hitsMax){
-            let closest = creep.pos.findClosestByRange(injured);
-            if(creep.pos.getRangeTo(closest) <= 3){
-                creep.heal(closest)
-                remoteHealing = true;
-            }   
-        }else{
-            creep.heal(creep)
-        }
         //If no target or position, do nothing
         if(!target && !targetPos) return;
         if(target){
-            console.log("target found",target)
-            if(!remoteHealing) creep.heal(creep)
-            if(creep.pos.getRangeTo(target) <=3){
-                let g = creep.rangedAttack(target);
-                let oppositeDirection = creep.pos.getDirectionTo(target);
-                let moveDirection = (oppositeDirection + 3) % 8 + 1;
-                creep.move(moveDirection);
+            if(creep.pos.getRangeTo(target) == 1){
+                let g = creep.attack(target);
             }
             //If target but no specific place to stand, just travel towards it until range 3
             else{
@@ -59,5 +43,5 @@ BlinkyLance.prototype.runCreeps = function(myCreeps){
     }
 }
 
-global.BlinkyLance = BlinkyLance;
-module.exports = BlinkyLance;
+global.MeleeLance = MeleeLance;
+module.exports = MeleeLance;

@@ -16,7 +16,8 @@ const registry = {
         'sapper'   :'Sapper',
         'archer'   :'Archer',
         'generalist':'Settler',
-        'skirmisher'    :'Skirmisher'
+        'skirmisher'    :'Skirmisher',
+        'pikeman'   :'Pikeman'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -202,6 +203,9 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             break;
         case 'skirmisher':
             return getSkirmisher(room,plan);
+            break;
+        case 'pikeman':
+            return getPikeman(room,plan);
             break;
         case 'generalist':
             return getGeneralist(room);
@@ -509,6 +513,25 @@ function getArcher(room,plan){
     let energyAvailable = room.energyCapacityAvailable
     //Max size is the set body size or energy cap, whichever is less
     let maxParts = Math.min(plan.bodySize,Math.floor(energyAvailable / setCost));
+    let newBody = [];
+    let totalCost = 0;
+
+    newBody.push(...parts);
+    totalCost += setCost;
+
+    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+        newBody.push(...parts);
+        totalCost += setCost;
+    }
+
+    return [newBody,totalCost];
+}
+function getPikeman(room,plan){
+    let parts = [MOVE,ATTACK]
+    let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+    let energyAvailable = room.energyCapacityAvailable
+    //Max size is the set body size or energy cap, whichever is less
+    let maxParts = Math.min(20,Math.floor(energyAvailable / setCost));
     let newBody = [];
     let totalCost = 0;
 

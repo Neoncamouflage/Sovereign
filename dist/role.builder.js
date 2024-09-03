@@ -18,10 +18,13 @@ const roleBuilder = {
                 target = creep.pos.findClosestByRange(targets)
                 if(target){creep.memory.target = target.id}
                 else{
+                    creep.memory.status = 'upgrading'
                     upgrader.run(creep);
+                    return;
                 }
                 
             }
+            creep.memory.status = 'building'
             if(target && creep.store.getUsedCapacity() > 0) {
                 if(creep.pos.getRangeTo(target) > 3){
                     creep.travelTo(target);

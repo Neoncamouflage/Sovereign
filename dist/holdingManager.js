@@ -274,7 +274,23 @@ var holdingManager = {
 
         }
         //Check for dropped resources and submit tasks as needed, only if not hostile
-        if(remote && !global.heap.alarms[holdingName] && sData.ownerType != 'enemy'){
+        if(remote){
+            //Check for hostiles
+            let hostiles = remote.find(FIND_HOSTILE_STRUCTURES)
+            if(hostiles.length){
+                let hasMission = false;
+                if(global.heap.missionMap && global.heap.missionMap[holdingName]){
+                    for(let mission of global.heap.missionMap[holdingName]){
+                        if(mission.type == 'destroyCore') hasMission = true;
+                        break;
+                    }
+                }
+                if(!hasMission){
+                    marshal.destroyCore(holdingName);
+                }
+            }
+        }
+        if(remote && !global.heap.alarms[holdingName] && data.ownerType != 'enemy'){
             
             let droppedResources = remote.find(FIND_DROPPED_RESOURCES);
             //console.log("Checking drops in",remote.name,"and found",droppedResources.length)
@@ -352,23 +368,10 @@ var holdingManager = {
             //If we have the energy capacity in our home fief and we need a reservation, ask for a claim creep if needed
             //We want vision for this
             if(remote){
-                
-                //Seasonal check for score
-                if(Game.shard.name == 'shardSeason' && Game.rooms[fief].storage){
-                    let scoreCans = remote.find(FIND_SCORE_CONTAINERS);
-                    if(scoreCans.length){
-                        for(let can of scoreCans){
-                            if(can.ticksToDecay < 100) continue;
-                            addSupplyRequest(Game.rooms[fief],{type:'pickup',resourceType:RESOURCE_SCORE,amount:can.store.getUsedCapacity(RESOURCE_SCORE),targetID:can.id,international:true,priority:6})
-                        }
-                    }
-                }
-                //Check for hostiles
+
                 let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => helper.isSoldier(crp) && !Memory.diplomacy.allies.includes(crp.owner.username) && !Memory.diplomacy.ceasefire.includes(crp.owner.username))
                 if(hostiles.length && !global.heap.alarms[holdingName]){
                     global.heap.alarms[holdingName] = {tick:Game.time}
-                    let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
-                    creep.say(words.join(''))
                     let hasMission = false;
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                         for(let mission of global.heap.missionMap[holdingName]){
@@ -394,20 +397,39 @@ var holdingManager = {
                         }
                     }
                 }
+                //Get controller spots if we don't
+                if(!holding.controllerSpots) holding.controllerSpots = helper.getOpenSpots(remote.controller.pos).length
+                //Seasonal check for score
+                if(Game.shard.name == 'shardSeason' && Game.rooms[fief].storage){
+                    let scoreCans = remote.find(FIND_SCORE_CONTAINERS);
+                    if(scoreCans.length){
+                        for(let can of scoreCans){
+                            if(can.ticksToDecay < 100) continue;
+                            addSupplyRequest(Game.rooms[fief],{type:'pickup',resourceType:RESOURCE_SCORE,amount:can.store.getUsedCapacity(RESOURCE_SCORE),targetID:can.id,international:true,priority:6})
+                        }
+                    }
+                }
                 let reserverPower = 0;
+                let claimers = 0;
+                let tickend = false;
                 if(fiefCreeps.claimer){
                     for(creep of fiefCreeps.claimer){
                         if(creep.memory.holding == holdingName && creep.memory.job == 'reserver' && creep.ticksToLive > holding.distance){
+                            claimers ++;
                             reserverPower+= creep.getActiveBodyparts(CLAIM);
                         }
                     }
                 }
                 
                 if(reserverPower < 2 && Game.rooms[fief].energyCapacityAvailable >= 650){
-                    let spots = helper.getOpenSpots(remote.controller.pos,true);
+                    //let spots = helper.getOpenSpots(remote.controller.pos,true);
                     //See if we have a mission already
-
-                    if(!spots.length){
+                   // console.log("Reserver checks")
+                   // console.log(`For remote: ${remote.name}. Reserver set:${reserverSet},fiefCreep role:${fiefCreeps.claimer},isReserved:${isReserved},spots:${spots}`)
+                   if((!(isReserved) || remote.controller.reservation.ticksToEnd <= CONTROLLER_RESERVE_MAX*0.8) && claimers < holding.controllerSpots){
+                        registry.requestCreep({sev:30.1-spawnPad,memory:{role:'claimer',job:'reserver',fief:fief,target:{x:remote.controller.pos.x,y:remote.controller.pos.y,id:remote.controller.id},holding:holdingName,status:'spawning',preflight:false}})
+                    }
+                    if(false && !spots.length){
                         let hasMission = false;
                         if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                             for(let mission of global.heap.missionMap[holdingName]){
@@ -449,11 +471,7 @@ var holdingManager = {
                         }
                     }
                     
-                   // console.log("Reserver checks")
-                   // console.log(`For remote: ${remote.name}. Reserver set:${reserverSet},fiefCreep role:${fiefCreeps.claimer},isReserved:${isReserved},spots:${spots}`)
-                    if((!(isReserved) || remote.controller.reservation.ticksToEnd <= CONTROLLER_RESERVE_MAX*0.8) && spots.length){
-                        registry.requestCreep({sev:30.1-spawnPad,memory:{role:'claimer',job:'reserver',fief:fief,target:{x:remote.controller.pos.x,y:remote.controller.pos.y,id:remote.controller.id},holding:holdingName,status:'spawning',preflight:false}})
-                    }
+
                 }
             }
             

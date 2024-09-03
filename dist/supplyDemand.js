@@ -125,14 +125,15 @@ const supplyDemand = {
             //If utilization is past our tracking length, trim
             if(global.heap.shipping[roomName].utilization.length > 50) global.heap.shipping[roomName].utilization.length = 50;
         }
-        //If no haulers, utilization is set to 1 by default
+        //If no haulers, utilization is set to 0 by default
         else{
             global.heap.shipping[roomName].utilization.unshift(0)
         }
         if(Game.time % 3 == 0){
         //Calculate utilization and request more haulers if needed
             let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length
-            if(MAX_IDLE > utilization){
+            //Extra check, no spawning if half or more haulers are currently idle
+            if(MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5){
                 registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : 60,memory:{role:'hauler',fief:roomName,preflight:false}})
             }
             console.log(`${roomName} hauler utilization: ${utilization}`)
@@ -206,7 +207,7 @@ const supplyDemand = {
             }
         }
 
-        let unassignedTasks = Object.values(shippingTasks).filter(task => task.unassignedAmount() > 0);
+        let unassignedTasks = Object.values(shippingTasks).filter(task => task.unassignedAmount() > 0 && Game.getObjectById(task.targetID) && !global.heap.alarms[Game.getObjectById(task.targetID).room.name]);
         
 
 
@@ -373,14 +374,18 @@ const supplyDemand = {
             }
         }
 
-        if(global.heap.alarms[haulers.room.name]){
-            if(creep.memory.task) getTaskByID(creep.memory.fief,creep.memory.task).unassign(creep)
-        }
 
         haulers.forEach(creep => {
             let carryParts = creep.getActiveBodyparts(CARRY);
             //Add carry parts so we can track idle time
             totalCarry += carryParts;
+            
+            if(global.heap.alarms[creep.room.name]){
+                if(creep.memory.task) getTaskByID(creep.memory.fief,creep.memory.task).unassign(creep)
+                let words = helper.getSay({symbol:`${Game.time % 2 == 1 ? '🚨' : '📢'}`});
+                creep.say(words.join(''))
+                creep.travelTo(Game.rooms[creep.memory.fief].controller)
+            }
             //Deathcheck every 3 ticks to match spawn timing
             if(Game.time % 3 == 0 && creep.ticksToLive <= CREEP_SPAWN_TIME*creep.body.length && !creep.memory.respawn){
                 let utilization = global.heap.shipping[room.name].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[room.name].utilization.length
@@ -683,11 +688,12 @@ const supplyDemand = {
 
 //#region Task Prototype
 //#endregion
-function Task(type, resourceType, targetID, amount, priority,international) {
+function Task(type, resourceType, targetID, amount, priority,international,targetRoom) {
     this.taskID = generateTaskID();
     this.type = type;
     this.resourceType = resourceType;
     this.targetID = targetID;
+    this.targetRoom = targetRoom || Game.getObjectById(targetID).room.name
     this.amount = amount;
     this.priority = priority || 1; //Everything above priority 3 is considered for hauler population demand
     this.assignedHaulers = {};

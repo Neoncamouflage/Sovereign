@@ -166,7 +166,7 @@ class Traveler {
      * @returns {RoomMemory|number}
      */
     static checkAvoid(roomName) {
-        if(Memory.avoidRooms) return Memory.avoidRooms.includes(roomName);
+        if(global.heap.alarms[roomName]) return true;
         else {return false}
     }
     /**
@@ -259,7 +259,7 @@ class Traveler {
                 if (!allowedRooms[roomName]) {
                     return false;
                 }
-            }   //!options.allowHostile && 
+            }  
             else if (Traveler.checkAvoid(roomName)
                 && roomName !== destRoomName && roomName !== originRoomName) {
                 return false;

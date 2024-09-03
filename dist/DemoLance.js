@@ -10,48 +10,11 @@ function DemoLance(name,details){
     this.details = details || {};
     this.lanceType = 'demo';
     //Total units intended for this lance, max 3
-    console.log("DLance details:",JSON.stringify(details))
     this.unitsNeeded = (details && details.targetHits && details.targetHits > 0) ? Math.min(Math.ceil(details.targetHits / 500000), MAX_DEMOS) : 0;
 }
 
 DemoLance.prototype = Object.create(Lance.prototype);
 DemoLance.prototype.constructor = DemoLance;
-
-//Orders a creep for the lance
-DemoLance.prototype.populate = function(fief,kingdomCreeps,role = 'sapper',sev=60){
-    let reserve = kingdomCreeps.reserve;
-    let foundReserve = false;
-    let takeaway = [];
-    kingdomCreeps[this.name] = kingdomCreeps[this.name] || [];
-    //First check to see if there are any reserves
-    if(reserve.length){
-        for(let crpID of reserve){
-            let crp = Game.getObjectById(crpID);
-            //If so, add to the lance, mark that we found them, and push the ID to be removed from reserves
-            if(crp.memory.role == role){
-                this.addCreep(crp);
-                kingdomCreeps[this.name].push(crp)
-                crp.memory.lance = this.name;
-                takeaway.push(crpID)
-            }
-            if(kingdomCreeps[this.name].length >= this.unitsNeeded){
-                foundReserve = true;
-                break;
-            }
-        }
-    }
-
-    //Update reserve units if we found them.
-    if(takeaway.length){
-        global.heap.army.reserve = global.heap.army.reserve.filter(resID => !takeaway.includes(resID));
-    }
-    //If we didn't find enough to fill, order a creep
-    if(!foundReserve){
-        registry.requestCreep({sev:sev,memory:{role:role,lance:this.name,fief:fief,status:'spawning',preflight:false}});
-    }
-    
-
-}
 
 //Executes creep orders. Moving to target positions and demolishing target objects
 DemoLance.prototype.runCreeps = function(myCreeps){

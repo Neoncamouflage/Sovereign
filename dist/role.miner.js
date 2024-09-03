@@ -10,7 +10,12 @@ var roleMiner = {
             //Memory.kingdom.holdings[targetRoom].sources[harvestID].miner = creep.name;
             creep.memory.preflight = true;
         }
-        
+        if(global.heap.alarms[creep.memory.holding]){
+            creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:20})
+            let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
+            creep.say(words.join(''))
+            return;
+        }
         let holding = Memory.kingdom.holdings[creep.memory.holding];
         if(creep.room.name != creep.memory.holding){
             if(targetSource && holding.sources[creep.memory.target].path){
