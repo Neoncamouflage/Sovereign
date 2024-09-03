@@ -14,12 +14,9 @@ var holdingManager = {
         const CPU_ADD_LIMIT = Game.cpu.limit * 0.8 //Add if we're below 80%
         const CPU_REMOVE_LIMIT = Game.cpu.limit * 0.9 //Remove if we're above 90%
         //If no CPU, skip
-        if(!Memory.trailingCPU) return;
-        let cpuUte = Memory.trailingCPU.reduce((total, perTick) => {
-            return total + perTick.cpu;
-        }, 0);
-        let avCPU = Math.round(cpuUte/Memory.trailingCPU.length)
-        //console.log(`Holding check. Average CPU: ${avCPU}, Add limit: ${CPU_ADD_LIMIT}`)
+        if(!Memory.trailingCPU || !global.cpuAverage) return;
+        let avCPU  = global.cpuAverage;
+        console.log(`Holding check. Average CPU: ${avCPU}, Add limit: ${CPU_ADD_LIMIT}`)
         let holdings = Object.keys(Memory.kingdom.holdings).sort((a, b) => 
             Memory.kingdom.holdings[a].distance - Memory.kingdom.holdings[b].distance
         );
@@ -56,7 +53,7 @@ var holdingManager = {
             Memory.kingdom.holdings[remove].standby = true;
         }
 
-       // console.log("HOLDINGS")
+        //console.log("HOLDINGS")
         for(const each of holdings){
             //We call base work for every holding
             let holding = Memory.kingdom.holdings[each]
@@ -75,7 +72,7 @@ var holdingManager = {
             fiefMap[holding.homeFief] = (fiefMap[holding.homeFief] || 0) + 1;
             //console.log("FiefMap: ",holding.homeFief,fiefMap[holding.homeFief])
             //If combined spawn use (plus some pad for already run holdings) is too high then we skip (90 for now plus 5 per holding run)
-            let skipCheck = 90//93-(fiefMap[holding.homeFief]*2);
+            let skipCheck = 100//93-(fiefMap[holding.homeFief]*2);
             if(Memory.kingdom.fiefs[holding.homeFief].combinedSpawnUse > skipCheck){
                 console.log("Holding",each,"failed skipcheck.",Memory.kingdom.fiefs[holding.homeFief].combinedSpawnUse,"spawn use is more than",skipCheck)
                 continue;
@@ -90,7 +87,7 @@ var holdingManager = {
         let remote = Game.rooms[holdingName]
         let holding = Memory.kingdom.holdings[holdingName];
         let fief = holding.homeFief;
-        let data = global.heap.scoutData;
+        let data = getScoutData([holdingName])
         global.heap.fiefs[fief] = global.heap.fiefs[fief] || {};
         let fiefHeap = global.heap.fiefs[fief];
         let isReserved = remote && remote.controller.reservation && remote.controller.reservation.username == Memory.me;
@@ -102,9 +99,9 @@ var holdingManager = {
         if(!holding.sources){
 
             //Do we have scout data (we should, more a safety check for later modifications)
-            if(data[holdingName]){
+            if(data){
                 //If so, record the sources and controller
-                holding.sources = data[holdingName].sources.reduce((obj,source) =>{
+                holding.sources = data.sources.reduce((obj,source) =>{
                     obj[source.id] = {
                         id:source.id,
                         x:source.x,
@@ -115,8 +112,8 @@ var holdingManager = {
                     return obj;
                 },{});
                 holding.controller = {
-                    x: data[holdingName].controller.x,
-                    y: data[holdingName].controller.y
+                    x: data.controller.x,
+                    y: data.controller.y
                 }
             }
             //If not, see if we can use vision
@@ -184,16 +181,18 @@ var holdingManager = {
             let totalRoute = []
             if(remoteRoute){
                 holding.remoteRoute = true;
-                let maxDist = 0;
+                let maxDist = 200;
+                let kill = []
                 for(let [id,route] of Object.entries(remoteRoute)){
-                    if(route.length > maxDist){
-                        maxDist = route.length
+                    if(route.length > maxDist || route[route.length-1].roomName != holdingName){
+                        delete Memory.kingdom.holdings[holdingName].sources[id];
+                        kill.push(id)
                     }
                 }
-                
+                kill.forEach(route => { delete remoteRoute[route]})
 
-                //If we're more than 250, kill the holding
-                if(maxDist > 200){
+                //If there are no routes, kill the holding
+                if(!Object.keys(remoteRoute).length){
                     delete Memory.kingdom.holdings[holdingName];
                     return;
                 }
@@ -290,7 +289,7 @@ var holdingManager = {
                     amount: amount,
                     resourceType: resourceType,
                     international : true,
-                    priority: 5
+                    priority: amount < 1000 ? 5 : 6
                 };
                 //console.log("Attempting to add",JSON.stringify(details))
                 const taskID = supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
@@ -335,7 +334,6 @@ var holdingManager = {
                         targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
                     })
                 }
-
                 //For each source, see if we have enough harvest power or enough space for a new harvester
                 Object.entries(holding.sources).forEach(([sourceID,source])=>{
                     //If there's no room, or if we have enough harvest power, return
@@ -354,6 +352,46 @@ var holdingManager = {
             //If we have the energy capacity in our home fief and we need a reservation, ask for a claim creep if needed
             //We want vision for this
             if(remote){
+                
+                //Seasonal check for score
+                if(Game.shard.name == 'shardSeason' && Game.rooms[fief].storage){
+                    let scoreCans = remote.find(FIND_SCORE_CONTAINERS);
+                    if(scoreCans.length){
+                        for(let can of scoreCans){
+                            if(can.ticksToDecay < 100) continue;
+                            addSupplyRequest(Game.rooms[fief],{type:'pickup',resourceType:RESOURCE_SCORE,amount:can.store.getUsedCapacity(RESOURCE_SCORE),targetID:can.id,international:true,priority:6})
+                        }
+                    }
+                }
+                //Check for hostiles
+                let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => helper.isSoldier(crp) && !Memory.diplomacy.allies.includes(crp.owner.username) && !Memory.diplomacy.ceasefire.includes(crp.owner.username))
+                if(hostiles.length && !global.heap.alarms[holdingName]){
+                    global.heap.alarms[holdingName] = {tick:Game.time}
+                    let hasMission = false;
+                    if(global.heap.missionMap && global.heap.missionMap[holdingName]){
+                        for(let mission of global.heap.missionMap[holdingName]){
+                            if(mission.type == 'defend') hasMission = true;
+                            break;
+                        }
+                    }
+                    if(!hasMission){
+                        marshal.defend(holdingName);
+                    }
+                }else{
+                    if(!hostiles.length && global.heap.alarms[holdingName]){
+                        delete global.heap.alarms[holdingName];
+                        let myMission;
+                        if(global.heap.missionMap && global.heap.missionMap[holdingName]){
+                            for(let mission of global.heap.missionMap[holdingName]){
+                                if(mission.type == 'defend') myMission = mission;
+                                break;
+                            }
+                        }
+                        if(myMission){
+                            myMission.complete();
+                        }
+                    }
+                }
                 let reserverPower = 0;
                 if(fiefCreeps.claimer){
                     for(creep of fiefCreeps.claimer){
@@ -412,7 +450,7 @@ var holdingManager = {
                    // console.log("Reserver checks")
                    // console.log(`For remote: ${remote.name}. Reserver set:${reserverSet},fiefCreep role:${fiefCreeps.claimer},isReserved:${isReserved},spots:${spots}`)
                     if((!(isReserved) || remote.controller.reservation.ticksToEnd <= CONTROLLER_RESERVE_MAX*0.8) && spots.length){
-                        registry.requestCreep({sev:29.1-spawnPad,memory:{role:'claimer',job:'reserver',fief:fief,target:{x:remote.controller.pos.x,y:remote.controller.pos.y,id:remote.controller.id},holding:holdingName,status:'spawning',preflight:false}})
+                        registry.requestCreep({sev:30.1-spawnPad,memory:{role:'claimer',job:'reserver',fief:fief,target:{x:remote.controller.pos.x,y:remote.controller.pos.y,id:remote.controller.id},holding:holdingName,status:'spawning',preflight:false}})
                     }
                 }
             }

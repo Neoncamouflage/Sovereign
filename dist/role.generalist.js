@@ -2,7 +2,7 @@ var roleGeneralist = {
 
     /** @param {Creep} creep **/
     run: function(creep) {
-                if(!creep.memory.fief) creep.memory.fief = creep.memory.homeRoom;
+                if(!creep.memory.fief) creep.memory.fief = creep.memory.fief;
                 if(!creep.memory.flag){
                     creep.memory.flag = 'harvesting';
                 }
@@ -21,9 +21,9 @@ var roleGeneralist = {
                         
                     }
                     else if(creep.memory.job == 'remote'){
-                        let remoteLink = Game.getObjectById(creep.room.memory.remoteLink);
+                        //let remoteLink = Game.getObjectById(creep.room.memory.remoteLink);
                         var target = creep.pos.findClosestByPath(FIND_MY_CONSTRUCTION_SITES);
-                        if(creep.room.name != creep.memory.homeRoom){
+                        if(creep.room.name != creep.memory.fief){
                             if(target){
                                 creep.build(target);
                                 creep.travelTo(target);
@@ -41,7 +41,7 @@ var roleGeneralist = {
                                     }
                                 }
                                 else{
-                                    creep.travelTo(Game.rooms[creep.memory.homeRoom].controller);
+                                    creep.travelTo(Game.rooms[creep.memory.fief].controller);
                                 }
                             }
                         }
@@ -68,7 +68,7 @@ var roleGeneralist = {
                                 }
                             }
                         }
-                        else if(remoteLink){
+                        /*else if(remoteLink){
                            
                             if(creep.pos.getRangeTo(remoteLink) < creep.pos.getRangeTo(creep.room.storage)){
                                 if(creep.transfer(remoteLink,'energy') == ERR_NOT_IN_RANGE){
@@ -85,7 +85,7 @@ var roleGeneralist = {
                             if(creep.transfer(Game.getObjectById(creep.room.memory.upgradeCan),'energy') == ERR_NOT_IN_RANGE){
                                 creep.travelTo(Game.getObjectById(creep.room.memory.upgradeCan));
                             }
-                        }
+                        }*/
                         else if(creep.room.controller.ticksToDowngrade > 1000 && (creep.room.storage && creep.room.storage.store[RESOURCE_ENERGY] < 10000)){
                             if(creep.transfer(creep.room.storage,RESOURCE_ENERGY)== ERR_NOT_IN_RANGE){
                                 creep.travelTo(creep.room.storage)
@@ -276,7 +276,7 @@ var roleGeneralist = {
                     }
                     else{
                         if(Game.rooms[creep.memory.targetRoom] && Game.rooms[creep.memory.targetRoom].memory.alarm){
-                            //creep.travelTo(new RoomPosition(25, 25, creep.memory.homeRoom))
+                            //creep.travelTo(new RoomPosition(25, 25, creep.memory.fief))
                         }
                         else{
                             let things = creep.room.find(FIND_DROPPED_RESOURCES)

@@ -405,7 +405,8 @@ const EIGHT_DELTA = [
 	}
 	let uniqueCoords = new Set();
 	let roomStructs = []
-	let roomController = global.heap.scoutData[roomName].controller
+	let scoutData = getScoutData(roomName)
+	let roomController = scoutData.controller
 	//console.log(JSON.stringify(roomController))
 
 	//Controller

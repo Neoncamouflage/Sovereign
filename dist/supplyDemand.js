@@ -237,7 +237,19 @@ const supplyDemand = {
         }
 
         //Prioritize
-        unassignedTasks.sort((a, b) => b.priority - a.priority);
+        //unassignedTasks.sort((a, b) => b.priority - a.priority);
+        unassignedTasks.sort((a, b) => {
+            // First, compare by priority
+            let priorityDifference = b.priority - a.priority;
+            
+            // If priorities are equal, compare by unassignedAmount
+            if (priorityDifference === 0) {
+                return b.unassignedAmount() - a.unassignedAmount();
+            }
+            
+            // Otherwise, return the priority difference
+            return priorityDifference;
+        });
         //Loop through tasks and assign where possible
         for (let task of unassignedTasks) {
             let taskTarget = Game.getObjectById(task.targetID);
@@ -463,6 +475,9 @@ const supplyDemand = {
                 if(task == null){
                     delete creep.memory.task;
                     return;
+                }
+                else if(task.assignedHaulers[creep.id] < 20 && task.resourceType == RESOURCE_ENERGY && Game.rooms[creep.memory.fief].controller.level > 2){
+                    task.unassign(creep)
                 }
                 //Are we on a pickup task? If so, head to the target and take the resource
                 if(task.type == 'pickup'){
@@ -723,9 +738,9 @@ Task.prototype.updateAmount = function(newAmount) {
         if(remainingAmount == 0) break;
     }
     //If we still have a remaining amount, and it's below 40, remove it from the total amount
-    if(remainingAmount > 0 && remainingAmount < 40){
-        this.amount -= remainingAmount;
-    }
+    //if(remainingAmount > 0 && remainingAmount < 40){
+        //this.amount -= remainingAmount;
+    //}
 };
 
 Task.prototype.completeRun = function(hauler) {

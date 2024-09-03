@@ -3,8 +3,8 @@ const DEFAULT_MISSION_PRIORITY = 5;
 const MISSION_TYPES = [
     'demo',
     'cleanup',
+    'defend'
 ];
-const DEFAULT_SCOPE = 'broad';
 
 const marshal = {
     //Assign missions to troupes and run them
@@ -28,7 +28,6 @@ const marshal = {
         
         details.roomName = options.roomName; //Room is the target or requester room, depending on mission
         details.priority = options.priority || DEFAULT_MISSION_PRIORITY;
-        details.scope = options.scope || DEFAULT_SCOPE;
         if(options.type) details.type = options.type;
         if(options.targets) details.targets = options.targets || [];
         
@@ -38,6 +37,13 @@ const marshal = {
         missionMap[details.roomName].push(newMission);
         global.heap.missions[newMission.missionID] = newMission
 
+    },
+    //Quick, premade missions to call
+    defend(roomName){
+        marshal.addMission({
+            type:'defend',
+            roomName:roomName,
+        })
     }
 }
 
@@ -48,11 +54,14 @@ function Mission(details) {
     this.room = details.roomName;
     this.tick = Game.time;
     this.targets = details.targets || [];
+    this.done = false;
     this.assigned = null;
 }
 
 Mission.prototype.complete = function(){
-    global.heap.missionMap[this.room] = global.heap.missionMap[this.room].filter(miss => miss.missionID != this.missionID)
+    if(global.heap.missionMap[this.room].length == 1) delete global.heap.missionMap[this.room]
+    else{global.heap.missionMap[this.room] = global.heap.missionMap[this.room].filter(miss => miss.missionID != this.missionID)}
+    this.done = true;
     delete global.heap.missions[this.missionID]
 }
 

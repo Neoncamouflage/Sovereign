@@ -5,7 +5,7 @@ var roleUpgrader = {
     /** @param {Creep} creep **/
     run: function(creep) {
         let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType != STRUCTURE_RAMPART)
-        if(creep.memory.job == 'starterUpgrader' && cSites.length){
+        if(cSites.length){
            
             let target = cSites[0];
             let range = creep.pos.getRangeTo(target);

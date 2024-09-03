@@ -17,6 +17,7 @@ const painter = {
         if(visuals.drawMilitary) this.drawMilitary(kingdomCreeps);
         if(visuals.drawIntel) this.drawIntel();
         if(visuals.drawTest) this.drawTest();
+        if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan)
         
     },
     setVisual: function(vis,setting='default'){
@@ -31,9 +32,45 @@ const painter = {
             Memory.visuals[vis] = typeof setting == 'boolean' ? setting : true;
         }
     },
+    drawRoomPlan: function(roomName){
+        let plans = JSON.parse(RawMemory.segments[1]);
+        let plan
+        let ramps
+        if(plans[roomName]){
+            [plan, ramps] = plans[roomName]
+        }
+        //let ramps = Memory.kingdom.fiefs[roomName].rampartPlan;
+        if(!plan || !ramps){
+            new RoomVisual(roomName).text("NO FIEF PLAN",25,25, {color:'#ffa500',font:'3 Bridgnorth'});
+            return;
+        }
+        let roomVis =  new RoomVisual(roomName);
+        let holdingArray = []
+        for(let [rcl,buildings] of Object.entries(plan)){
+            for(let [building,spots] of Object.entries(buildings)){
+                for(let spot of spots){
+                    //Store buildings in an array to draw after roads
+                    if(building == STRUCTURE_ROAD){
+                        roomVis.structure(spot.x,spot.y,building);
+                    }
+                    holdingArray.push([spot.x,spot.y,building,rcl]);
+                    
+                }
+            }
+        }
+        roomVis.connectRoads()
+        for(let ele of holdingArray){
+            if(ele[2] != STRUCTURE_ROAD) roomVis.structure(ele[0],ele[1],ele[2]);
+            roomVis.text(ele[3],ele[0],ele[1], {color:'#ffa500',font:'0.5 Bridgnorth'});
+        }
+        for(let ramp of ramps){
+            roomVis.circle(ramp.x,ramp.y,{fill:'green',radius:0.5});
+        }
+    },
     drawFiefPlan: function(fief){
         let plan = Memory.kingdom.fiefs[fief].roomPlan;
-        if(!plan){
+        let ramps = Memory.kingdom.fiefs[fief].rampartPlan;
+        if(!plan || !ramps){
             new RoomVisual(fief).text("NO FIEF PLAN",25,25, {color:'#ffa500',font:'3 Bridgnorth'});
             return;
         }
@@ -81,11 +118,11 @@ const painter = {
             if(Memory.kingdom.fiefs[roomName]){
                 Game.map.visual.text("🏰", new RoomPosition(49,6,roomName), {color: '#FFFFF', fontSize: 6,align:'right'});
             }
-            if(Game.time-data.lastRecord == 0){
+            if(Game.time-data.l == 0){
                 Game.map.visual.text("👁", new RoomPosition(0,6,roomName), {color: '#ffffff ', fontSize: 6, fontFamily: 'Bridgnorth',align:'left'});
             }
             else{
-                Game.map.visual.text("👁"+(Game.time-data.lastRecord), new RoomPosition(0,6,roomName), {color: '#ffa500 ', fontSize: 6, fontFamily: 'Bridgnorth',align:'left'});
+                Game.map.visual.text("👁"+(Game.time-data.l), new RoomPosition(0,6,roomName), {color: '#ffa500 ', fontSize: 6, fontFamily: 'Bridgnorth',align:'left'});
             }
         });
         for([holdingName,holding] of Object.entries(Memory.kingdom.holdings)){

@@ -67,7 +67,7 @@ const fiefPlanner = {
     //Runs scoring on all plans
     //Returns CM and object for best plan
     //Stores rejected plans in heap
-    getFiefPlan: function(roomName,totalPop = 20, maxIterations=10,mutationRate=0.01){
+    getFiefPlan: function(roomName,totalPop = 25, maxIterations=10,mutationRate=0.01){
         // 2.3,0.69,2.28,1.91,2.74,0.44,2.5,2.84,0.46,0.37,1.88,2.45
         //Set up weight minimums and maximums for the genetic algorithm
         let geneLimits = [
@@ -418,18 +418,11 @@ const fiefPlanner = {
         const CONTROLLER_WEIGHT = opts.cWeight;
         const SOURCE_WEIGHT = opts.sWeight;
         const DISTANCE_WEIGHT = opts.dWeight;
-        let roomData = global.heap && global.heap.scoutData && global.heap.scoutData[roomName];
+        let roomData = getScoutData(roomName)
         //If no room data, we're likely in spinup or no scout
         if(!roomData){
             console.log("No room data for the room planner");
-            //If we have vision and not in spinup, get the room data
-            if(Game.rooms[roomName] && global.heap && global.heap.scoutData){
-                getScoutData(Game.rooms[roomName]);
-                roomData = global.heap && global.heap.scoutData && global.heap.scoutData[roomName];
-            }
-            else{
                 return [-1,-1,-1];
-            }
         }
         let sources = roomData.sources;
         let mineral = roomData.mineral;
@@ -1140,8 +1133,9 @@ const fiefPlanner = {
     
         while (queue.length > 0 && loop <= loopMax) {
             let tile = queue.shift();
+            //console.log("Checking tile:",JSON.stringify(tile))
             let adjacentTiles = findAdjacentTiles(tile.pos); // Now implemented
-    
+            
             adjacentTiles.forEach(({x, y}) => {
                 
                 // Ensure we only process tiles within the room boundaries and are not already processed with a lower distance
@@ -1150,7 +1144,9 @@ const fiefPlanner = {
                     if (tileScore === 0 && basePlanCM.get(x,y) == 0) {
                         costMatrix.set(x, y, tile.distance + 1);
                         basePlanCM.set(x,y,25);
-                        queue.push({pos: new RoomPosition(x, y, roomName), distance: tile.distance + 1});
+                        let newTile = {pos: new RoomPosition(x, y, roomName), distance: tile.distance + 1};
+                        queue.push(newTile);
+                        //console.log("Adding tile",JSON.stringify(newTile))
                     }
                 }
             });
@@ -1449,7 +1445,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
     assignStructures: function(roomName,terrain,basePlanCM,structureBlobCM,basePlan,exitTileCM,spareCount=0,alpha=1,bravo=1){
         let ALPHA = alpha; //Exit tile weight, higher pushes away from exits
         let BRAVO = bravo; //Range from core weight, higher prioritizes core distance
-        let structures = [33,94,95,97,96,33,88,88,88,88,88,88,33]
+        let structures = [33,94,95,97,96,33,33,88,88,88,88,88,88]
         let distantStructs = [44,45]
         let storagePos = new RoomPosition(basePlan.storage.x,basePlan.storage.y,roomName);
         let count = 0;
@@ -1798,11 +1794,12 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
     },
     generateScoreFloodFill: function(terrain,origins,basePlanCM){
         let roomName = global.heap.fiefPlanner.roomName
+        let scoutData = getScoutData(roomName)
         let controllerFound = false;
         let sourceFound = false;
         let structureFound = false;
-        let controller = global.heap.scoutData[roomName].controller
-        let sources = global.heap.scoutData[roomName].sources
+        let controller = scoutData.controller
+        let sources = scoutData.sources
         let queue = [];
         let visited = new Set();
         let testCM = new PathFinder.CostMatrix;
@@ -2116,7 +2113,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
 }
 
 module.exports = fiefPlanner;
-//global.testGetFiefPlan = fiefPlanner.getFiefPlan;
+global.getFiefPlan = fiefPlanner.getFiefPlan;
 //global.testGenerateRoomPlan = fiefPlanner.generateRoomPlan.bind(fiefPlanner);
 //global.testRampartGroups = fiefPlanner.getRampartGroups;
 //global.testFill = fiefPlanner.testFill;

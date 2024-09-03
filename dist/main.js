@@ -23,12 +23,13 @@ console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 Memory.globalReset = Game.time;
 module.exports.loop = function () {
     profiler.wrap(function() {
-    //return;  
-    if (hasRespawned()){
+    if (hasRespawned() || !Memory.kingdom){
         spinup.run();
     }
     
-
+    if(Game.shard.name == 'shardSeason' && Game.time % 150 && global.heap && global.heap.scoreCans){
+        global.heap.scoreCans = global.heap.scoreCans.filter(can => !!Game.getObjectById(can.id))
+    }
     //Reset movement
     Traveler.resetMovementIntents();
     //Check for global reset and action accordingly
@@ -42,7 +43,10 @@ module.exports.loop = function () {
         //Segment 9 is for ad-hoc logging
         RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
-        global.heap = {fiefs:{},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]}};
+        global.heap = {fiefs:{},alarms:{},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]}};
+        if(Game.shard.name == 'shardSeason'){
+            global.heap.scoreContainers = [];
+        }
         /*for(let fief in Memory.kingdom.fiefs){
             global.heap.fiefs[fief] = {};
         }
@@ -53,6 +57,13 @@ module.exports.loop = function () {
     //If no reset, do stuff with segments
     else{
         global.reset = false;
+        if(Memory.trailingCPU){
+            let cpuUte = Memory.trailingCPU.reduce((total, perTick) => {
+                return total + perTick.cpu;
+            }, 0);
+            global.cpuAverage = Math.round(cpuUte/Memory.trailingCPU.length)
+        }
+        
         let roomData = RawMemory.segments[1]
         if(roomData == "")  RawMemory.segments[1] = "{}"
         if(!global.heap.scoutData){

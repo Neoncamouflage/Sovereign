@@ -1,15 +1,25 @@
 const DemoLance = require('DemoLance');
 const RangedLance = require('RangedLance');
+const BlinkyLance = require('BlinkyLance')
 const MeleeDuoLance = require('MeleeDuoLance');
+//When adding a new creep type, military roles in kingdomManager needs updated!!!
+
+
 const helper = require('functions.helper')
 
+const lanceDefaults = {
+    'defend':1
+}
+const unitDefaults = {
+    'defend':2
+}
 
 function Troupe(mission) {
     this.name = helper.getWarName();
     this.lances = [];
     this.mission = mission;
     //Lances needed will depend on mission. Generally start at 1 and escalate if needed
-    this.lancesNeeded  = 1;
+    this.lancesNeeded  = lanceDefaults[mission.type] || 1;
     global.heap.army.troupes.push(this)
 }
 
@@ -18,16 +28,22 @@ Troupe.prototype.addLance = function(lance) {
 };
 
 Troupe.prototype.createLance = function(type) {
-    let details = {}
+    let details = {
+        unitsNeeded: unitDefaults[this.mission.type] || 1
+    }
     switch(type){
         case 'demo':
             details.targetHits = getTargetHits(this.mission.targets);
-            //console.log("Troupe create lance details:",JSON.stringify(details))
+            console.log("Troupe create lance details:",JSON.stringify(details))
             this.lances.push(new DemoLance(`${this.name.split(' ')[1]} ${this.lances.length+1}`,details));
             break;
-        case 'rangedHarass':
-            //console.log("Troupe create lance details:",JSON.stringify(details))
+        case 'ranged':
+            console.log("Troupe create lance details:",JSON.stringify(details))
             this.lances.push(new RangedLance(`${this.name.split(' ')[1]} ${this.lances.length+1}`,details));
+            break;
+        case 'blinky':
+            console.log("Troupe create lance details:",JSON.stringify(details))
+            this.lances.push(new BlinkyLance(`${this.name.split(' ')[1]} ${this.lances.length+1}`,details));
             break;
     }
     
@@ -38,6 +54,12 @@ Troupe.prototype.removeLance = function(lance) {
 };
 
 Troupe.prototype.run = function(kingdomCreeps) {
+    if(this.mission.done){
+        global.heap.army.troupes = global.heap.army.troupes.filter(trp => trp.name != this.name)
+        for(let lance of this.lances){
+            delete global.heap.army.lances[lance]
+        }
+    }
     //If no base fief for spawning and grouping, assign one based on the mission location.
     if(!this.baseFief){
         this.baseFief = getBaseFief(this,kingdomCreeps);
@@ -52,42 +74,30 @@ Troupe.prototype.run = function(kingdomCreeps) {
             case 'rangedHarass':
                 this.createLance('rangedHarass');
                 break;
+            case 'defend':
+                this.createLance('blinky');
+                break;
         }
     }
     let readyFlag = true;
     //console.log("Creeps in troupe",this.name)
     for(let lance of this.lances){
-        //console.log(kingdomCreeps[lance.name])
+        console.log(kingdomCreeps[lance.name])
         //If understaffed, populate
         if(!kingdomCreeps[lance.name] || kingdomCreeps[lance.name].length < lance.unitsNeeded){
             lance.populate(this.baseFief,kingdomCreeps);
             readyFlag = false;
         }
     }
-
     if(this.mission.type == 'rangedHarass'){
         rangedHarassLogic(this);
         return;
     }
-    //Give all demo creeps the first target. Later on, refine this by checking available space
-    
-    for(let lance of this.lances){
-        //If no targets, complete the mission
-        //if(!this.mission.targets.length){
-          //  this.mission.complete();
-            //return;
-        //}
-        //Check if target is dead
-        //if(this.mission.targets.length){
-          //  if(!Game.getObjectById(this.mission.targets[0])){
-            //    this.mission.targets.shift();
-           // }
-            //for(let crp of kingdomCreeps[lance.name]){
-              //  lance.target[crp.id] = this.mission.targets[0];
-            //}
-        //}
-        lance.runCreeps(kingdomCreeps[lance.name])
+    if(this.mission.type == 'defend'){
+        defendLogic(this);
+        return;
     }
+    //Give all demo creeps the first target. Later on, refine this by checking available space
 };
 
 function getTargetHits(targets){
@@ -128,6 +138,76 @@ function getBaseFief(troupe){
         baseFief = pick;
     }
     return baseFief
+}
+
+function defendLogic(troupe){
+    let roomName = troupe.mission.room;
+    let roomData = getScoutData(roomName);
+    let room = Game.rooms[roomName];
+    let targets = troupe.mission.targets || [];
+    let status = 'none';
+    let liveCreeps = [];
+    //If no vision, convoy
+    if(!room){
+        status = 'convoy';
+    }
+    //If no target but we have vision, acquire targets
+    else if(!targets.length && room){
+        let targetFind = room.find(FIND_HOSTILE_CREEPS,{filter:(creep) => (!Memory.diplomacy.allies.includes(creep.owner.username) && !Memory.diplomacy.ceasefire.includes(creep.owner.username))})
+        //If none, navigate to the room
+        if(!targetFind.length) status = 'convoy';
+        //Otherwise, assign them to the mission
+        troupe.mission.targets = targetFind.map(crp => crp.id);
+        status = 'attack';
+    }
+    //If we have targets and vision, remove any that are dead and keep attacking
+    else{
+        let flag = false;
+        for(let crpID of targets){
+            let creep = Game.getObjectById(crpID);
+            if(!creep){
+                flag = true;
+                continue;
+            }
+            liveCreeps.push(crpID);
+        }
+        if(flag) troupe.mission.targets = liveCreeps;
+        status = 'attack';
+    }
+
+    
+    //Based on status result of the above logic, assign targets and positions to creeps
+    for(let lance of troupe.lances){
+        console.log(JSON.stringify(lance))
+        if(status == 'convoy'){
+            //Navigate to the controller if possible, else default 25,25
+            for(let crp of kingdomCreeps[lance.name]){
+                if(roomData.controller){
+                    lance.targetPos[crp.id] = {x:roomData.controller.x,y:roomData.controller.y,roomName:roomName}
+                }
+                else{
+                    lance.targetPos[crp.id] = {x:25,y:25,roomName:roomName,range:20}
+                }
+            }
+        }
+        //If attacking, find the closest creep and go shoot it
+        else if(status == 'attack'){
+            for(let crp of kingdomCreeps[lance.name]){
+                liveTargets = liveCreeps.map(cID => Game.getObjectById(cID));
+                //console.log("Attack status for",crp,"with livecreeps",liveTargets)
+                //let closest = crp.pos.findClosestByRange(liveTargets);
+                let closest = crp.pos.getClosestByTileDistance(liveTargets);
+                //console.log("Closest is",closest)
+                if(!closest) continue;
+                
+                lance.target[crp.id] = closest.id;
+                lance.targetPos[crp.id] = {x:closest.pos.x,y:closest.pos.y,roomName:roomName,range:3};
+
+            }
+        }
+        lance.runCreeps(kingdomCreeps[lance.name])
+    }
+
 }
 
 

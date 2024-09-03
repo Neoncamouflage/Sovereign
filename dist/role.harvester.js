@@ -45,12 +45,12 @@ var roleHarvester = {
             //Else, regular harvesting stuff
             //If not in spot, go there
             else if(!(creep.memory.status == 'harvest')){
-                    if(creep.pos.getRangeTo(target) == 1){
+                    if(creep.pos.x == fief.sources[creep.memory.target].spotx && creep.pos.y == fief.sources[creep.memory.target].spoty && creep.room.name == homeRoom){
                         creep.memory.stay = true;
                         creep.memory.status = 'harvest';
                     }
                     else{
-                        creep.travelTo(target)
+                        creep.travelTo(new RoomPosition(fief.sources[creep.memory.target].spotx,fief.sources[creep.memory.target].spoty,homeRoom))
                     }
             }
             else{

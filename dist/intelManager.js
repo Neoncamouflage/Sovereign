@@ -8,12 +8,13 @@ const intelManager = {
         //If we have no scouts, order one
         if(Game.time % 3 == 0){
             //1 scout per fief untl 3
+            let fiefPick = fiefs[Math.floor(Math.random() * fiefs.length)];
             if(scouts.length < Math.min(fiefs.length*2,SCOUT_MAX)){
                 let plan = {
-                    sev:!scouts.length ? 40 : 20,
+                    sev:(!scouts.length) || Game.rooms[fiefPick].controller.level > 2 ? 40 : 20,
                     memory:{
                         role:'scout',
-                        fief:fiefs[Math.floor(Math.random() * fiefs.length)],
+                        fief:fiefPick,
                     }
                 };
                 registry.requestCreep(plan)
@@ -25,6 +26,61 @@ const intelManager = {
     },
     runScouts: function(scouts){
         scouts.forEach(creep=>{
+            //Season stuff
+            if(Game.shard.name == 'shardSeason'){
+                let scoreCheck = creep.room.find(FIND_SCORE_COLLECTORS)
+                if(scoreCheck.length){
+                    if(!Memory.season) Memory.season = {}
+                    if(!Memory.season.scoreCollectors) Memory.season.scoreCollectors = {}
+                    if(!Memory.season.scoreCollectors[creep.room.name]){
+                        let walls  = creep.room.find(FIND_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_WALL)
+                        let collector = scoreCheck[0]
+                        let maxWallHits = 0;
+                        walls.forEach(w => {if(w.hits > maxWallHits)maxWallHits = w.hits});
+                        let costMatrix = new PathFinder.CostMatrix();
+                        console.log("WALLS",walls)
+                        for (let wall of walls) {
+                            let cost = mapWallHitsToCost(wall.hits);
+                            costMatrix.set(wall.pos.x, wall.pos.y, cost);
+                        }
+                        
+                        let route = PathFinder.search(creep.pos, { pos: collector.pos, range: 1 }, {
+                            plainCost: 0,
+                            swampCost: 0,
+                            maxOps: 2000,
+                            maxRooms: 1,
+                            roomCallback: function(roomName){
+                                return costMatrix
+                            }
+                        }).path;
+                        console.log("PATH",route)
+    
+    
+    
+                        let targetWalls = []
+                        let totalHits = 0;
+                        for(let spot of route){
+                            let look = creep.room.lookForAt(LOOK_STRUCTURES,spot).filter(struct => struct.structureType == STRUCTURE_WALL);
+                            console.log("LOOK",look)
+                            if(look.length){
+                                targetWalls.push(spot);
+                                totalHits += look[0].hits
+                            }
+                        }
+    
+                        Memory.season.scoreCollectors[creep.room.name] = {
+                            costMatrix: costMatrix.serialize(),
+                            targetWalls: targetWalls,
+                            totalHits : totalHits
+                        }
+    
+                        function mapWallHitsToCost(wallHits,maxWallHits) {
+                            return Math.min(254, Math.floor((wallHits / maxWallHits) * 254));
+                        }
+                    }
+                }
+
+            }
             //If we're freshly spawned, get us an exit and set lastRoom
             if (!creep.memory.lastRoom || !creep.memory.exitTarget) {
                 creep.memory.lastRoom = creep.room.name;
@@ -53,7 +109,7 @@ const intelManager = {
                         //Otherwise we set the signMessage and start pathing.
                         else if(creep.pos.getRangeTo(creep.room.controller) > 1){
                             creep.memory.signMessage = sign;
-                            creep.travelTo(creep.room.controller);
+                            creep.travelTo(creep.room.controller,{maxRooms:1});
                         }
                         else{
                             creep.memory.signMessage = sign;
@@ -69,7 +125,7 @@ const intelManager = {
                 //Else if we already know we need to sign the controller, do so
                 else{
                     if(creep.pos.getRangeTo(creep.room.controller) > 1){
-                        creep.travelTo(creep.room.controller);
+                        creep.travelTo(creep.room.controller,{maxRooms:1});
                     }
                     else{
                         creep.signController(creep.room.controller,creep.memory.signMessage)
@@ -81,7 +137,7 @@ const intelManager = {
             }
             else if(creep.memory.exitTarget){
                 let mem = creep.memory.exitTarget;
-                creep.travelTo(new RoomPosition(mem.x,mem.y,mem.roomName),{allowHostile:false})
+                creep.travelTo(new RoomPosition(mem.x,mem.y,mem.roomName),{maxRooms:1})
             }
             else{
                 console.log("SCOUT",creep.name,"HAVING ISSUES FINDING EXIT")
@@ -150,7 +206,7 @@ const intelManager = {
                 if(unscouted.length) roomPick = unscouted[Math.floor(Math.random() * unscouted.length)];
                 //If we found one already, use that, otherwise continue
                 if(!roomPick){
-                    //console.log("No roompick, finding oldest of",JSON.stringify(roomOpts))
+                    console.log("No roompick, finding oldest of",JSON.stringify(roomOpts))
                     let highest = 0;
                     for(let scoutRoom of roomOpts){
                         //console.log(JSON.stringify(scoutRoom))
@@ -159,6 +215,11 @@ const intelManager = {
                             roomPick = scoutRoom.roomName;
                             highest = Game.time - scoutRoom.lastRecord; 
                         }
+                    }
+                    //console.log("Highest score is",highest)
+                    if(highest == 0){
+                        roomPick = roomOpts[Math.floor(Math.random() * roomOpts.length)].roomName;
+                        //console.log("Random pick is",roomPick)
                     }
                     //console.log("Picked",JSON.stringify(highest))
                    // console.log("Scouting",roomPick,"due to it being the oldest")

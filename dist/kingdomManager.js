@@ -182,7 +182,7 @@ function runRoles(kingdomCreeps){
                 creepRole = '👮';
                 break;
             case 'settler':
-                roleSettler.run(myCreep);
+                roleGeneralist.run(myCreep);
                 creepRole = '🚚';
                 break;
             case 'manager':
@@ -206,7 +206,8 @@ function sortCreeps(){
     let milRoles = [
         'sapper',
         'archer',
-        'pikeman'
+        'pikeman',
+        'skirmisher'
     ]
     for(let creepName in Game.creeps){
         let creep = Game.creeps[creepName];

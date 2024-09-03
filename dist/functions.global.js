@@ -56,12 +56,38 @@ global.setDiplomacy = function setDiplomacy(type,username){
 }
 //Scout Data Getter and Setter - Single is an optional string for a specific property
 global.getScoutData = function getScoutData(roomName=false,single=false){
+        /**
+     * roomName: r
+     * lastRecord: l
+     * roomType: t
+     * ownerType: o
+     * owner: w
+     * controller: c
+     * controllerLevel: u
+     * towers: y
+     * sources: s
+     * mineral: m
+     * exits: e
+     */
     let scoutData = global.heap.scoutData;
     //If first tick and no scout data, return false
-    if(!scoutData) return false;
+    if(!scoutData || !scoutData[roomName]) return false;
     //No room name means all data
     if(!roomName) return scoutData;
-    let roomData = scoutData[roomName];
+    //Convert data
+    let roomData = {
+        roomName: scoutData[roomName]['r'],
+        lastRecord: scoutData[roomName]['l'],
+        roomType: scoutData[roomName]['t'],
+        ownerType: scoutData[roomName]['o'],
+        owner: scoutData[roomName]['w'],
+        controller: scoutData[roomName]['c'],
+        controllerLevel: scoutData[roomName]['u'],
+        towers: scoutData[roomName]['t'],
+        sources: scoutData[roomName]['s'],
+        mineral: scoutData[roomName]['m'],
+        exits: scoutData[roomName]['e']
+    };
     if(!roomData){
         console.log(`No scout data for ${roomName}`)
         return false;
@@ -88,32 +114,40 @@ global.setScoutData = function setScoutData(room,data={},force=false){
         console.log("Room name or object must be provided for scout data");
         return;
     }
-    //console.log(`Setting scout data, official. Room:${room.name},Last record:${scoutData[room.name].lastRecord}`)
-    //If we already have the room logged and it's a fief or too soon, return
-    //if(scoutData[room.name] && (scoutData[room.name].lastRecord > Game.time - 200 || Memory.kingdom.fiefs[room.name])) return;
 
     let [roomType,ownerType,owner] = helper.getRoomType(room);
     let sources = room.find(FIND_SOURCES).map(src => {return {x:src.pos.x,y:src.pos.y,id:src.id}})
     let mineral = room.find(FIND_MINERALS)[0];
-    let towerPositions = room.find(FIND_HOSTILE_STRUCTURES,{filter:{structureType:STRUCTURE_TOWER}}).map(tow => {return {x:tow.pos.x,y:tow.pos.y,id:tow.id}});
-    //let otherCreeps = room.find(FIND_HOSTILE_CREEPS);
-    //let hostileCreeps = otherCreeps.filter(creep =>{!Memory.diplomacy.allies.includes(creep.owner.username)});
-    //let allyCreeps = otherCreeps.filter(creep =>{Memory.diplomacy.allies.includes(creep.owner.username)});
-    
-    //If the N/S and E/W coords mod 10 are both 5 then it's a center room, otherwise if they're both in the range 4-6 then it's an SK room. 
-    //Maybe use this instead of saving room type
+    let towerPositions = room.find(FIND_HOSTILE_STRUCTURES,{filter:{structureType:STRUCTURE_TOWER}}).map(tow => {return {x:tow.pos.x,y:tow.pos.y}});
+    /**
+     * roomName: r
+     * lastRecord: l
+     * roomType: t
+     * ownerType: o
+     * owner: w
+     * controller: c
+     * controllerLevel: u
+     * towers: y
+     * sources: s
+     * mineral: m
+     * exits: e
+     */
     global.heap.scoutData[room.name] = {
-        roomName : room.name,
-        lastRecord : Game.time,
-        roomType: roomType,
-        ownerType: ownerType,
-        owner: ownerType ?  owner : null,
-        controller: room.controller ? {x:room.controller.pos.x,y:room.controller.pos.y} : null,
-        controllerLevel: roomType == 'fief' ? room.controller.level : null,
-        towers: towerPositions,
-        sources: sources,
-        mineral: mineral ? {x:mineral.pos.x,y:mineral.pos.y,type:mineral.mineralType} : null,
-        exits: Game.map.describeExits(room.name),
+        r : room.name,
+        l : Game.time,
+        t: roomType,
+        o: ownerType,
+        w: ownerType ?  owner : null,
+        c: room.controller ? {x:room.controller.pos.x,y:room.controller.pos.y} : null,
+        u: roomType == 'fief' ? room.controller.level : null,
+        y: towerPositions,
+        s: sources,
+        m: mineral ? {x:mineral.pos.x,y:mineral.pos.y,type:mineral.mineralType} : null,
+        e: Game.map.describeExits(room.name),
+    }
+    if(Game.shard.name == 'shardSeason'){
+        //global.heap.scoutData[room.name].scoreCollector = room.find(FIND_SCORE_COLLECTORS).map(coll => {return {x:coll.pos.x,y:coll.pos.y,id:coll.id}})
+        //global.heap.scoreCans.push(... room.find(FIND_SCORE_CONTAINERS).map(can => {return {x:can.pos.x,y:can.pos.y,id:can.id}}))
     }
     global.heap.newScoutData = true;
 
@@ -156,16 +190,18 @@ global.parseRoomName = function parseRoomName(roomName) {
     return coord;
 }
 
-global.spawnCreep = function spawnCreep(role,body,fief,sev=50){
+global.spawnCreep = function spawnCreep(role,body,fief,sev=50,memory = {}){
+    memory.role = role
+    memory.fief = fief || Memory.kingdom.fiefs[Math.floor(Math.random() * Memory.kingdom.fiefs.length)]
     let plan = {
         sev:sev,
         body:body,
-        memory:{    
-            role:role,
-            fief:fief || Memory.kingdom.fiefs[Math.floor(Math.random() * Memory.kingdom.fiefs.length)],
+        hardSpawn:true,
+        memory:memory
         }
-    };
-    registry.requestCreep(plan)
+    if(!Memory.hardSpawns) Memory.hardSpawns = {};
+    if(!Memory.hardSpawns[fief]) Memory.hardSpawns[fief] = []; 
+    Memory.hardSpawns[fief].push(plan)
 }
 
 global.describeRoom = function describeRoom(name){

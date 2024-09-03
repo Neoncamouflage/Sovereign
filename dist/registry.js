@@ -15,7 +15,8 @@ const registry = {
         'bait'     :'Rogue',
         'sapper'   :'Sapper',
         'archer'   :'Archer',
-        'generalist':'Settler'
+        'generalist':'Settler',
+        'skirmisher'    :'Skirmisher'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -28,6 +29,7 @@ const registry = {
         for(each of spawns){
             if(!each.spawning) freeSpawns.push(each);
         }
+        if(Memory.hardSpawns && Memory.hardSpawns[room.name]) spawnQueue.push(...Memory.hardSpawns[room.name])
         let qprint = '';
         for(let each of spawnQueue){
             qprint+=`${each.memory.role} - ${each.sev}\n`
@@ -74,18 +76,26 @@ const registry = {
                 }
                 let spawnTry = this.spawnCreep(nextSpawn,newName,newCreep)
 
-                //If we successfully spawned and this was a respawn request from a creep, update them
-                if (spawnTry == OK && newCreep.respawn) Game.getObjectById(newCreep.respawn).memory.respawn = true;
+                //If we successfully spawned
+                if (spawnTry == OK){
+                    //If this was a respawn request from a creep, update them
+                    if(newCreep.respawn) Game.getObjectById(newCreep.respawn).memory.respawn = true;
+                    //If it was a hard spawn, remove it
+                    if(newCreep.hardSpawn){
+                        let index = Memory.hardSpawns[room.name].indexOf(newCreep);
+                        Memory.hardSpawns[room.name].splice(index,1);
+                    }
+                } 
                 if(spawnTry != OK){
                     console.log("Bad spawn:",spawnTry)
                 }
                 //If no mre free spawns, break
-                if(!freeSpawns.length) break;
             }
             else{
                 //Focusing on priority. If we can't build the top priority creep yet, break and we wait
                 break;
             }
+            if(!freeSpawns.length) break;
         }
         global.heap.registry[room.name] = [];
     },
@@ -189,6 +199,9 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             break;
         case 'archer':
             return getArcher(room,plan);
+            break;
+        case 'skirmisher':
+            return getSkirmisher(room,plan);
             break;
         case 'generalist':
             return getGeneralist(room);
@@ -509,6 +522,27 @@ function getArcher(room,plan){
 
     return [newBody,totalCost];
 }
+function getSkirmisher(room,plan){
+    let parts = [RANGED_ATTACK,RANGED_ATTACK,MOVE,MOVE,MOVE,HEAL]
+    let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+    let energyAvailable = room.energyCapacityAvailable
+    //Max size is the set body size or energy cap, whichever is less
+    //Need to set up bodysize logic for the plan, for now default
+    let maxBody = parts.length;
+    let maxParts = Math.min(maxBody,Math.floor(energyAvailable / setCost));
+    let newBody = [];
+    let totalCost = 0;
+
+    newBody.push(...parts);
+    totalCost += setCost;
+
+    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+        newBody.push(...parts);
+        totalCost += setCost;
+    }
+
+    return [newBody,totalCost];
+}
 
 //General hauler - Porter
 function getHauler(room,fiefCreeps){
@@ -517,7 +551,8 @@ function getHauler(room,fiefCreeps){
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     //If we have 0 average and planned, and no haulers, the energy is what we have now, otherwise we wait for at least half of max
     //console.log("Hauler spawning: Ticknet",tickNet,"AvgNet",avgNet,"Hauler creeps?",fiefCreeps['hauler'])
-    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? room.energyCapacityAvailable : room.energyAvailable;
+    let maxCap = global.cpuAverage > 80 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable*0.66)
+    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? maxCap : room.energyAvailable;
     //console.log("Available energy",energyAvailable)
     let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
@@ -611,7 +646,7 @@ function getFortifier(room,fiefCreeps){
 //Builder - Carpenter
 function getBuilder(room,fiefCreeps){
     let nonWork = [MOVE,CARRY]
-    let fullSet = [MOVE,CARRY,WORK,WORK,WORK,WORK];
+    let fullSet = [MOVE,CARRY,WORK,WORK];
     let fullCost = fullSet.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let totalCost = 0;
     let engAvail = room.energyCapacityAvailable;
