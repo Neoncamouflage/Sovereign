@@ -33,7 +33,7 @@ var roleDiver = {
             }
             return;
         }
-        else if(creep.memory.job == 'kill'){ //spawnCreep('diver',[MOVE,MOVE,MOVE,MOVE,MOVE,ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK],'W17S3',99,{job:'kill',targetRoom:'W17S4'})
+        else if(creep.memory.job == 'kill'){ //
             let targetRoom = creep.memory.targetRoom
             if(creep.room.name != targetRoom){
                 creep.travelTo(new RoomPosition(25,25,targetRoom))

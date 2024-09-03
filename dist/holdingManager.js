@@ -274,8 +274,8 @@ var holdingManager = {
 
         }
         //Check for dropped resources and submit tasks as needed, only if not hostile
-        let sData = getScoutData(holdingName);
-        if(remote && sData.ownerType != 'enemy'){
+        if(remote && !global.heap.alarms[holdingName] && sData.ownerType != 'enemy'){
+            
             let droppedResources = remote.find(FIND_DROPPED_RESOURCES);
             //console.log("Checking drops in",remote.name,"and found",droppedResources.length)
             //Retrieve current tasks to check against
@@ -367,6 +367,8 @@ var holdingManager = {
                 let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => helper.isSoldier(crp) && !Memory.diplomacy.allies.includes(crp.owner.username) && !Memory.diplomacy.ceasefire.includes(crp.owner.username))
                 if(hostiles.length && !global.heap.alarms[holdingName]){
                     global.heap.alarms[holdingName] = {tick:Game.time}
+                    let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
+                    creep.say(words.join(''))
                     let hasMission = false;
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                         for(let mission of global.heap.missionMap[holdingName]){

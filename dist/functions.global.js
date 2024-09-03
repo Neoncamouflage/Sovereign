@@ -1,6 +1,7 @@
 const registry = require('registry');
 const supplyDemand = require('supplyDemand');
 const helper = require('functions.helper');
+
 //Update diplomacy
 global.setDiplomacy = function setDiplomacy(type,username){
     //Memory.diplomacy = {allies:[], ceasefire:[], outlaws:[],ledger:[]}

@@ -13,7 +13,7 @@ module.exports = function(grunt) {
                 http:true}
         },
         private: {
-            email: config.email,
+            email: config.localEmail,
             password: config.password,
             branch: 'default',
             server: {host: 'jayseegames.com',

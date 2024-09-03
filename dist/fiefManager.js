@@ -1472,6 +1472,12 @@ function getDomainRooms(fief) {
     Memory.kingdom.fiefs[fief].domain = validRooms;
     return validRooms;
 }
+
+function getControllerSpaces(room,fief){
+    //Get all blocks within range 3 of controller
+    let controller = room.controller.pos
+    
+}
     /*let range = 3;
     //Check if already calculated
     if(Memory.kingdom.fiefs[fief].domain) return Memory.kingdom.fiefs[fief].domain;

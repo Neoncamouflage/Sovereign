@@ -373,6 +373,10 @@ const supplyDemand = {
             }
         }
 
+        if(global.heap.alarms[haulers.room.name]){
+            if(creep.memory.task) getTaskByID(creep.memory.fief,creep.memory.task).unassign(creep)
+        }
+
         haulers.forEach(creep => {
             let carryParts = creep.getActiveBodyparts(CARRY);
             //Add carry parts so we can track idle time

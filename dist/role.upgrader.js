@@ -24,12 +24,11 @@ var roleUpgrader = {
 
         let range = creep.pos.getRangeTo(creep.room.controller);
         
-        if(range > 2 && creep.store.getUsedCapacity() > 0){
+        if(range > 3){
             creep.travelTo(creep.room.controller,{range:1});
+            return;
         }
-        if(range < 4){
-            creep.upgradeController(creep.room.controller)
-        }
+        //If range 3 or less, check if another upgrader is in the path. If so, transfer them 
         if(creep.store.getUsedCapacity() < creep.store.getCapacity() ){
             if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
                 if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
