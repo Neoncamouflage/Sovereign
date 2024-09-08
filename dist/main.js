@@ -43,7 +43,7 @@ module.exports.loop = function () {
         //Segment 9 is for ad-hoc logging
         RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
-        global.heap = {fiefs:{},alarms:{},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]}};
+        global.heap = {fiefs:{},alarms:{},stock:{},kingdomStatus:{fiefs:{},holdings:{},wares:{}},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]},funnelTarget:null};
         if(Game.shard.name == 'shardSeason'){
             global.heap.scoreContainers = [];
         }
@@ -79,8 +79,14 @@ module.exports.loop = function () {
             //If scout data changed,record it to the segment. Check every 100 ticks
             if(Game.time % 100 == 0 && global.heap.newScoutData){
                 console.log("--!!!Updating scout data!!!--")
-                RawMemory.segments[0] = JSON.stringify(global.heap.scoutData)
-                global.heap.newScoutData = false;
+                try{
+                    RawMemory.segments[0] = JSON.stringify(global.heap.scoutData)
+                    global.heap.newScoutData = false;
+                }
+                catch(error){
+                    console.log("CAUGHT AND MOVING ON")
+                    console.log(error)
+                }
             }
         }
     }
@@ -111,6 +117,7 @@ module.exports.loop = function () {
     }
         
     if(Game.time % 1000 === 0){
+        purgeOldScoutData()
         //Every 1000 ticks clear room memory
         //Compile list of rooms to keep
         let keepRooms = [
@@ -504,6 +511,16 @@ function profileMemory(root = Memory, depth = 1) {
     recursiveMemoryProfile(root, sizes, depth);
     console.log(`Time elapsed: ${Game.cpu.getUsed() - start}`);
     RawMemory.segments[9] = JSON.stringify(sizes, undefined, '\t');
+}
+
+global.purgeOldScoutData = function purgeOldScoutData(){
+    let data = global.heap && global.heap.scoutData;
+    if(!data) return false;
+    for(let [room,roomData] of Object.entries(getScoutData())){
+        if(Game.time - roomData.lastRecord > 20000) removeScoutData(room)
+    }
+    RawMemory.segments[0] = JSON.stringify(global.heap.scoutData)
+    global.heap.newScoutData = false;
 }
 
 global.profileMemory = profileMemory;

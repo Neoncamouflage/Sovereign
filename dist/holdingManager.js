@@ -87,7 +87,7 @@ var holdingManager = {
         let remote = Game.rooms[holdingName]
         let holding = Memory.kingdom.holdings[holdingName];
         let fief = holding.homeFief;
-        let data = getScoutData([holdingName])
+        let data = getScoutData(holdingName)
         global.heap.fiefs[fief] = global.heap.fiefs[fief] || {};
         let fiefHeap = global.heap.fiefs[fief];
         let isReserved = remote && remote.controller.reservation && remote.controller.reservation.username == Memory.me;
@@ -305,12 +305,54 @@ var holdingManager = {
                     amount: amount,
                     resourceType: resourceType,
                     international : true,
-                    priority: amount < 1000 ? 5 : 6
+                    priority: 5//amount < 1000 ? 5 : 6
                 };
                 //console.log("Attempting to add",JSON.stringify(details))
                 const taskID = supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
                 //console.log('Holding added new task:', taskID);
             });
+            //Seasonal check for score
+            if(Game.shard.name == 'shardSeason' && Game.rooms[holding.homeFief].storage){
+                let scoreCans = remote.find(FIND_SCORE_CONTAINERS);
+                if(scoreCans.length){
+                    for(let can of scoreCans){
+                        if(can.ticksToDecay < 100) continue;
+                        addSupplyRequest(Game.rooms[holding.homeFief],{type:'pickup',resourceType:RESOURCE_SCORE,amount:can.store.getUsedCapacity(RESOURCE_SCORE),targetID:can.id,international:true,priority:6})
+                    }
+                }
+            }
+            const droppedTombstones = remote.find(FIND_TOMBSTONES);
+            droppedTombstones.forEach(stone =>{
+                Object.entries(stone.store).forEach(([resource,amount]) => {
+                    let details = {
+                        type: 'pickup',
+                        targetID: stone.id,
+                        amount: amount,
+                        resourceType: resource,
+                        priority: 6
+                    };
+                    supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
+                });
+            });
+            let cans = []
+            for(let source of Object.values(holding.sources)){
+                if(source.can && Game.getObjectById(source.can) && Game.getObjectById(source.can).store.getUsedCapacity() > 100) cans.push(source.can)
+                if(source.can && !Game.getObjectById(source.can) ) delete source.can
+            }
+            for(let canID of cans){
+                let can = Game.getObjectById(canID)
+                for(let resType in can.store){
+                    let details = {
+                        type: 'pickup',
+                        targetID: canID,
+                        amount: can.store[resType],
+                        resourceType: resType,
+                        priority: 5,
+                        international:true
+                    };
+                    supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
+                }
+            }
         }
         
         
@@ -330,7 +372,7 @@ var holdingManager = {
 
         
         if(Game.time % 3 == 0){
-            if(!enemyReserve){
+            if(!enemyReserve && !global.heap.alarms[holdingName]){
                 //-- Harvester --
                 //Check each source for open space and harvester need
                 //console.log("RUNNING HOLDING SPAWN")
@@ -340,7 +382,7 @@ var holdingManager = {
                     return obj;
                 },{});
                 if(!fiefCreeps.miner) fiefCreeps.miner = [];
-                let fiefMiners = fiefCreeps.miner.filter(creep => creep.memory.holding == holdingName)
+                let fiefMiners = fiefCreeps.miner.filter(creep => creep.memory.holding == holdingName && (creep.spawning ||creep.ticksToLive > (creep.body.length * CREEP_SPAWN_TIME) + holding.sources[creep.memory.target].path.length))
                 //console.log("TARGET SOURCES",JSON.stringify(targetSources))
                 if(fiefMiners){
                     fiefMiners.forEach(creep =>{
@@ -354,9 +396,7 @@ var holdingManager = {
                 Object.entries(holding.sources).forEach(([sourceID,source])=>{
                     //If there's no room, or if we have enough harvest power, return
 
-                    if((source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= (isReserved ? SOURCE_ENERGY_CAPACITY : SOURCE_ENERGY_NEUTRAL_CAPACITY)/ENERGY_REGEN_TIME)) return;
-
-                    //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
+                    if((source.openSpots.length <= targetSources[sourceID].harvs || targetSources[sourceID].power >= (isReserved ? SOURCE_ENERGY_CAPACITY : SOURCE_ENERGY_NEUTRAL_CAPACITY)/ENERGY_REGEN_TIME)) return;
                     let sev = 30
                     //console.log("Adding remote harv to spawnQueue")
                     registry.requestCreep({sev:sev-spawnPad,memory:{role:'miner',fief:fief,target:sourceID,holding:holdingName,status:'spawning',preflight:false}})
@@ -373,6 +413,12 @@ var holdingManager = {
                 if(hostiles.length && !global.heap.alarms[holdingName]){
                     global.heap.alarms[holdingName] = {tick:Game.time}
                     let hasMission = false;
+                    //Heals don't get one yet
+                    let hasHeal = false
+                    for(let host of hostiles){
+                        if(host.getActiveBodyparts(HEAL) > 0) hasHeal = true;
+                    }
+                    if(hasHeal) return;
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                         for(let mission of global.heap.missionMap[holdingName]){
                             if(mission.type == 'defend') hasMission = true;
@@ -399,16 +445,7 @@ var holdingManager = {
                 }
                 //Get controller spots if we don't
                 if(!holding.controllerSpots) holding.controllerSpots = helper.getOpenSpots(remote.controller.pos).length
-                //Seasonal check for score
-                if(Game.shard.name == 'shardSeason' && Game.rooms[fief].storage){
-                    let scoreCans = remote.find(FIND_SCORE_CONTAINERS);
-                    if(scoreCans.length){
-                        for(let can of scoreCans){
-                            if(can.ticksToDecay < 100) continue;
-                            addSupplyRequest(Game.rooms[fief],{type:'pickup',resourceType:RESOURCE_SCORE,amount:can.store.getUsedCapacity(RESOURCE_SCORE),targetID:can.id,international:true,priority:6})
-                        }
-                    }
-                }
+
                 let reserverPower = 0;
                 let claimers = 0;
                 let tickend = false;
@@ -833,6 +870,8 @@ var holdingManager = {
 
     }
 };
+
+
 
 function getDistanceFF(roomName,origin){
     let terrain = Game.map.getRoomTerrain(roomName)

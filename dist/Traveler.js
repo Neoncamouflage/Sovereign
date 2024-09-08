@@ -260,7 +260,7 @@ class Traveler {
                     return false;
                 }
             }  
-            else if (Traveler.checkAvoid(roomName)
+            else if (Traveler.checkAvoid(roomName) && !options.military
                 && roomName !== destRoomName && roomName !== originRoomName) {
                 return false;
             }

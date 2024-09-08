@@ -66,12 +66,19 @@ Lance.prototype.removeCreep = function(creep) {
     }
 };
 
-Lance.prototype.populate = function(fief,kingdomCreeps,role,sev=60){
+Lance.prototype.populate = function(fief,kingdomCreeps,role){
     let roleRef = {
         'blinky':'skirmisher',
         'demo'  :'sapper',
         'melee' :'pikeman'
     }
+    //How far away a creep can be and be allowed to join as a reserve
+    let distanceRef = {
+        'pikeman':4,
+        'skirmisher':2
+    }
+    let sev = 60;
+    if(role == 'pikeman') sev = 30;
     let rolePick = role || roleRef[this.lanceType] || 'generic'
     let reserve = kingdomCreeps.reserve;
     let foundReserve = false;
@@ -81,7 +88,7 @@ Lance.prototype.populate = function(fief,kingdomCreeps,role,sev=60){
     console.log(kingdomCreeps[this.name])
     if(reserve.length){
         //Convert to creeps and sort by linear distance
-        reserve = reserve.map(crpID => Game.getObjectById(crpID)).filter(crp => crp.memory.role == rolePick && crp.ticksToLive > 200).sort((a, b) => {
+        reserve = reserve.map(crpID => Game.getObjectById(crpID)).filter(crp => crp.memory.role == rolePick && crp.ticksToLive > distanceRef[rolePick]*100 && Game.map.getRoomLinearDistance(crp.room.name, this.targetRoom) <= distanceRef[rolePick]).sort((a, b) => {
             let distanceA = Game.map.getRoomLinearDistance(a.room.name, this.targetRoom);
             let distanceB = Game.map.getRoomLinearDistance(b.room.name, this.targetRoom);
             return distanceA - distanceB;

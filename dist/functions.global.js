@@ -55,8 +55,11 @@ global.setDiplomacy = function setDiplomacy(type,username){
         
     }
 }
+global.removeScoutData = function removeScoutData(roomName){
+    if(global.heap && global.heap.scoutData && global.heap.scoutData[roomName]) delete global.heap.scoutData[roomName];
+}
 //Scout Data Getter and Setter - Single is an optional string for a specific property
-global.getScoutData = function getScoutData(roomName=false,single=false){
+global.getScoutData = function getScoutData(roomName=false){
         /**
      * roomName: r
      * lastRecord: l
@@ -70,36 +73,42 @@ global.getScoutData = function getScoutData(roomName=false,single=false){
      * mineral: m
      * exits: e
      */
-    let scoutData = global.heap.scoutData;
-    //If first tick and no scout data, return false
-    if(!scoutData || !scoutData[roomName]) return false;
+    let scoutData = global.heap && global.heap.scoutData;
+    //If first tick or no scout data for a specific room, return false
+    if(!scoutData || (roomName && !scoutData[roomName])){
+        console.log("No scout data available! Room?",JSON.stringify(roomName))
+        return false;
+    }
     //No room name means all data
-    if(!roomName) return scoutData;
-    //Convert data
-    let roomData = {
-        roomName: scoutData[roomName]['r'],
-        lastRecord: scoutData[roomName]['l'],
-        roomType: scoutData[roomName]['t'],
-        ownerType: scoutData[roomName]['o'],
-        owner: scoutData[roomName]['w'],
-        controller: scoutData[roomName]['c'],
-        controllerLevel: scoutData[roomName]['u'],
-        towers: scoutData[roomName]['t'],
-        sources: scoutData[roomName]['s'],
-        mineral: scoutData[roomName]['m'],
-        exits: scoutData[roomName]['e']
-    };
-    if(!roomData){
-        console.log(`No scout data for ${roomName}`)
-        return false;
+    if(!roomName){
+        let roomData = {};
+        for(let roomName of Object.keys(scoutData)){
+            roomData[roomName] = convertData(roomName);
+        }
+        return roomData;
     }
-    //If they don't want
-    if(!single) return roomData;
-    if(!roomData[single]){
-        console.log(`${single} is not available in scout data for ${roomName}`);
-        return false;
+    //Else just the requested room
+    else{
+        return convertData(roomName)
     }
-    return roomData[single];
+
+    
+
+    function convertData(roomName){
+        return {
+            roomName: scoutData[roomName]['r'],
+            lastRecord: scoutData[roomName]['l'],
+            roomType: scoutData[roomName]['t'],
+            ownerType: scoutData[roomName]['o'],
+            owner: scoutData[roomName]['w'],
+            controller: scoutData[roomName]['c'],
+            controllerLevel: scoutData[roomName]['u'],
+            towers: scoutData[roomName]['t'],
+            sources: scoutData[roomName]['s'],
+            mineral: scoutData[roomName]['m'],
+            exits: scoutData[roomName]['e']
+        };
+    }
 }
 global.setScoutData = function setScoutData(room,data={},force=false){
     //console.log("Setting data for",room,JSON.stringify(data))
@@ -134,17 +143,16 @@ global.setScoutData = function setScoutData(room,data={},force=false){
      * exits: e
      */
     global.heap.scoutData[room.name] = {
-        r : room.name,
-        l : Game.time,
-        t: roomType,
-        o: ownerType,
-        w: ownerType ?  owner : null,
-        c: room.controller ? {x:room.controller.pos.x,y:room.controller.pos.y} : null,
-        u: roomType == 'fief' ? room.controller.level : null,
-        y: towerPositions,
-        s: sources,
-        m: mineral ? {x:mineral.pos.x,y:mineral.pos.y,type:mineral.mineralType} : null,
-        e: Game.map.describeExits(room.name),
+        r : room.name || '',
+        l : Game.time || '',
+        t: roomType || '',
+        o: ownerType || '',
+        w: ownerType ?  owner : '',
+        c: room.controller ? {x:room.controller.pos.x,y:room.controller.pos.y} : '',
+        u: roomType == 'fief' ? room.controller.level : '',
+        y: towerPositions || '',
+        s: sources || '',
+        m: mineral ? {x:mineral.pos.x,y:mineral.pos.y,type:mineral.mineralType} : ''
     }
     if(Game.shard.name == 'shardSeason'){
         //global.heap.scoutData[room.name].scoreCollector = room.find(FIND_SCORE_COLLECTORS).map(coll => {return {x:coll.pos.x,y:coll.pos.y,id:coll.id}})

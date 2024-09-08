@@ -4,6 +4,10 @@ const DEFAULT_MISSION_PRIORITY = 5;
 const marshal = {
     //Assign missions to troupes and run them
     run: function(kingdomCreeps){
+        //Before we do anything, clear any old alarms. 1500 ticks expiration
+        for(let [room,alarm] of Object.entries(global.heap.alarms)){
+            if(Game.time - alarm.tick > 1500) delete global.heap.alarms[room]
+        }
         for(let mission of Object.values(global.heap.missions)){
             if(!mission.assigned){
                 let troupe = new Troupe(mission);
@@ -19,10 +23,17 @@ const marshal = {
             let injured = creep.room.find(FIND_MY_CREEPS).filter(crp => crp.hits < crp.hitsMax)
             if(injured.length){
                 creep.travelTo(injured[0])
-                creep.heal(injured[0])
+                if(creep.pos.getRangeTo(injured[0]) > 1){
+                    creep.rangedHeal(injured[0])
+                }else{
+                    creep.heal(injured[0])
+                }
             }
-            if(creep.room.name != creep.memory.fief || creep.pos.getRangeTo(creep.room.controller) < 10){
+            if(creep.room.name != creep.memory.fief){
                 creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
+            }
+            else if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
+                creep.travelTo(Game.rooms[creep.memory.fief].controller);
             }
         }
     },
@@ -52,11 +63,16 @@ const marshal = {
             roomName:roomName,
         })
     },
-    destroyCore(target){
+    destroyCore(roomName){
         marshal.addMission({
             type:'destroyCore',
-            roomName:target.room.name,
-            targets:[target] || null
+            roomName:roomName
+        })
+    },
+    MineSKMineral(roomName){
+        marshal.addMission({
+            type:'mineSKMineral',
+            roomName:roomName
         })
     }
 }

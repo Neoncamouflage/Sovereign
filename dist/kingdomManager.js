@@ -32,7 +32,7 @@ const kingdomManager = {
         //ArmyManager - Strategic logic vs tactical for Lances/Troupes, mission management level. Handles strength calculations, Lance/Troupe requests/assignments, attack/retreat, etc.
         //SiegeManager - Handles room defense in the event of a siege. Takes control of all room elements, including army units.
 
-        let kingdomStatus = {fiefs:{},holdings:{}}
+
         //Assign creeps to their fiefs and sort by role
         kingdomCreeps = sortCreeps();
         global.heap.army.reserve = kingdomCreeps.reserve || [];
@@ -44,11 +44,20 @@ const kingdomManager = {
         //Loop through all fiefs and holdings and run their respective manager
         //Holdings first so we can run the registry for each fief in the same loop
         marshal.run(kingdomCreeps);
-        kingdomStatus.holdings = holdingManager.run(kingdomCreeps);
+        holdingManager.run(kingdomCreeps);
+        //Every 300 ticks, check for a funnel target
+        if(false && Game.time % 300 == 0){
+            let funnels = Object.values(Game.rooms).filter(rm => rm.controller && rm.controller.my && rm.controller.level == 6)
+            let fRoom = funnels.reduce((maxRoom, room) => {
+                return (maxRoom === null || room.controller.progress > maxRoom.controller.progress) ? room : maxRoom;
+            }, null);
+            global.heap.funnelTarget = fRoom == null ? null : fRoom.name;
+        }
+
+        global.heap.stock = { ...global.heap.kingdomStatus.wares };
+        global.heap.kingdomStatus.wares = {};
         for(const fief in Memory.kingdom.fiefs){
             supplyDemand.prepShipping(fief);
-            //Assignments
-            let fiefResults;
             kingdomCreeps[fief] = kingdomCreeps[fief] || [];
             //Make sure fief is live, remove if not
             if(!Game.rooms[fief] || !Game.rooms[fief].controller.my){
@@ -57,15 +66,11 @@ const kingdomManager = {
                 continue;
             }
             
-            fiefResults = fiefManager.run(Game.rooms[fief],kingdomCreeps[fief]);
+            global.heap.kingdomStatus[fief] = fiefManager.run(Game.rooms[fief],kingdomCreeps[fief]);
             //Manage shipping tasks
             supplyDemand.manageShipping(fief,kingdomCreeps[fief]['hauler'] || []);
-            //Cache the status to display next tick
-            kingdomStatus.fiefs[fief] = fiefResults;
             //Run spawn logic every 3 ticks
-            //if(Game.time % 3 == 0) kingdomStatus.fiefs[fief].spawnQueue = 
             registry.calculateSpawns(Game.rooms[fief],kingdomCreeps[fief]);
-            //console.log(granary.getIncome(fief))
         }
 
         
@@ -84,8 +89,8 @@ const kingdomManager = {
         }
 
         //Run status manager to draw room visuals
-        //Must be last thing run in kingdom for accurate details
-        //if(Memory.statusVisuals)statusManager.run(kingdomStatus);
+        //Separate from painter as it must be last thing run in kingdom for accurate details
+        if(Memory.visuals.drawStatus)statusManager.run();
     }
 }
 

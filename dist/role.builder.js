@@ -17,10 +17,20 @@ const roleBuilder = {
                 let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
                 target = creep.pos.findClosestByRange(targets)
                 if(target){creep.memory.target = target.id}
-                else{
+                else if(creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 50000){
                     creep.memory.status = 'upgrading'
                     upgrader.run(creep);
                     return;
+                }
+                else{
+                    let spawns = Memory.kingdom.fiefs[creep.memory.fief].spawns.map(spw => Game.getObjectById(spw))
+                    let tSpawn = creep.pos.findClosestByRange(spawns)
+                    if(creep.pos.getRangeTo(tSpawn) == 1){
+                        if(!tSpawn.spawning) tSpawn.recycleCreep(creep)
+                    }
+                    else{
+                        creep.travelTo(tSpawn)
+                    }
                 }
                 
             }
@@ -37,15 +47,15 @@ const roleBuilder = {
             //Submit order if not close to storage
             if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
                 if((!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5)){
-                    if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2) supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                    if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2) supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
                 }
-                else if(creep.store.getUsedCapacity() == 0){
+                else{
                     if(creep.room.storage){
                         let range = creep.pos.getRangeTo(creep.room.storage);
                         if(range == 1){
                             creep.withdraw(creep.room.storage,RESOURCE_ENERGY);
                         }
-                        else if(range < 5){
+                        else if(creep.store.getUsedCapacity() == 0){
                             creep.travelTo(creep.room.storage)
                         }
                     }
@@ -119,7 +129,7 @@ const roleBuilder = {
             //If we have a target and need energy, request
             if(!target || creep.pos.getRangeTo(target) > 6) continue;
             if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
-                supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
         }
 

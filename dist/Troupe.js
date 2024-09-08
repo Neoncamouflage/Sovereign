@@ -62,7 +62,7 @@ Troupe.prototype.removeLance = function(lance) {
 };
 
 Troupe.prototype.run = function(kingdomCreeps) {
-    if(this.mission.done){
+    if(this.mission.done || !this.mission){
         for(let lance of this.lances){
             delete global.heap.army.lances[lance.name]
         }
@@ -171,7 +171,7 @@ function destroyCoreLogic(troupe){
     else if(!targets.length && room){
         let targetFind = room.find(FIND_HOSTILE_STRUCTURES)
         //If none, mission over
-        if(!targetFind.length) this.mission.complete();
+        if(!targetFind.length) troupe.mission.complete();
         //Otherwise, assign them to the mission
         troupe.mission.targets = targetFind.map(crp => crp.id);
         status = 'attack';

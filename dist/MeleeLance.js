@@ -30,12 +30,12 @@ MeleeLance.prototype.runCreeps = function(myCreeps){
             }
             //If target but no specific place to stand, just travel towards it until range 3
             else{
-                creep.travelTo(target)
+                creep.travelTo(target,{military:true})
             }
         }
         else if(targetPos){
             console.log(creep,"travelling")
-            let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{range:targetPos.range});
+            let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{range:targetPos.range,military:true});
             console.log(JSON.stringify(x))
         }
         //If the target is in range, we dismantle

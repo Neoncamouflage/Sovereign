@@ -1,10 +1,29 @@
-var roleClaimer = {
+const helper = require('functions.helper');
+
+const roleClaimer = {
 
     /** @param {Creep} creep **/
     run: function(creep) {
         if(creep.memory.job == 'reserver'){
             if(!creep.memory.preflight){
                 creep.memory.preflight = true;
+            }
+            if(global.heap.alarms[creep.memory.holding]){     
+                if(creep.room.name != creep.memory.fief){
+                    creep.memory.stay = false;
+                    creep.memory.status = 'flee';
+                    creep.travelTo(Game.rooms[creep.memory.fief].controller)
+                    let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
+                    creep.say(words.join(''))
+                }
+                else{
+                    console.log("AYE")
+                    if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
+                        console.log("TWO")
+                        creep.travelTo(Game.rooms[creep.memory.fief].controller);
+                    }
+                }
+                return;
             }
             var targetRoom = creep.memory.holding;
             var targetText = 'Tax Collection Ongoing💰'
@@ -73,15 +92,17 @@ var roleClaimer = {
                 creep.travelTo(new RoomPosition(38, 23, targetRoom));
             }
             else {
+            
+                if(creep.pos.getRangeTo(creep.room.controller) > 1){
+                    creep.travelTo(creep.room.controller)
+                    return;
+                }
                 let g = creep.signController(creep.room.controller, targetText);
-                if(g == ERR_NOT_IN_RANGE) {
-                    creep.travelTo(creep.room.controller);
+                if(creep.room.controller.reservation && creep.room.controller.reservation.username.toLowerCase() != Memory.me.toLowerCase()){
+                    creep.attackController(creep.room.controller)
                 }
-                if(creep.claimController(creep.room.controller) == ERR_NOT_IN_RANGE) {
-                    creep.travelTo(creep.room.controller);
-                }
-                else if(g == 0){
-                    creep.suicide();
+                else{
+                    creep.claimController(creep.room.controller)
                 }
             }   
         }

@@ -309,7 +309,7 @@ var roleGeneralist = {
                                 //console.log(g)
                                 if(g== ERR_NOT_IN_RANGE){
 
-                                    let x = creep.travelTo(target);
+                                    let x = creep.travelTo(target,{range:1});
                                 }
                                 else{
                                     let can = creep.pos.findClosestByPath(FIND_STRUCTURES, {

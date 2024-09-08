@@ -17,7 +17,8 @@ const registry = {
         'archer'   :'Archer',
         'generalist':'Settler',
         'skirmisher'    :'Skirmisher',
-        'pikeman'   :'Pikeman'
+        'pikeman'   :'Pikeman',
+        'mineralHarvester': 'Gemcutter'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -65,7 +66,7 @@ const registry = {
             
             
             //Check if spawn has energy
-            console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
+            //console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
                 //If spawning, continue
@@ -165,20 +166,7 @@ function getBody(role,room,job='default',fiefCreeps,plan){
         case 'harvester':
             switch(job){
                 case 'mineralHarvester':
-                    parts = [MOVE,WORK,WORK,WORK];
-                    let partsCost = 0;
-                    for(each of parts){
-                        partsCost += BODYPART_COST[each];
-                    }
-                    //Add work/move cost
-                    let engAvail = room.energyCapacityAvailable
-                    mult = Math.floor(engAvail/partsCost)
-                    //Max number of arrays so we don't pass 50 parts
-                    let arrMax = Math.floor(50/parts.length)
-                    //Fill new body with either the multiple we can afford or the max, whichever is smaller
-                    newBod = [].concat(...Array(Math.min(mult,arrMax)).fill(parts));
-                    //console.log(newBod)
-                    return newBod;
+                    return getMHarvester(room)
                 case 'energyHarvester':
                     return getEHarvester(room,fiefCreeps)
             }
@@ -456,9 +444,9 @@ function getGeneralist(room) {
 //Miner - Yeoman
 function getMiner(holding){
     let isReserved = Game.rooms[holding] && Game.rooms[holding].controller.reservation && Game.rooms[holding].controller.reservation.username == Memory.me;
-    let newBody = isReserved ? [MOVE,MOVE,CARRY,WORK,WORK] : [MOVE,WORK];
+    let newBody = Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level > 4 ? [MOVE,MOVE,CARRY,WORK,WORK] : [MOVE,WORK];
     let partsCost = 0
-    let maxWorkParts = isReserved ? 6 : 3;
+    let maxWorkParts = Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level > 4 ? 6 : 3;
     let energyAvailable = Game.rooms[Memory.kingdom.holdings[holding].homeFief].energyCapacityAvailable;
     let workPartsCount = newBody.filter(part => part === WORK).length;
 
@@ -546,7 +534,7 @@ function getPikeman(room,plan){
     return [newBody,totalCost];
 }
 function getSkirmisher(room,plan){
-    let parts = [RANGED_ATTACK,RANGED_ATTACK,MOVE,MOVE,MOVE,HEAL]
+    let parts = [MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,HEAL]
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let energyAvailable = room.energyCapacityAvailable
     //Max size is the set body size or energy cap, whichever is less
@@ -569,27 +557,23 @@ function getSkirmisher(room,plan){
 
 //General hauler - Porter
 function getHauler(room,fiefCreeps){
-    //console.log("Firing Hauler")
     let parts = room.controller.level > 3 && room.storage ? [MOVE, CARRY] : [MOVE,CARRY];
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
-    //If we have 0 average and planned, and no haulers, the energy is what we have now, otherwise we wait for at least half of max
-    //console.log("Hauler spawning: Ticknet",tickNet,"AvgNet",avgNet,"Hauler creeps?",fiefCreeps['hauler'])
-    let maxCap = global.cpuAverage > 80 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable*0.66)
+    let maxCap = global.cpuAverage > 90 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable/2)
     let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? maxCap : room.energyAvailable;
-    //console.log("Available energy",energyAvailable)
     let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];
     let totalCost = 0;
-    //console.log(`Max parts: ${maxParts}, energyAvailable: ${energyAvailable}, setCost: ${setCost}, cap: ${cap}`)
+
     newBody.push(...parts);
     totalCost += setCost;
-    //Add parts til we hit part or energy cap
+
     for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
-    //console.log("Hauler body",newBody)
+
     return [newBody,totalCost];
 }
 
@@ -626,6 +610,23 @@ function getScout(room,fiefCreeps){
     if(!fiefCreeps.harvester || !fiefCreeps.hauler) return ['REGISTRY_BABY_FIEF',-1];
     
     return [[MOVE],50]
+}
+function getMHarvester(room){
+    parts = [MOVE,MOVE,WORK,WORK,WORK];
+    let partsCost = 0;
+    for(each of parts){
+        partsCost += BODYPART_COST[each];
+    }
+    //Add work/move cost
+    let engAvail = room.energyCapacityAvailable
+    mult = Math.floor(engAvail/partsCost)
+    //Max number of arrays so we don't pass 50 parts
+    let arrMax = Math.floor(50/parts.length)
+    //Fill new body with either the multiple we can afford or the max, whichever is smaller
+    newBod = [].concat(...Array(Math.min(mult,arrMax)).fill(parts));
+    partsCost = newBod.reduce((totalCost, part) => totalCost + BODYPART_COST[part], 0);
+    //console.log(newBod)
+    return [newBod,partsCost];
 }
 
 function getReserver(room,fiefCreeps){

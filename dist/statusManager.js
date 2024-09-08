@@ -1,45 +1,73 @@
 const profiler = require('screeps-profiler');
 
 /*
-Kingdom status object structure:
-{
-    roomName:{
-        {
-            roomLevel:roomLevel,
-            cSites: cSites.length,
-            wares: totalWares(room),
-            totalCreeps: fiefCreeps.length,
-            fiefCreeps: fiefCreeps,
-            hostileCreeps: roomBaddies,
-            controllerProgress: room.controller.progress,
-            safeMode: room.controller.safeMode,
-            spawnUse: spawnUse,
-            cpuUsed: (Game.cpu.getUsed() - cpuStart).toFixed(2),
-            spawnQueue: spawnQueue,
-            storageLevel: storageLevel
-        }
+By default this module references an object stored in global that is updated by the rest of the bot.
+The object must conform to the following schema.
+kingdomStatus: {
+    'roomName' : {
+        roomLevel:roomLevel,
+        wares: totalWares(room),
+        totalCreeps: totalCreeps,
+        fiefCreeps: fiefCreeps,
+        hostileCreeps: roomBaddies,
+        controllerProgress: room.controller.progress,
+        safeMode: room.controller.safeMode,
+        spawnUse: fief.combinedSpawnUse,
+        currentlySpawning: Object.values(Game.spawns).filter(spawn => spawn.spawning && spawn.room.name == room.name).map(spawn => Game.creeps[spawn.spawning.name].memory.role),
+        storageLevel: storageLevel
     }
 }
 
 
 */
 
+// --Constants --
+//These values can be changed to adjust the appearance of the scrolls
 
+//Base scroll dimensions and colors
+const ROLL_OPACITY = 1;
+const MIDDLE_OPACITY = 0.5;
+const SCROLL_WIDTH = 6.25;
+const SCROLL_LENGTH = 0.75;
+const SCROLL_FILL_COLOR = '#c99157';
+const SCROLL_END_COLOR = '#ffdd8a';
+//Max fiefs to display before it has to cycle
+//Lower this to take up less space, increasing past 7 causes it to extend past the bottom of the room
+const MAXIMUM_FIEFS_DISPLAYED = 7;
 
+//Icons
+const RCL_ICONS = {
+    0:'0️⃣',
+    1:'1️⃣',
+    2:'2️⃣',
+    3:'3️⃣',
+    4:'4️⃣',
+    5:'5️⃣',
+    6:'6️⃣',
+    7:'7️⃣',
+    8:'8️⃣'
+};
+const STORAGE_ICONS = {
+    0:'🌑', //No Storage
+    1:'🌘', //Less than 1/4 full
+    2:'🌗', //Less than half full
+    3:'🌖', //Less than 3/4 full
+    4:'🌕' //More than 3/4 full
+};
+const STATUS_ICONS = {
+    0:'👍', //Good
+    1:'⚔️', //Hostiles in room
+    2:'🛡️'  //Safemode
+};
+//How many ticks before the scroll changes to a new view
+const SCROLL_CYCLE_TICKS = 5;
 const statusManager = {
 
-    run: function(kingdomStatus) {
-        
-        //Opacity
-        let rollOpacity = 1;
-        let middleOpacity = 0.5
-        //Fixed scroll width
-        let scrollWidth = 6.25;
-        
-        //Fixed scroll length when empty
-        var scrollLength =  0.75;
-        //Wares object
-        let kingdomWares = {}
+    run: function() {
+        let kingdomStatus = global.heap.kingdomStatus;
+        let rVis = new RoomVisual();
+        drawScrolls();
+        return;
         //Loop through status of each fief for wares
         Object.keys(kingdomStatus.fiefs).forEach(fief => {
             //There's a better way to do this, fix at some point
@@ -57,94 +85,31 @@ const statusManager = {
         })
         
         //Extend scroll length as needed based on the amount of wares
-        if(kingdomWares && Object.keys(kingdomWares).length > 0) scrollLength += Object.keys(kingdomWares).length;
-        else{scrollLength +=1;}
+        if(kingdomWares && Object.keys(kingdomWares).length > 0) SCROLL_LENGTH += Object.keys(kingdomWares).length;
+        else{SCROLL_LENGTH +=1;}
         //console.log(Object.keys(roomWares).length)
         
         //Banner dimensions
         let bannerWidth = 15
         let bannerLength = 1
-        if(scrollLength == 0) scrollLength +=1;
+        if(SCROLL_LENGTH == 0) SCROLL_LENGTH +=1;
         //Build banner flag
-        new RoomVisual().poly([[49.5,-0.5],[49.5 - bannerWidth - 1,-0.5],[49.5- bannerWidth,bannerLength/2 - 0.5],[49.5 - bannerWidth - 1,bannerLength-0.5],[49.5,bannerLength-0.5]], {
+        rVis.poly([[49.5,-0.5],[49.5 - bannerWidth - 1,-0.5],[49.5- bannerWidth,bannerLength/2 - 0.5],[49.5 - bannerWidth - 1,bannerLength-0.5],[49.5,bannerLength-0.5]], {
             fill: '#FFBA4B',
             opacity:0.6,
             stroke:'black'
         }); 
          
         
-        //Build wares scroll top
-        new RoomVisual().circle(scrollWidth-.4,0.20,{
-            radius: .75,
-            fill:'#c99157',
-            opacity: rollOpacity,
-            stroke: '#c99157'
-        });
-        new RoomVisual().rect(-0.25, -0.5,scrollWidth, 1.5,{
-            opacity: rollOpacity,
-            fill:'#c99157'
-        }); 
-        new RoomVisual().circle(-0.25,0.22,{
-            radius: .73,
-            fill:'#ffdd8a',
-            opacity: rollOpacity,
-            stroke: '#c99157'
-        });
 
-        //Middle of wares scroll
-        new RoomVisual().rect(-0.5, 0.9, scrollWidth+0.2, scrollLength,{
-            opacity: middleOpacity,
-            fill:'#c99157'
-        }); 
-
-        //Bottom of wares scroll
-        new RoomVisual().circle(scrollWidth-.4,scrollLength+1,{
-            radius: .70,
-            fill:'#c99157',
-            opacity: rollOpacity,
-            stroke: '#c99157'
-        });
-        new RoomVisual().rect(-0.25, scrollLength+0.25,scrollWidth, 1.5,{
-            opacity: rollOpacity,
-            fill:'#c99157'
-        }); 
-        new RoomVisual().circle(-0.25,scrollLength+1,{
-            radius: .70,
-            fill:'#ffdd8a',
-            opacity: rollOpacity,
-            stroke: '#c99157'
-        });
         
         //Kingdom text array holds each line inserted for the fief
         let kingdomText = [];
-        //Icon references
-        let storeIcon = {
-            0:'🌑', //No Storage
-            1:'🌘', //Less than 1/4 full
-            2:'🌗', //Less than half full
-            3:'🌖', //Less than 3/4 full
-            4:'🌕' //More than 3/4 full
-        };
+
         //Current line text
         let fiefStatus = ''
         //Storage variable
         let storePart;
-        let statusIcons = {
-            0:'👍', //Good
-            1:'⚔️', //Hostiles in room
-            2:'🛡️'  //Safemode
-        }
-        let roomLevelIcons = {
-            0:'0️⃣',
-            1:'1️⃣',
-            2:'2️⃣',
-            3:'3️⃣',
-            4:'4️⃣',
-            5:'5️⃣',
-            6:'6️⃣',
-            7:'7️⃣',
-            8:'8️⃣'
-        }
         //Loop through all fiefs in the status object to fill out their details
         
         Object.keys(kingdomStatus.fiefs).forEach(fief => {
@@ -364,52 +329,7 @@ const statusManager = {
             })
         });
         
-        //Build kingdom scroll below wares
-        new RoomVisual().circle(scrollWidth-.4,scrollLength+3,{
-            radius: .75,
-            fill:'#c99157',
-            opacity: 1,
-            stroke: '#c99157'
-        });
-        new RoomVisual().rect(-0.25, scrollLength+2.205,scrollWidth, 1.59,{
-            opacity: 1,
-            fill:'#c99157'
-        }); 
-        new RoomVisual().circle(-0.25,scrollLength+3,{
-            radius: .75,
-            fill:'#ffdd8a',
-            opacity: 1,
-            stroke: '#c99157'
-        });
-        scrollLength += 3;
-        //Middle of scroll
-        new RoomVisual().rect(-0.5, scrollLength+0.75, scrollWidth+0.2, kingdomText.length+1,{
-            opacity: 0.5,
-            fill:'#c99157'
-        }); 
-        //Write kingdom stats
-        textCount = 0;
-        for(each of kingdomText){
-            new RoomVisual().text(each, 0, scrollLength+1.7+textCount, {color: 'black', font: 'bold 0.6 Bridgnorth',align:'left'});
-            textCount +=1;
-        }
-        //Bottom of scroll
-        new RoomVisual().circle(scrollWidth-.4,scrollLength+kingdomText.length+2,{
-            radius: .70,
-            fill:'#c99157',
-            opacity: rollOpacity,
-            stroke: '#c99157'
-        });
-        new RoomVisual().rect(-0.25, scrollLength+kingdomText.length+1.25,scrollWidth, 1.5,{
-            opacity: rollOpacity,
-            fill:'#c99157'
-        }); 
-        new RoomVisual().circle(-0.25,scrollLength+kingdomText.length+2,{
-            radius: .70,
-            fill:'#ffdd8a',
-            opacity: rollOpacity,
-            stroke: '#c99157'
-        });
+
         //Banner Flag Stats 
         //CPU
         let bannerText = Game.cpu.getUsed().toFixed(2)+'/'+Game.cpu.limit
@@ -420,13 +340,13 @@ const statusManager = {
 
         //Write banner
         let bannerDist = 49 - (bannerWidth-0.75)
-        new RoomVisual().text(bannerText, bannerDist, 0.25, {color: 'black', font: 'bold 0.8 Bridgnorth', align:'left'});
+        rVis.text(bannerText, bannerDist, 0.25, {color: 'black', font: 'bold 0.8 Bridgnorth', align:'left'});
 
 
 
         //Scroll Labels ----------------------//
-        new RoomVisual().text('📦Wares', scrollWidth/2, 0.5, {color: 'black', font: 'bold 1 Bridgnorth'});
-        new RoomVisual().text('🏰Fiefs '+Object.keys(Memory.kingdom.fiefs).length+'/'+Game.gcl.level, scrollWidth/2, scrollLength+0.3, {color: 'black', font: 'bold 1 Bridgnorth'});
+        rVis.text('📦Wares', SCROLL_WIDTH/2, 0.5, {color: 'black', font: 'bold 1 Bridgnorth'});
+        rVis.text('🏰Fiefs '+Object.keys(Memory.kingdom.fiefs).length+'/'+Game.gcl.level, SCROLL_WIDTH/2, SCROLL_LENGTH+0.3, {color: 'black', font: 'bold 1 Bridgnorth'});
         //Room inventory
         try{
             let waresCount = 0;
@@ -434,7 +354,7 @@ const statusManager = {
             Object.keys(kingdomWares).forEach(ware =>{
                 //console.log(ware)
                 waresText = ware.charAt(0).toUpperCase() + ware.slice(1)+': '+kingdomWares[ware].toLocaleString();
-                new RoomVisual().text(waresText, 0, 1.7+waresCount, {color: 'black', font: 'bold 0.75 Bridgnorth',align:'left'});
+                rVis.text(waresText, 0, 1.7+waresCount, {color: 'black', font: 'bold 0.75 Bridgnorth',align:'left'});
                 waresCount+=1;
             });
             
@@ -445,7 +365,97 @@ const statusManager = {
 
 
         return;
-        
+
+        function drawScrolls(){
+            //Cycle the scrolls based on the cycle constant. Wares scroll will cycle through:
+            //Boosts - T1/T2/T3
+            //Base minerals and energy
+            //Factory commodities
+            
+            //Minimum length of 1 if empty, otherwise extend the scroll up to the maximum
+            let totalFiefLength = SCROLL_LENGTH + Math.min(MAXIMUM_FIEFS_DISPLAYED,Math.max(1,Object.keys(kingdomStatus.fiefs).length))
+            let totalWaresLength = SCROLL_LENGTH + Math.min(MAXIMUM_FIEFS_DISPLAYED,Math.max(1,Object.keys(kingdomStatus.fiefs).length))
+            //Build wares scroll top
+            rVis.circle(SCROLL_WIDTH-.4,0.20,{
+                radius: .75,
+                fill:SCROLL_FILL_COLOR,
+                opacity: ROLL_OPACITY,
+                stroke: SCROLL_FILL_COLOR
+            });
+            rVis.rect(-0.25, -0.5,SCROLL_WIDTH, 1.5,{
+                opacity: ROLL_OPACITY,
+                fill:SCROLL_FILL_COLOR
+            }); 
+            rVis.circle(-0.25,0.22,{
+                radius: .73,
+                fill:SCROLL_END_COLOR,
+                opacity: ROLL_OPACITY,
+                stroke: SCROLL_FILL_COLOR
+            });
+
+            //Middle of wares scroll
+            rVis.rect(-0.5, 0.9, SCROLL_WIDTH+0.2, totalWaresLength,{
+                opacity: MIDDLE_OPACITY,
+                fill:SCROLL_FILL_COLOR
+            }); 
+
+            //Bottom of wares scroll
+            rVis.circle(SCROLL_WIDTH-.4,totalWaresLength+1,{
+                radius: .70,
+                fill:SCROLL_FILL_COLOR,
+                opacity: ROLL_OPACITY,
+                stroke: SCROLL_FILL_COLOR
+            });
+            rVis.rect(-0.25, totalWaresLength+0.25,SCROLL_WIDTH, 1.5,{
+                opacity: ROLL_OPACITY,
+                fill:SCROLL_FILL_COLOR
+            }); 
+            rVis.circle(-0.25,totalWaresLength+1,{
+                radius: .70,
+                fill:SCROLL_END_COLOR,
+                opacity: ROLL_OPACITY,
+                stroke: SCROLL_FILL_COLOR
+            });
+            //Build kingdom scroll below wares
+            rVis.circle(SCROLL_WIDTH-.4,totalFiefLength+3,{
+                radius: .75,
+                fill:SCROLL_FILL_COLOR,
+                opacity: 1,
+                stroke: SCROLL_FILL_COLOR
+            });
+            rVis.rect(-0.25, totalFiefLength+2.205,SCROLL_WIDTH, 1.59,{
+                opacity: 1,
+                fill:SCROLL_FILL_COLOR
+            }); 
+            rVis.circle(-0.25,totalFiefLength+3,{
+                radius: .75,
+                fill:SCROLL_END_COLOR,
+                opacity: 1,
+                stroke: SCROLL_FILL_COLOR
+            });
+            //Middle of scroll
+            rVis.rect(-0.5, totalFiefLength+0.75, SCROLL_WIDTH+0.2, totalFiefLength,{
+                opacity: 0.5,
+                fill:SCROLL_FILL_COLOR
+            }); 
+            //Bottom of scroll
+            rVis.circle(SCROLL_WIDTH-.4,totalFiefLength.length+2,{
+                radius: .70,
+                fill:SCROLL_FILL_COLOR,
+                opacity: ROLL_OPACITY,
+                stroke: SCROLL_FILL_COLOR
+            });
+            rVis.rect(-0.25, totalFiefLength.length+1.25,SCROLL_WIDTH, 1.5,{
+                opacity: ROLL_OPACITY,
+                fill:SCROLL_FILL_COLOR
+            }); 
+            rVis.circle(-0.25,totalFiefLength.length+2,{
+                radius: .70,
+                fill:SCROLL_END_COLOR,
+                opacity: ROLL_OPACITY,
+                stroke: SCROLL_FILL_COLOR
+            });
+        }
     }
 }
 

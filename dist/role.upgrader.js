@@ -7,21 +7,33 @@ var roleUpgrader = {
         let fief = Memory.kingdom.fiefs[creep.memory.fief]
         let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType != STRUCTURE_RAMPART)
         if(creep.memory.status == 'spawning' && !creep.spawning) creep.memory.status = 'travel'
-        if(cSites.length){
+        if(creep.memory.job != 'starterUpgrader' && cSites.length && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2){
            
-            let target = cSites[0];
-            let range = creep.pos.getRangeTo(target);
-            if(range <= 3){
-                creep.build(target)
+            creep.memory.role = 'builder';
+
+        }
+        else if(cSites.length && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2){
+            let target;
+            if(creep.memory.target) target = Game.getObjectById(creep.memory.target)
+            if(!target){
+                let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+                target = creep.pos.findClosestByRange(targets)
+                if(target){creep.memory.target = target.id}
             }
-            if(range > 2){
-                creep.travelTo(target)
+            if(target && creep.store.getUsedCapacity() > 0) {
+                if(creep.pos.getRangeTo(target) > 3){
+                    creep.travelTo(target);
+                }
+                else{
+                    creep.build(target)
+                }                    
             }
-            if(creep.store.getFreeCapacity() > creep.store.getCapacity()*0.2 && range <=5 && creep.room.energyAvailable > creep.room.energyCapacityAvailable/2){
-                let x = supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+
+            //Submit order if not close to storage
+            if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
+                if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2) supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
             return;
-
         }
 
         let range = creep.pos.getRangeTo(creep.room.controller);
@@ -49,7 +61,8 @@ var roleUpgrader = {
                         let search = creep.room.lookForAt(LOOK_CREEPS,spot.x,spot.y);
                         if(search.length){
                             let buddy = search[0]
-                            if((buddy.memory.role == 'upgrader' || buddy.memory.status == 'upgrading') && buddy.store.getUsedCapacity(RESOURCE_ENERGY) > 0 && !buddy.transferring){
+                            
+                            if(buddy.owner.username.toLowerCase() == Memory.me.toLowerCase() && (buddy.memory.role == 'upgrader' || buddy.memory.status == 'upgrading') && buddy.store.getUsedCapacity(RESOURCE_ENERGY) > 0 && !buddy.transferring){
                                 buddy.transfer(creep,RESOURCE_ENERGY);
                                 buddy.transferring = true;
                                 gotTransfer = true;
@@ -61,15 +74,27 @@ var roleUpgrader = {
             }
             if(gotTransfer) return;
             if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
-                if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getFreeCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
-            else if(creep.store.getUsedCapacity() == 0){
+            else{
                 if(creep.room.storage){
                     let storageRange = creep.pos.getRangeTo(creep.room.storage);
-                    if(storageRange == 1){
+                    if(creep.room.terminal && creep.room.terminal.store[RESOURCE_ENERGY] > 0){
+                        let tRange = creep.pos.getRangeTo(creep.room.terminal);
+
+                        if(tRange <= storageRange){
+                            if(tRange == 1){
+                                creep.withdraw(creep.room.terminal,RESOURCE_ENERGY);
+                            }
+                            else if(creep.store.getUsedCapacity() == 0){
+                                creep.travelTo(creep.room.terminal)
+                            }
+                        }
+                    }
+                    else if(storageRange == 1){
                         creep.withdraw(creep.room.storage,RESOURCE_ENERGY);
                     }
-                    else if(storageRange < 5){
+                    else if(creep.store.getUsedCapacity() == 0){
                         creep.travelTo(creep.room.storage)
                     }
                 }

@@ -8,6 +8,8 @@ var roleHarvester = {
             const targetID = creep.memory.target
             const homeRoom = creep.memory.fief
             const fief = Memory.kingdom.fiefs[homeRoom]
+            
+            const link = null;
             if(!creep.memory.preflight && !creep.memory.spawning){
                 creep.memory.preflight = true;
             }
@@ -16,17 +18,23 @@ var roleHarvester = {
             //If target is a mineral, do mineral harvest things
             
             if(creep.memory.target == fief.mineral.id){
-                //console.log(creep.memory.target)
-                //console.log(creep.memory.target == fief.mineral.id)
+                
                 //If not in spot, go there
                 if(!(creep.memory.status == 'harvest')){
                     //console.log(JSON.stringify(fief.mineral))
-                    if (creep.pos.x != fief.mineral.spot.x || creep.pos.y != fief.mineral.spot.y) {
-                        if(!creep.memory.pull){
-                            //Plan on legless harvesters, so see if we're marked as pull
-                            creep.travelTo(new RoomPosition(fief.mineral.spot.x, fief.mineral.spot.y, homeRoom));
+                    if(fief.mineral.can && Game.getObjectById(fief.mineral.can)){
+                        if(!creep.pos.isEqualTo(Game.getObjectById(fief.mineral.can).pos)){
+                            creep.travelTo(Game.getObjectById(fief.mineral.can).pos)
                         }
-                    }else{
+                        else{
+                            creep.memory.stay = true;
+                            creep.memory.status = 'harvest'
+                        }
+                    }
+                    else if(creep.pos.getRangeTo(target) > 1){
+                        creep.travelTo(target);
+                    }
+                    else{
                         creep.memory.stay = true;
                         creep.memory.status = 'harvest'
                     }
@@ -34,31 +42,63 @@ var roleHarvester = {
                 //Else, harvest
                 else{
                     //console.log(target.mineralAmount)
-                    if(target.mineralAmount >0){
+
+                    let can = fief.mineral.can ? Game.getObjectById(fief.mineral.can) : false;
+                
+                    if(target.mineralAmount >0 && (!can || can.store.getFreeCapacity() > 0)){
                         //console.log("AYE")
                         let g =creep.harvest(target);
                         //console.log(g)
                     }
                 }
+                return;
             }
 
             //Else, regular harvesting stuff
             //If not in spot, go there
             else if(!(creep.memory.status == 'harvest')){
-                    if(creep.pos.x == fief.sources[creep.memory.target].spotx && creep.pos.y == fief.sources[creep.memory.target].spoty && creep.room.name == homeRoom){
-                        creep.memory.stay = true;
-                        creep.memory.status = 'harvest';
+                    if(creep.getActiveBodyparts(WORK) >=5){
+                        if(creep.pos.x == fief.sources[creep.memory.target].spotx && creep.pos.y == fief.sources[creep.memory.target].spoty && creep.room.name == homeRoom){
+                            creep.memory.stay = true;
+                            creep.memory.status = 'harvest';
+                        }
+                        else{
+                            creep.travelTo(new RoomPosition(fief.sources[creep.memory.target].spotx,fief.sources[creep.memory.target].spoty,homeRoom))
+                        }
+                        return;
                     }
                     else{
-                        creep.travelTo(new RoomPosition(fief.sources[creep.memory.target].spotx,fief.sources[creep.memory.target].spoty,homeRoom))
+                        if(creep.pos.getRangeTo(target) == 1){
+                            creep.memory.stay = true;
+                            creep.memory.status = 'harvest';
+                        }
+                        else{
+                            creep.travelTo(target)
+                        }
+                        return;
                     }
             }
-            else{
+            
+            //If there's a source, harvest if energy. If no energy, repair can if there
+            if(target){
+                const can = fief.sources[targetID].can && Game.getObjectById(fief.sources[targetID].can)
+                if(target.energy > 0){
+                    creep.harvest(target);
+                }
+                else if(can && can.hits < can.hitsMax * 0.8){
+                    creep.repair(can);
+                    creep.withdraw(can,RESOURCE_ENERGY);
+                }
+            }
+
+            //Old link code, likely just remove
+            if(link){
                 //console.log("HERE")
                 //Stop flag in case link is full
                 let stopFlag = false;
                 //If we're at the point of using carry creeps
-                if(creep.store.getCapacity() > 0){
+                if(creep.store && creep.store.getCapacity() > 0){
+                    //Check for a can to repair
                     let harvLink = Game.getObjectById(Memory.kingdom.fiefs[creep.room.name].sources[creep.memory.target].link);
                     //If link is live
                     if(harvLink && harvLink.store[RESOURCE_ENERGY] != 800){
@@ -79,10 +119,6 @@ var roleHarvester = {
                             creep.pickup(drops)
                         }
                     }
-                }
-                
-                if(target && target.energy > 0 && !stopFlag){
-                    creep.harvest(target);
                 }
             }
         }

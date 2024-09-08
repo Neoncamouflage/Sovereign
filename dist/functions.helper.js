@@ -111,7 +111,8 @@ const helper = {
             "This soil, kissed by royal decree, curses all who trespass.",
             "A fortress of loyalty, bound by honor to the Crown's eternal rule.",
             "By decree of the Throne, this soil is consecrated and protected.",
-            "Under the Sovereign's eye, this land knows only one ruler."
+            "Under the Sovereign's eye, this land knows only one ruler.",
+            "Let joy be in your hearts and peace in your mind, for the Sovereign protects these lands."
 
         ]
         let far = [

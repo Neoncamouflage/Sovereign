@@ -40,7 +40,7 @@ const intelManager = {
                         let costMatrix = new PathFinder.CostMatrix();
                         console.log("WALLS",walls)
                         for (let wall of walls) {
-                            let cost = mapWallHitsToCost(wall.hits);
+                            let cost = mapWallHitsToCost(wall.hits,maxWallHits);
                             costMatrix.set(wall.pos.x, wall.pos.y, cost);
                         }
                         
@@ -146,7 +146,7 @@ const intelManager = {
         });
 
         function getExit(creep){
-            let exits = getScoutData(creep.room.name,'exits') || Game.map.describeExits(creep.room.name);
+            let exits = Game.map.describeExits(creep.room.name);
             //console.log("Viable exits:",JSON.stringify(exits))
             let exitRooms = Object.values(exits).filter(roomName => {
                 //If it's on the no scout list, deny

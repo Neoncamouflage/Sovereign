@@ -4,6 +4,18 @@ var roleDiver = {
 
     /** @param {Creep} creep **/
     run: function(creep) {
+        if(creep.memory.job == 'goTo'){
+            let targetRoom = creep.memory.targetRoom;
+            if(creep.room.name != targetRoom){
+                creep.travelTo(new RoomPosition(25,25,targetRoom))
+            }
+            else{
+                creep.memory.lastRoom = creep.memory.fief;
+                creep.memory.role = 'scout'
+            }
+            return;
+            return;
+        }
         if(creep.memory.job == 'customScout'){
             let occupied =[
                 "The Throne's justice will soon restore order to this land.",
