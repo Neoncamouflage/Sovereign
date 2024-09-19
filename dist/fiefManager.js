@@ -46,11 +46,11 @@ const fiefManager = {
             8:800000
         }
         let extractor = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_EXTRACTOR).length;
-        let noBuild = [STRUCTURE_LAB,STRUCTURE_FACTORY,STRUCTURE_NUKER]
+        let noBuild = [STRUCTURE_FACTORY,STRUCTURE_NUKER]
         fief.spawns = mySpawns
         let [plannedNet,averageNet] = granary.getIncome(room.name);
         //Create harvest spot if none exists
-        console.log(room.name,"income",plannedNet,averageNet)
+        //console.log(room.name,"income",plannedNet,averageNet)
 
         if(!fief.roomPlan || fief.roomPlan == 'null'){
             //restartFlag = true;
@@ -435,11 +435,11 @@ const fiefManager = {
             },{});
             if(fiefCreeps.harvester){
                 fiefCreeps.harvester.forEach(creep =>{
-                    if(creep.memory.job == 'mineralHarvester') return;
+                    if(creep.memory.job == 'mineralHarvester' || creep.memory.job == 'remoteHarvest') return;
                     creepSource = creep.memory.target;
                     targetSources[creepSource].harvs++;
                     targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
-                    if(storagePos && creep.ticksToLive < storagePos.getRangeTo(Game.getObjectById(creepSource)) + (CREEP_SPAWN_TIME*creep.body.length) && !creep.memory.respawn){
+                    if(storagePos && creep.ticksToLive < storagePos.getRangeTo(Game.getObjectById(creepSource) + (CREEP_SPAWN_TIME*creep.body.length)) && !creep.memory.respawn){
                         targetSources[creepSource].ttlFlag = creep.id;
 
                     };
@@ -481,10 +481,13 @@ const fiefManager = {
                     }
                 }
                 let upgradersNeeded;
-                if(room.storage.store[RESOURCE_ENERGY] < 50000){
+                if(roomLevel == 8){
+                    if(room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE/2) registry.requestCreep({sev:35,body:[MOVE,CARRY,WORK,MOVE,WORK],memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
+                }
+                else if(room.storage.store[RESOURCE_ENERGY] < 50000){
                     upgradersNeeded = 0;
                 }
-                else if(roomLevel == 6 && global.heap.funnelTarget && global.heap.funnelTarget != room.name && room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[roomLevel]/2){
+                else if([6,7].includes(roomLevel) && global.heap.funnelTarget && global.heap.funnelTarget != room.name && room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[roomLevel]/2){
                     //No upgrading if we're helping funnel and aren't in downgrade alert
                     upgradersNeeded = 0;
                 }
@@ -492,7 +495,7 @@ const fiefManager = {
                     let tStore = room.terminal ? room.terminal.store[RESOURCE_ENERGY] : 0;
                     upgradersNeeded = room.controller.level > 5 ? Math.ceil((room.storage.store[RESOURCE_ENERGY]+tStore)/100000) : Math.ceil(room.storage.store[RESOURCE_ENERGY]/100000);
                 }
-                if(upgradersNeeded > 0 && (!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded)){
+                if(!cSites.length && upgradersNeeded > 0 && (!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded)){
                     registry.requestCreep({sev:35,memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
                 let fortFlag = false;
@@ -511,7 +514,7 @@ const fiefManager = {
                 let hurtRamps = room.find(FIND_MY_STRUCTURES).filter(st => st.structureType == STRUCTURE_RAMPART && st.hits < fief.rampTarget)
                 if(hurtRamps.length) fortFlag = true;
                 //Don't repair if we're below energy
-                if(fortFlag && room.storage && room.storage.store[RESOURCE_ENERGY] > 20000){
+                if(fortFlag && room.storage && room.storage.store[RESOURCE_ENERGY] > RAMPART_REPAIR_MINIMUM_ENERGY){
                     let forts = fiefCreeps.builder || [];
                     forts = forts.filter(crp => crp.memory.job == 'fortifier')
                     let fortsNeed = room.controller.level > 4 ? 1 : 2;
@@ -521,7 +524,9 @@ const fiefManager = {
                 }              
                 if(roomLevel >=6 && extractor){
                     let mineral = Game.getObjectById(fief.mineral.id)
-                    if(!mineral.ticksToRegeneration && global.heap.stock[mineral.mineralType] < 80000){
+                    if(!Memory.kingdom.mineralNeed) Memory.kingdom.mineralNeed = {};
+                    let mineralNeed = Memory.kingdom.mineralNeed[mineral.mineralType] || DEFAULT_MINERAL_NEED
+                    if(!mineral.ticksToRegeneration && room.storage.store.getFreeCapacity() > STORAGE_SPACE_FOR_MINERAL_HARVEST && global.heap.stock[mineral.mineralType] < mineralNeed){
                         if(!fiefCreeps.harvester || !fiefCreeps.harvester.filter(crp => crp.memory.target == mineral.id).length){
                             registry.requestCreep({sev:33,memory:{role:'harvester',job:'mineralHarvester',fief:room.name,target:mineral.id,status:'spawning',preflight:false}})
                         }
@@ -554,12 +559,135 @@ const fiefManager = {
         if(room.storage){
             //If no construction sites and positive income, start raising the ramp target as long as they're all at the last one
             if(Game.time % (Math.round(roomLevel*1.3)*1000) == 0){
-                //If we're below the minimum for our RCL, bump it up
-                fief.rampTarget = Math.max(fief.rampTarget,rampartMinimums[room.controller.level])
-                if(averageNet > 0 || room.storage.store[RESOURCE_ENERGY] > 100000){
-                    let ramps = room.find(FIND_MY_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_RAMPART && struct.hits < fief.rampTarget);
-                    //Grow by 10% if there are none
-                    if(!ramps.length) fief.rampTarget += Math.round(fief.rampTarget*0.1);
+                //If we aren't yet RCL8 and we're over 3M hits, then no raising unless we have a war override
+                if(fief.rampTarget < 3000000 || roomLevel == 8 || fief.rampOverride){
+                    //If we're below the minimum for our RCL, bump it up
+                    fief.rampTarget = Math.max(fief.rampTarget,rampartMinimums[room.controller.level])
+                    if(averageNet > 0 || room.storage.store[RESOURCE_ENERGY] > 100000){
+                        let ramps = room.find(FIND_MY_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_RAMPART && struct.hits < fief.rampTarget);
+                        //Grow by 10% if there are none
+                        if(!ramps.length) fief.rampTarget += Math.round(fief.rampTarget*0.1);
+                    }
+                }
+                
+            }
+
+            //If we have source labs and a boost objective
+            if(fief.labs && fief.labs.sourceLabs){
+                let log = `${room.name} labs:`
+                if(!fief.labs.boostLabs || Array.isArray(fief.labs.boostLabs)) fief.labs.boostLabs = {};
+                //Combine the boosting and target supply requests
+                if(Object.keys(fief.labs.boostLabs).length){
+                    log += '\nBoostlabs available'
+                    for(let [labID,part] of Object.entries(fief.labs.boostLabs)){
+                        let lab = Game.getObjectById(labID)
+                        //If the wrong mineral is in the lab, remove it
+                        if(lab.mineralType && lab.mineralType != part){
+                            supplyDemand.addRequest(room,{type:'pickup',targetID:labID,resourceType:lab.mineralType,amount:lab.store[lab.mineralType],priority:6})
+                        }
+                        //If no mineral is in the lab, order some
+                        else if(!lab.mineralType){
+                            supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
+                                amount:Math.min(3000, 
+                                (room.storage ? room.storage.store[part] : 0) + 
+                                (room.terminal ? room.terminal.store[part] : 0)
+                            )
+                            ,priority:6})
+                        }
+                        //If the right mineral is in the lab, mark the source as good
+                        else if(lab.mineralType == part){
+                            goodSource++;
+                            //Order more if less than half full
+                            if(lab.store[lab.mineralType] < 1500){
+                                supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
+                                    amount:Math.min(3000, 
+                                    (room.storage ? room.storage.store[part] : 0) + 
+                                    (room.terminal ? room.terminal.store[part] : 0)
+                                )
+                                ,priority:6})
+                            }
+                        }
+                    }
+                }
+                if(fief.labs.target){
+                    log += '\n Target labs available'
+                    let ingredients = REACTION_INGREDIENTS[fief.labs.target];
+                    let labIDs = Object.keys(fief.labs.sourceLabs)
+                    let goodSource = 0;
+                    for(let i=0;i<2;i++){
+                        fief.labs.sourceLabs[labIDs[i]] = ingredients[i]
+                    }
+                    //If we're short on labs, add them
+                    if(fief.labs.targetLabs.length+2 < CONTROLLER_STRUCTURES[STRUCTURE_LAB][room.controller.level] ){
+                        //If we're building stuff still, skip
+                        if(!cSites.length){
+                            console.log("ADDING LABS FOR",room.name)
+                            fief.labs.targetLabs = room.find(FIND_STRUCTURES).filter(s=>s.structureType == STRUCTURE_LAB && !Object.keys(fief.labs.sourceLabs).includes(s.id)).map(s=>s.id)
+                        }
+                    }
+                    
+                    for(let [labID,part] of Object.entries(fief.labs.sourceLabs)){
+                        
+                        let lab = Game.getObjectById(labID)
+                        //If the wrong mineral is in the lab, remove it
+                        if(lab.mineralType && lab.mineralType != part){
+                            
+                            let t = supplyDemand.addRequest(room,{type:'pickup',targetID:labID,resourceType:lab.mineralType,amount:lab.store[lab.mineralType],priority:6})
+                            log+=`\n${lab.id} has wrong mineral ${lab.mineralType}, pickup request ${t}`
+                        }
+                        //If no mineral is in the lab, order some
+                        else if(!lab.mineralType){
+
+                            let t = supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
+                                amount:Math.min(3000, 
+                                (room.storage ? room.storage.store[part] : 0) + 
+                                (room.terminal ? room.terminal.store[part] : 0)
+                            )
+                            ,priority:6})
+                            log+=`\n${lab.id} has no mineral, dropoff request ${t}`
+                        }
+                        //If the right mineral is in the lab, mark the source as good
+                        else if(lab.mineralType == part){
+                            goodSource++;
+                            //Order more if less than half full
+                            if(lab.store[lab.mineralType] < 1500){
+                                let t = supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
+                                    amount:Math.min(3000, 
+                                    (room.storage ? room.storage.store[part] : 0) + 
+                                    (room.terminal ? room.terminal.store[part] : 0)
+                                )
+                                ,priority:6})
+                                log+=`\n${lab.id} is low on mineral ${part}, dropoff request ${t}`
+                            }
+                            
+                        }
+                    }
+                    if(goodSource == 2){
+                        log += '\n Two good sources'
+                        let sources = labIDs.map(id => Game.getObjectById(id))
+                        for(let targetID of fief.labs.targetLabs){
+                            let target = Game.getObjectById(targetID);
+                            let occupied = Object.keys(fief.labs.boostLabs) || [];
+                            if(!occupied.includes(targetID) && target.mineralType && (target.store[target.mineralType] > 1000 || target.mineralType != fief.labs.target)){
+                                
+                                let t = supplyDemand.addRequest(room,{type:'pickup',targetID:targetID,resourceType:target.mineralType,amount:target.store[target.mineralType],priority:6})
+                                log+=`\n${target.id} needs pickup for mineral ${target.mineralType}, pickup request ${t}`
+                            }
+                            if(!!target.cooldown) continue;
+                            target.runReaction(sources[0],sources[1])
+                        }
+                    }
+                    console.log(log)
+                }
+            }
+
+            if(room.terminal){
+                let termNeeds = fief.termNeeds;
+                //Default behavior if nothing is set
+                if(!termNeeds){
+                    if(room.terminal.store[RESOURCE_ENERGY] < 40000){
+                        supplyDemand.addRequest(room,{type:'dropoff',amount:50000-room.terminal.store[RESOURCE_ENERGY],targetID:room.terminal.id});
+                    }
                 }
             }
 
@@ -578,12 +706,11 @@ const fiefManager = {
                 }
                 //If we are the funnel target
                 else{
-                    if(room.terminal.store[RESOURCE_ENERGY] > 100000 && room.storage.store.getFreeCapacity() > 100000){
-                        supplyDemand.addRequest(room,{type:'pickup',resourceType:'energy',amount:room.terminal.store[RESOURCE_ENERGY],targetID:room.terminal.id,international:false,priority:6})
-                    }
+                    //if(room.terminal.store[RESOURCE_ENERGY] > 200000 && room.storage.store.getFreeCapacity() > 100000){
+                        //supplyDemand.addRequest(room,{type:'pickup',resourceType:'energy',amount:room.terminal.store[RESOURCE_ENERGY],targetID:room.terminal.id,international:false,priority:6})
+                    //}
                 }
             }
-
            
         }
 

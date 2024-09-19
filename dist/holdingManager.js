@@ -16,6 +16,7 @@ var holdingManager = {
         //If no CPU, skip
         if(!Memory.trailingCPU || !global.cpuAverage) return;
         let avCPU  = global.cpuAverage;
+        //If we're over 100 average
         console.log(`Holding check. Average CPU: ${avCPU}, Add limit: ${CPU_ADD_LIMIT}`)
         let holdings = Object.keys(Memory.kingdom.holdings).sort((a, b) => 
             Memory.kingdom.holdings[a].distance - Memory.kingdom.holdings[b].distance
@@ -74,7 +75,7 @@ var holdingManager = {
             //If combined spawn use (plus some pad for already run holdings) is too high then we skip (90 for now plus 5 per holding run)
             let skipCheck = 100//93-(fiefMap[holding.homeFief]*2);
             if(Memory.kingdom.fiefs[holding.homeFief].combinedSpawnUse > skipCheck){
-                console.log("Holding",each,"failed skipcheck.",Memory.kingdom.fiefs[holding.homeFief].combinedSpawnUse,"spawn use is more than",skipCheck)
+                //console.log("Holding",each,"failed skipcheck.",Memory.kingdom.fiefs[holding.homeFief].combinedSpawnUse,"spawn use is more than",skipCheck)
                 continue;
             }
             kingdomCreeps[holding.homeFief] = kingdomCreeps[holding.homeFief] || []
@@ -276,8 +277,8 @@ var holdingManager = {
         //Check for dropped resources and submit tasks as needed, only if not hostile
         if(remote){
             //Check for hostiles
-            let hostiles = remote.find(FIND_HOSTILE_STRUCTURES)
-            if(hostiles.length){
+            let hostiles = remote.find(FIND_HOSTILE_STRUCTURES).filter(struct => struct.structureType != STRUCTURE_CONTROLLER)
+            if(hostiles.length && Game.rooms[holding.homeFief].controller.level > 2){
                 let hasMission = false;
                 if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                     for(let mission of global.heap.missionMap[holdingName]){
@@ -286,6 +287,7 @@ var holdingManager = {
                     }
                 }
                 if(!hasMission){
+                    console.log("Requesting core mission",holdingName)
                     marshal.destroyCore(holdingName);
                 }
             }
@@ -409,9 +411,9 @@ var holdingManager = {
             //We want vision for this
             if(remote){
 
-                let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => helper.isSoldier(crp) && !Memory.diplomacy.allies.includes(crp.owner.username) && !Memory.diplomacy.ceasefire.includes(crp.owner.username))
+                let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => helper.isSoldier(crp) && !isFriend(crp))
                 if(hostiles.length && !global.heap.alarms[holdingName]){
-                    global.heap.alarms[holdingName] = {tick:Game.time}
+                    global.heap.alarms[holdingName] = {tick:Game.time,creeps:true,expiry:Game.time + Math.max(...hostiles.map(creep => creep.ticksToLive))}
                     let hasMission = false;
                     //Heals don't get one yet
                     let hasHeal = false
@@ -425,7 +427,8 @@ var holdingManager = {
                             break;
                         }
                     }
-                    if(!hasMission){
+                    if(!hasMission && Game.rooms[holding.homeFief].controller.level > 2){
+                        console.log("Requesting defend mission",holdingName)
                         marshal.defend(holdingName);
                     }
                 }else{
@@ -451,7 +454,7 @@ var holdingManager = {
                 let tickend = false;
                 if(fiefCreeps.claimer){
                     for(creep of fiefCreeps.claimer){
-                        if(creep.memory.holding == holdingName && creep.memory.job == 'reserver' && creep.ticksToLive > holding.distance){
+                        if(creep.memory.holding == holdingName && creep.memory.job == 'reserver' && (creep.spawning || creep.ticksToLive > holding.distance)){
                             claimers ++;
                             reserverPower+= creep.getActiveBodyparts(CLAIM);
                         }

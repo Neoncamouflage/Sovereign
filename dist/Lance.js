@@ -66,20 +66,25 @@ Lance.prototype.removeCreep = function(creep) {
     }
 };
 
-Lance.prototype.populate = function(fief,kingdomCreeps,role){
+Lance.prototype.populate = function(fief,kingdomCreeps,options={}){
     let roleRef = {
         'blinky':'skirmisher',
         'demo'  :'sapper',
-        'melee' :'pikeman'
+        'melee' :'pikeman',
     }
     //How far away a creep can be and be allowed to join as a reserve
     let distanceRef = {
         'pikeman':4,
-        'skirmisher':2
+        'skirmisher':3,
+        'halberdier':4
     }
-    let sev = 60;
-    if(role == 'pikeman') sev = 30;
-    let rolePick = role || roleRef[this.lanceType] || 'generic'
+    let sevRef = {
+        'pikeman':38,
+        'skirmisher':40,
+        'halberdier':33
+    }
+    let rolePick = options.role || this.details.role || roleRef[this.lanceType] || 'generic'
+    let sev = sevRef[rolePick] || 40;
     let reserve = kingdomCreeps.reserve;
     let foundReserve = false;
     let takeaway = [];
@@ -88,7 +93,7 @@ Lance.prototype.populate = function(fief,kingdomCreeps,role){
     console.log(kingdomCreeps[this.name])
     if(reserve.length){
         //Convert to creeps and sort by linear distance
-        reserve = reserve.map(crpID => Game.getObjectById(crpID)).filter(crp => crp.memory.role == rolePick && crp.ticksToLive > distanceRef[rolePick]*100 && Game.map.getRoomLinearDistance(crp.room.name, this.targetRoom) <= distanceRef[rolePick]).sort((a, b) => {
+        reserve = reserve.map(crpID => Game.getObjectById(crpID)).filter(crp => crp.memory.role == rolePick && (crp.ticksToLive > Game.map.getRoomLinearDistance(crp.room.name, this.targetRoom)*100 || crp.spawning) && Game.map.getRoomLinearDistance(crp.room.name, this.targetRoom) <= distanceRef[rolePick]).sort((a, b) => {
             let distanceA = Game.map.getRoomLinearDistance(a.room.name, this.targetRoom);
             let distanceB = Game.map.getRoomLinearDistance(b.room.name, this.targetRoom);
             return distanceA - distanceB;
@@ -116,7 +121,22 @@ Lance.prototype.populate = function(fief,kingdomCreeps,role){
     }
     //If we didn't find enough to fill, order a creep
     if(!foundReserve){
-        registry.requestCreep({sev:sev,memory:{role:rolePick,lance:this.name,fief:fief,status:'spawning',preflight:false}});
+        let requestDetails = {
+            sev:sev,
+            memory:{
+                role:rolePick,
+                lance:this.name,
+                fief:fief,
+                status:'spawning',
+                preflight:false
+            }
+        }
+        //Override from options if available
+        if(options.body) requestDetails.body = options.body;
+        //If not, check for a default template
+        else if(this.details.body) requestDetails.body = this.details.body;
+        
+        registry.requestCreep(requestDetails);
     }
     
 

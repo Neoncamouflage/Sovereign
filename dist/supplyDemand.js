@@ -2,6 +2,10 @@ const helper = require('functions.helper');
 const registry = require('registry');
 
 const supplyDemand = {
+    makeTask: function(details={}){
+        let newTask = new Task(details.type,details.resourceType,details.targetID,details.amount,details.priority,details.international,details.targetRoom,details.taskID,details.assignedHaulers,details.tick)
+        return newTask;
+    },
     prepShipping: function(roomName){
         if (!global.heap) global.heap = {};
         if (!global.heap.shipping) global.heap.shipping = {};
@@ -25,7 +29,7 @@ const supplyDemand = {
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_TOWER
         ]
-        const MAX_IDLE = 0.15;
+        const MAX_IDLE = 0.12;
 
         //global.heap.shipping[roomName].forEach(task =>{
             //console.log(JSON.stringify(task));
@@ -136,7 +140,7 @@ const supplyDemand = {
             let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length
             //Extra check, no spawning if half or more haulers are currently idle
             if(MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5){
-                registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : 60,memory:{role:'hauler',fief:roomName,preflight:false}})
+                registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : fiefCreeps.length > 2 ? 60 : 50,memory:{role:'hauler',fief:roomName,preflight:false,state:'idle'}})
             }
             console.log(`${roomName} hauler utilization: ${utilization}`)
         }
@@ -145,13 +149,12 @@ const supplyDemand = {
     },
     addRequest: function(room,details){
         //addSupplyRequest(Game.rooms.E46N37,{type:'pickup',resourceType:'energy',amount:0,targetID:'aaa',international:true,priority:5})
-        supplyDemand.prepShipping(room.name)
+       
         //console.log("Shipping ready!")
         //Adds a request to the room's shipping tasks
         //Details is an object containing task data
         const DEFAULT_PRIORITY = 1;
         //console.log("Add room",room.name)
-        let shippingTasks = global.heap.shipping[room.name].requests;
 
         if (!(room instanceof Room)) {
             console.log("ERR_NEED_ROOM_OBJECT");
@@ -167,7 +170,7 @@ const supplyDemand = {
                 let pick;
                 let pickNum = Infinity;
                 Object.keys(Memory.kingdom.fiefs).forEach(fief => {
-                    let dist = Game.map.getRoomLinearDistance(room, fief);
+                    let dist = Game.map.getRoomLinearDistance(room.name, fief);
                     if(dist < pickNum){
                         pick = fief;
                         pickNum = dist;
@@ -177,11 +180,14 @@ const supplyDemand = {
             }
 
         }
-
+        supplyDemand.prepShipping(room.name)
+        
+        //Shipping tasks have to be retrieved after we assign the room
+        let shippingTasks = global.heap.shipping[room.name].requests;
         //Mandatory data. If missing, return error
         if(!details.type || !details.targetID || !details.amount){
-            console.log("ERR_MISSING_DETAILS")
-            return -1;
+            console.log(`ERR_MISSING_DETAILS - ${room.name} Type:${!details.type}, TargetID:${!details.targetID}, Amount:${!details.amount}. Details:${JSON.stringify(details)}`)
+            return -3;
 
         }
         if(!details.resourceType) details.resourceType = RESOURCE_ENERGY
@@ -203,8 +209,8 @@ const supplyDemand = {
                     return taskID;
                 }
                 else{
-                    //console.log("Trying to add same amount to shipping task");
-                    return -1;
+                    //("Trying to add same amount to shipping task");
+                    return taskID;
                 }
             }
         }
@@ -319,8 +325,8 @@ const supplyDemand = {
             }
         
             //If no resource hauler, check terminal/storage for backup resources to see if we can fill
-            if ((terminal && terminal.store[task.resourceType] >= task.unassignedAmount()) ||
-                (storage && storage.store[task.resourceType] >= task.unassignedAmount())) {
+            if ((terminal && terminal.store[task.resourceType] > 0) ||
+                (storage && storage.store[task.resourceType] > 0)) {
                 //If we have empty haulers, assign the closest
                 if (emptyHaulers.length > 0) {
                     let hauler = taskTarget.pos.getClosestByTileDistance(emptyHaulers);
@@ -373,6 +379,7 @@ const supplyDemand = {
         const RENEW = 'renew';
         const TOW = 'tow';
         const STATES = [IDLE,PICKUP,DROPOFF,RENEW,TOW];
+        let shippingTasks = global.heap.shipping[room.name].requests;
         let isIdle = 0;
         let totalCarry = 0;
         let combos = [];
@@ -390,6 +397,8 @@ const supplyDemand = {
         //Also get upgraders and builders
         let fills = room.find(FIND_MY_STRUCTURES).filter(struct => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(struct.structureType) && struct.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
         let buildUps = []
+        //Track IDs of fills so we can clear their tasks
+        let fillTransfers = []
         for(let role of ['upgrader','builder']){
             if(fiefCreeps[role]) buildUps.push(...fiefCreeps[role])
         }
@@ -398,6 +407,8 @@ const supplyDemand = {
             for(let fill of fills){
                 if(haul.pos.isNearTo(fill)){
                     haul.transfer(fill,RESOURCE_ENERGY);
+                    //Grab the id to clear the task
+                    fillTransfers.push(fill.id)
                     tFlag = true;
                     break;
                 }
@@ -410,7 +421,15 @@ const supplyDemand = {
                 }
             }
         }
-
+        let fillTasks = []
+        for(let each of Object.values(shippingTasks)){
+            if(fillTransfers.includes(each.taskID)){
+                fillTasks.push(each)
+            }
+        }
+        for(let every of fillTasks){
+            every.remove(room.name)
+        }
         haulers.forEach(creep => {
             let postFlag = true;
             let carryParts = creep.getActiveBodyparts(CARRY);
@@ -422,11 +441,11 @@ const supplyDemand = {
                 let words = helper.getSay({symbol:`${Game.time % 2 == 1 ? '🚨' : '📢'}`});
                 creep.say(words.join(''))
                 creep.memory.status = 'flee';
-                creep.travelTo(Game.rooms[creep.memory.fief].controller)
+                creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
             }
             else if(creep.memory.status == 'flee'){
                 if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
-                    creep.travelTo(Game.rooms[creep.memory.fief].controller);
+                    creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10});
                 }
 
                 creep.memory.status = 'idle'
@@ -436,7 +455,7 @@ const supplyDemand = {
                 let utilization = global.heap.shipping[room.name].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[room.name].utilization.length
                 
                 //Check utilization to make sure we aren't respawning when not needed
-                if(utilization < 0.3){
+                if(utilization < 0.25){
                     registry.requestCreep({sev:35,memory:{role:'hauler',fief:room.name,preflight:false},respawn:creep.id})
                 }
             }
@@ -520,7 +539,7 @@ const supplyDemand = {
                     }
                     //If chilling idle, go home if remote. If home then stay off room edges
                     if(creep.room.name != creep.memory.fief || [0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
-                        creep.travelTo(Game.rooms[creep.memory.fief].controller);
+                        creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10,maxRooms:32});
                     }
                 }
             }
@@ -579,32 +598,36 @@ const supplyDemand = {
                     else{
                         //If not, dump and get it from terminal/storage, whichever has more
                         //If pulling energy, no amount specified so we multi-fill
-                        let amountPick = resourceType == RESOURCE_ENERGY ? null : task.assignedHaulers[creep.id];
+                        //If no amount anywhere, drop task
+                        if(((room.storage && room.storage.id != task.targetID && room.storage.store[resourceType])|| 0) + ((room.terminal && room.terminal.id != task.targetID && room.terminal.store[resourceType])|| 0) == 0){
+                            task.unassign(creep)
+                        }
                         if(Memory.kingdom.fiefs[creep.room.name] && creep.room.storage && creep.room.terminal){
-                            if(creep.room.storage.store.getUsedCapacity(resourceType) >= creep.room.terminal.store.getUsedCapacity(resourceType)){
+                            //Take from storage if it has more and is not the target, or if our target is the terminal
+                            if((creep.room.storage.store.getUsedCapacity(resourceType) >= creep.room.terminal.store.getUsedCapacity(resourceType) && creep.room.storage.id != task.targetID) || task.targetID == creep.room.terminal.id){
                                 //dumpAndGet() dumps extra materials and gets up to an amount of resource
-                                creep.dumpAndGet(creep.room.storage,resourceType,amountPick);
+                                creep.dumpAndGet(creep.room.storage,resourceType);
                                 //console.log("C1")
                             }else{
-                                creep.dumpAndGet(creep.room.terminal,resourceType,amountPick);
+                                creep.dumpAndGet(creep.room.terminal,resourceType);
                                 //console.log("C2")
                             }
                         }
                         else if(Memory.kingdom.fiefs[creep.room.name] && creep.room.storage){
-                            creep.dumpAndGet(creep.room.storage,resourceType,amountPick);
+                            creep.dumpAndGet(creep.room.storage,resourceType);
                             //console.log("C3")
                         }
                         else if(Memory.kingdom.fiefs[creep.room.name] && creep.room.terminal){
-                            creep.dumpAndGet(creep.room.terminal,resourceType,amountPick);
+                            creep.dumpAndGet(creep.room.terminal,resourceType);
                             //console.log("C4")
                         }
                         else if(!Memory.kingdom.fiefs[creep.room.name] && (Game.rooms[creep.memory.fief].storage || Game.rooms[creep.memory.fief].terminal)){
                             if(Game.rooms[creep.memory.fief].terminal){
-                                creep.travelTo(Game.rooms[creep.memory.fief].terminal)
+                                creep.travelTo(Game.rooms[creep.memory.fief].terminal,{maxRooms:32})
                                 //console.log("C5")
                             }
                             else if(Game.rooms[creep.room.name].storage){
-                                creep.travelTo(Game.rooms[creep.memory.fief].storage)
+                                creep.travelTo(Game.rooms[creep.memory.fief].storage,{maxRooms:32})
                                 //console.log("C6")
                             }
                         }
@@ -628,9 +651,14 @@ const supplyDemand = {
                 }
                 //Are we on a dropoff task? If so, go to target and transfer
                 if(task.type == 'dropoff'){
+                    //Make sure we didn't dump all our inventory. If so, pickup
+                    if(creep.store.getUsedCapacity() == 0){
+                        task.unassign(creep);
+                        return;
+                    }
                     let dropTarget = Game.getObjectById(task.targetID);
                     if(creep.pos.getRangeTo(dropTarget) > 1){
-                        creep.travelTo(dropTarget)
+                        creep.travelTo(dropTarget,{maxRooms:32})
                     }
                     else{
                         //If we're in range, transfer and finish the task
@@ -672,7 +700,7 @@ const supplyDemand = {
                 //Dunno what this will do yet
             }
             let usedStore = creep.store.getUsedCapacity();
-            //If state is idle, report any used parts as not idle, otherwise all idle
+            //If state is idle, all idle
             if(state==IDLE){
                 isIdle += carryParts
                 //No postflag means we didn't do anything, no need to rerun
@@ -681,6 +709,21 @@ const supplyDemand = {
 
                 if(creep.memory.fief == creep.room.name && creep.store.getUsedCapacity(RESOURCE_ENERGY) >0 && creep.store.getUsedCapacity(RESOURCE_ENERGY) < creep.store.getCapacity()){
                     combos.push(creep)
+                }
+                //Recycle if we have lots of haulers and we're low on life
+                else if(creep.memory.fief == creep.room.name && creep.store.getUsedCapacity(RESOURCE_ENERGY) == 0){
+                    if(heap.shipping[creep.memory.fief].utilization[0] > 0.5 && creep.ticksToLive < 200){
+                        let spawns = Memory.kingdom.fiefs[creep.memory.fief].spawns.map(spw => Game.getObjectById(spw)).filter(spw => !spw.spawning)
+                        if(spawns.length){
+                            let tSpawn = creep.pos.findClosestByRange(spawns)
+                            if(creep.pos.getRangeTo(tSpawn) == 1){
+                                tSpawn.recycleCreep(creep)
+                            }
+                            else{
+                                creep.travelTo(tSpawn)
+                            }
+                        }
+                    }
                 }
 
             } else{
@@ -739,17 +782,17 @@ const supplyDemand = {
 
 //#region Task Prototype
 //#endregion
-function Task(type, resourceType, targetID, amount, priority,international,targetRoom) {
-    this.taskID = generateTaskID();
+function Task(type, resourceType, targetID, amount, priority,international,targetRoom,taskID,assignedHaulers,tick) {
+    this.taskID = taskID || generateTaskID();
     this.type = type;
     this.resourceType = resourceType;
     this.targetID = targetID;
     this.targetRoom = targetRoom || Game.getObjectById(targetID).room.name
     this.amount = amount;
     this.priority = priority || 1; //Everything above priority 3 is considered for hauler population demand
-    this.assignedHaulers = {};
+    this.assignedHaulers = assignedHaulers || {};
     this.international = international || false;
-    this.tick = Game.time;
+    this.tick = tick || Game.time;
 }
 
 Task.prototype.assignTo = function(hauler,amount='default') {
@@ -834,7 +877,7 @@ function generateTaskID(){
         global.heap.shipping.counter = 0
     }
     global.heap.shipping.counter += 1;
-    let newID = Game.time+global.heap.shipping.counter
+    let newID = Game.time.toString()+global.heap.shipping.counter.toString()
     //console.log("Generated task ID",newID)
     return newID;
 }

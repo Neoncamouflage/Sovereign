@@ -25,9 +25,9 @@ var roleMiner = {
                 creep.say(words.join(''))
             }
             else{
-                console.log("AYE")
+                //console.log("AYE")
                 if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
-                    console.log("TWO")
+                    //console.log("TWO")
                     creep.travelTo(Game.rooms[creep.memory.fief].controller);
                 }
             }
@@ -54,12 +54,19 @@ var roleMiner = {
                     
                     if(creep.pos.getRangeTo(targetSource) ==1){
                         creep.memory.status = 'harvesting';
+                        creep.memory.stay = true;
                     }
                     else{
                         for(let spot of holding.sources[targetID].openSpots){
                             let crps = creep.room.lookForAt(LOOK_CREEPS,spot.x,spot.y);
+                            console.log("CHECKING SPOT",JSON.stringify(spot),"CRPS",crps.length,JSON.stringify(crps))
                             if(!crps.length){
-                                creep.travelTo(new RoomPosition(spot.x,spot.y,spot.roomName));
+                                if(creep.room.name == creep.memory.holding){
+                                    creep.travelTo(new RoomPosition(spot.x,spot.y,spot.roomName),{maxRooms:1});
+                                }
+                                else{
+                                    creep.travelTo(new RoomPosition(spot.x,spot.y,spot.roomName));
+                                }
                                 return;
                             }
                         }

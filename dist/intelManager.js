@@ -1,5 +1,6 @@
 const registry = require('registry');
 const helper = require('functions.helper');
+const profiler = require('screeps-profiler');
 const intelManager = {
     run: function(scouts,fiefs){
         let scoutData = global.heap.scoutData;
@@ -243,3 +244,4 @@ const intelManager = {
 }
 
 module.exports = intelManager;
+profiler.registerObject(intelManager, 'intelManager');

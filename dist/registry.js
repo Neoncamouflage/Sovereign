@@ -1,5 +1,6 @@
 const helper = require('functions.helper');
 const granary = require('granary');
+const profiler = require('screeps-profiler');
 const registry = {
     //Associates roles to names
     nameRef: {
@@ -18,7 +19,9 @@ const registry = {
         'generalist':'Settler',
         'skirmisher'    :'Skirmisher',
         'pikeman'   :'Pikeman',
-        'mineralHarvester': 'Gemcutter'
+        'mineralHarvester': 'Gemcutter',
+        'remoteHarvest' : 'Delver',
+        'halberdier' : 'Halberdier'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -27,11 +30,12 @@ const registry = {
         let spawnQueue = global.heap.registry[room.name] || []
         let spawns = fief.spawns.map(spawn => Game.getObjectById(spawn))
         let freeSpawns = [];
-        if(!spawnQueue.length) return;
+        
         for(each of spawns){
             if(!each.spawning) freeSpawns.push(each);
         }
         if(Memory.hardSpawns && Memory.hardSpawns[room.name]) spawnQueue.push(...Memory.hardSpawns[room.name])
+        if(!spawnQueue.length) return;
         let qprint = '';
         for(let each of spawnQueue){
             qprint+=`${each.memory.role} - ${each.sev}\n`
@@ -122,7 +126,7 @@ const registry = {
             }
             try{
                 let x = spawner.spawnCreep(plan.body,name,{memory:plan.memory});
-                
+                console.log("SPAWN",name,x,plan.body)
                 if(x == 0){
                     //console.log("SPAWN UPTIME TRACK")
                     //console.log(`RoomName ${spawner.room.name}, Uptime id ${spawner.id}, Body length ${plan.body.length}`)
@@ -138,7 +142,7 @@ const registry = {
             //Track spawn uptime by logging the spawn call
 
             //console.log(name+'\n'+)
-            //console.log(x)
+            console.log("SPAWN",name,x)
         }
     },
     requestCreep: function(plan){
@@ -154,7 +158,7 @@ const registry = {
         
 
 module.exports = registry;
-
+profiler.registerObject(registry, 'registry');
 //#region Creep Body Switch
 function getBody(role,room,job='default',fiefCreeps,plan){
     let parts;
@@ -165,8 +169,9 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             return getScout(room,fiefCreeps);
         case 'harvester':
             switch(job){
+                case 'remoteHarvest':
                 case 'mineralHarvester':
-                    return getMHarvester(room)
+                    return getMHarvester(room,job)
                 case 'energyHarvester':
                     return getEHarvester(room,fiefCreeps)
             }
@@ -186,6 +191,9 @@ function getBody(role,room,job='default',fiefCreeps,plan){
         case 'sapper':
             return getSapper(room);
             break;
+        case 'skHarvester':
+            return getMHarvester(room);
+            break;
         case 'archer':
             return getArcher(room,plan);
             break;
@@ -202,202 +210,13 @@ function getBody(role,room,job='default',fiefCreeps,plan){
                 case 'fortifier':
                     return getFortifier(room,fiefCreeps);
                 default:
-                    return getBuilder(room,fiefCreeps);
+                    return getFortifier(room,fiefCreeps);
             }
             break;
     }
-    console.log("GETBODY FAIL FOR",role,room,job,fiefCreeps,plan)
+    console.log("GETBODY FAIL FOR",role,room,job,fiefCreeps,JSON.stringify(plan))
     return [[],-1]
 }
-
-/*function getBody(role,room,job='default',fiefCreeps,plan){
-    let parts;
-    let mult;
-    let newBod;
-    switch(role){
-        case 'scout':
-            return getScout(room,fiefCreeps);
-        case 'harvester':
-            switch(job){
-                case 'mineralHarvester':
-                    parts = [MOVE,WORK,WORK,WORK];
-                    let partsCost = 0;
-                    for(each of parts){
-                        partsCost += BODYPART_COST[each];
-                    }
-                    //Add work/move cost
-                    let engAvail = room.energyCapacityAvailable
-                    mult = Math.floor(engAvail/partsCost)
-                    //Max number of arrays so we don't pass 50 parts
-                    let arrMax = Math.floor(50/parts.length)
-                    //Fill new body with either the multiple we can afford or the max, whichever is smaller
-                    newBod = [].concat(...Array(Math.min(mult,arrMax)).fill(parts));
-                    //console.log(newBod)
-                    return newBod;
-                case 'energyHarvester':
-                    return getEHarvester(room,fiefCreeps)
-            }
-            break;
-        case 'remoteDefender':
-            switch(roomName){
-                case 'W29N25':
-                    switch(job){
-                        case 'remoteDefender':
-                            return [TOUGH,TOUGH,MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK];
-                            break;
-                        case 'core':
-                            return [MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK];
-                            break;
-                    }
-                case 'W28N25':
-                    switch(job){
-                        case 'remoteDefender':
-                            return [TOUGH,TOUGH,MOVE,MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK];
-                            break;
-                        case 'core':
-                            return [MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK];
-                            break;
-                    }
-                default:
-                    return [MOVE,MOVE,WORK,WORK];
-            }       
-            break;
-        case 'guard':
-            return [MOVE,MOVE,ATTACK,ATTACK]
-        case 'generalist':
-            switch(job){
-                case 'generalist':
-                    parts = [MOVE,CARRY,MOVE,WORK];
-                    let partsCost = 0;
-                    for(each of parts){
-                        partsCost += BODYPART_COST[each];
-                    }
-                    //Add work/move cost
-                    let engAvail = Game.rooms[roomName].energyCapacityAvailable
-                    //Minus 150 for the work/carry base, then see how many move/carries we can add
-                    mult = Math.floor(engAvail/partsCost)
-                    //console.log(mult)
-                    newBod = [].concat(...Array(mult).fill(parts));
-                    //console.log(newBod)
-                    return newBod;
-                case 'crasher':
-                    console.log("Crash firing")
-                    parts = [MOVE,MOVE,CARRY,WORK];
-                    let partsCost2 = 0;
-                    for(each of parts){
-                        partsCost2 += BODYPART_COST[each];
-                    }
-                    //Add work/move cost
-                    let engAvail2 = Game.rooms[roomName].energyAvailable
-                    //Minus 150 for the work/carry base, then see how many move/carries we can add
-                    mult = Math.floor(engAvail2/partsCost2)
-                    //console.log('CRASH MULT', mult)
-                    //console.log(mult)
-                    newBod = [].concat(...Array(mult).fill(parts));
-                    //console.log(newBod)
-                    return newBod;
-                case 'remote':
-                    switch(roomName){
-                        case 'W28N24':
-                            return [MOVE,MOVE,MOVE,MOVE,CARRY,CARRY,WORK,WORK];
-                            break;
-                        case 'W17N27':
-                            return [MOVE,MOVE,MOVE,MOVE,CARRY,CARRY,WORK,WORK]
-                            break;
-                        case 'W29N21':
-                            return [MOVE,MOVE,MOVE,CARRY,CARRY,MOVE,WORK,WORK]
-                            break;
-                        case 'W24N19':
-                            return [MOVE,MOVE,MOVE,CARRY,CARRY,MOVE,WORK,WORK]
-                            break;
-                        case 'W19N23':
-                            return [MOVE,MOVE,MOVE,CARRY,MOVE,CARRY,MOVE,WORK,WORK,WORK]
-                            break;
-                        case 'W18N26':
-                            return [MOVE,MOVE,MOVE,CARRY,WORK,WORK]
-                            break;
-                        default:
-                            return [MOVE,CARRY,MOVE,WORK];
-                    }       
-                    break;
-            }      
-            break;    
-        case 'manager':
-            return [MOVE,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY,CARRY];
-        case 'claimer':
-            getReserver(room,fiefCreeps);  
-            break;
-        case 'miner':
-            return getMiner(plan.memory.holding)
-            break;
-        case 'trucker':
-            switch(roomName){
-                case 'W39N46':
-                    switch(job){
-                        case 'linkHauler':
-                            return [MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY];
-                            break;
-                        case 'canHauler':
-                            return [MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY];
-                            break;
-                        default:
-                            return [MOVE,CARRY,WORK,WORK];
-                    }
-                    
-                default:
-                    return [MOVE,CARRY,WORK,WORK];
-            }
-            break;
-        case 'hauler':
-            return getHauler(room,fiefCreeps);
-            break;
-        case 'upgrader':
-            return getUpgrader(room,fiefCreeps);
-            break;
-        case 'builder':
-            switch(job){
-                case 'homeBuilder':
-                    parts = [MOVE,MOVE,CARRY,CARRY,WORK,WORK];
-                    let partsCost = 0;
-                    for(each of parts){
-                        partsCost += BODYPART_COST[each];
-                    }
-                    //Add work/move cost
-                    let engAvail = Game.rooms[roomName].energyCapacityAvailable
-                    //Minus 150 for the work/carry base, then see how many move/carries we can add
-                    mult = Math.floor(engAvail/partsCost)
-                    //console.log(mult)
-                    newBod = [].concat(...Array(Math.min(mult,4)).fill(parts));
-                    //console.log(newBod)
-                    return newBod;
-                case 'fortBuilder':
-                    parts = [MOVE,CARRY,WORK,WORK,WORK,WORK,WORK];
-                    let partsCost2 = 0;
-                    for(each of parts){
-                        partsCost2 += BODYPART_COST[each];
-                    }
-                    //Add work/move cost
-                    let engAvail2 = Game.rooms[roomName].energyCapacityAvailable
-                    //Minus 150 for the work/carry base, then see how many move/carries we can add
-                    mult = Math.floor(engAvail2/partsCost2)
-                    //console.log(mult)
-                    newBod = [].concat(...Array(Math.min(mult,7)).fill(parts));
-                    //console.log(newBod)
-                    return newBod;
-                case 'remoteBuilder':
-                    switch(roomName){
-                        case 'W39N46':
-                            //console.log("REMOTE")
-                            return [MOVE,MOVE,MOVE,MOVE,WORK,WORK,WORK,WORK,WORK,CARRY,CARRY,CARRY,CARRY];
-                            break;
-                        default:
-                            return [MOVE,CARRY,MOVE,CARRY,MOVE,CARRY];
-                    } 
-                    break;
-            }
-            break;
-    }
-}*/
 //#endregion
 //#region Creep Body Functions
 
@@ -444,9 +263,9 @@ function getGeneralist(room) {
 //Miner - Yeoman
 function getMiner(holding){
     let isReserved = Game.rooms[holding] && Game.rooms[holding].controller.reservation && Game.rooms[holding].controller.reservation.username == Memory.me;
-    let newBody = Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level > 4 ? [MOVE,MOVE,CARRY,WORK,WORK] : [MOVE,WORK];
+    let newBody = Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level >= 4 ? [MOVE,MOVE,CARRY,WORK,WORK] : [MOVE,WORK];
     let partsCost = 0
-    let maxWorkParts = Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level > 4 ? 6 : 3;
+    let maxWorkParts = Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level >= 4 ? 6 : 3;
     let energyAvailable = Game.rooms[Memory.kingdom.holdings[holding].homeFief].energyCapacityAvailable;
     let workPartsCount = newBody.filter(part => part === WORK).length;
 
@@ -546,8 +365,8 @@ function getSkirmisher(room,plan){
 
     newBody.push(...parts);
     totalCost += setCost;
-
-    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+    let cap = 2;
+    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50 && i <= cap; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
@@ -557,6 +376,7 @@ function getSkirmisher(room,plan){
 
 //General hauler - Porter
 function getHauler(room,fiefCreeps){
+    let partsCap = global.cpuAverage > 90 ? 36 : 28;
     let parts = room.controller.level > 3 && room.storage ? [MOVE, CARRY] : [MOVE,CARRY];
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let maxCap = global.cpuAverage > 90 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable/2)
@@ -569,7 +389,7 @@ function getHauler(room,fiefCreeps){
     newBody.push(...parts);
     totalCost += setCost;
 
-    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+    for (let i = 1; i < maxParts && newBody.length + parts.length <= partsCap; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
@@ -611,14 +431,15 @@ function getScout(room,fiefCreeps){
     
     return [[MOVE],50]
 }
-function getMHarvester(room){
-    parts = [MOVE,MOVE,WORK,WORK,WORK];
+function getMHarvester(room,job = 'default'){
+    let engAvail = room.energyCapacityAvailable
+    parts = [MOVE,WORK,WORK];
     let partsCost = 0;
     for(each of parts){
         partsCost += BODYPART_COST[each];
     }
     //Add work/move cost
-    let engAvail = room.energyCapacityAvailable
+    
     mult = Math.floor(engAvail/partsCost)
     //Max number of arrays so we don't pass 50 parts
     let arrMax = Math.floor(50/parts.length)
@@ -626,6 +447,16 @@ function getMHarvester(room){
     newBod = [].concat(...Array(Math.min(mult,arrMax)).fill(parts));
     partsCost = newBod.reduce((totalCost, part) => totalCost + BODYPART_COST[part], 0);
     //console.log(newBod)
+    if(job == 'remoteHarvest') {
+        for (let i = 0; i < newBod.length; i++) {
+            if (newBod[i] == WORK) {
+                newBod[i] = CARRY;
+                partsCost -= BODYPART_COST[WORK] - BODYPART_COST[CARRY];
+                break;
+            }
+        }
+    }
+    
     return [newBod,partsCost];
 }
 
@@ -637,7 +468,7 @@ function getReserver(room,fiefCreeps){
     }
     let engAvail = room.energyCapacityAvailable;
     let mult = Math.floor(engAvail/partsCost)
-    let arrCap = Math.floor(MAX_CREEP_SIZE/parts.length)
+    let arrCap = 6//Math.floor(MAX_CREEP_SIZE/parts.length)
     let newBod = [].concat(...Array(Math.min(mult,arrCap)).fill(parts));
     //Get the total cost of the body
     let totalCost = 0;

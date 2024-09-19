@@ -14,59 +14,155 @@ var roleBait = {
             { x: -1, y: -1 }  // Top-left
         ];
         let targetRoom = creep.memory.targetRoom || 'W20S0'
-        if(creep.memory.job == 'gopher'){
-            creep.travelTo(new RoomPosition(36,44,targetRoom))
-            if(creep.room.name == targetRoom){
-                if(!Memory.season) Memory.season = {}
-                if(!Memory.season.scoreCollectors) Memory.season.scoreCollectors = {}
-                if(!Memory.season.scoreCollectors[creep.room.name]){
-                    let walls  = creep.room.find(FIND_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_WALL)
-                    let collector = creep.room.find(FIND_SCORE_COLLECTORS)[0]
-                    if(!collector) return
-                    let maxWallHits = 0;
-                    walls.forEach(w => {if(w.hits > maxWallHits)maxWallHits = w.hits});
-                    let costMatrix = new PathFinder.CostMatrix();
-                    console.log("WALLS",walls)
-                    for (let wall of walls) {
-                        let cost = mapWallHitsToCost(wall.hits);
-                        costMatrix.set(wall.pos.x, wall.pos.y, cost);
+        if(creep.memory.job == 'score'){
+            if(creep.store.getUsedCapacity()==0){
+
+                if(creep.room.name == creep.memory.fief){
+                    if(creep.room.terminal && creep.room.terminal.store[RESOURCE_SCORE] > 0){
+                        creep.travelTo(creep.room.terminal);
+                        creep.withdraw(creep.room.terminal,RESOURCE_SCORE)
+                        return;
                     }
-                    
-                    let route = PathFinder.search(creep.pos, { pos: collector.pos, range: 1 }, {
-                        plainCost: 0,
-                        swampCost: 0,
-                        maxOps: 2000,
-                        maxRooms: 1,
-                        roomCallback: function(roomName){
-                            return costMatrix
+                    creep.travelTo(creep.room.storage);
+                    creep.withdraw(creep.room.storage,RESOURCE_SCORE)
+                    return;
+                }
+                else{
+                    let cans = creep.room.find(FIND_SCORE_CONTAINERS);
+                    if(cans.length){
+                        creep.travelTo(cans[0]);
+                        if(creep.pos.getRangeTo(cans[0])){
+                            creep.withdraw(cans[0],RESOURCE_SCORE)
                         }
-                    }).path;
-                    console.log("PATH",route)
-
-
-
-                    let targetWalls = []
-                    let totalHits = 0;
-                    for(let spot of route){
-                        let look = creep.room.lookForAt(LOOK_STRUCTURES,spot).filter(struct => struct.structureType == STRUCTURE_WALL);
-                        console.log("LOOK",look)
-                        if(look.length){
-                            targetWalls.push(spot);
-                            totalHits += look[0].hits
-                        }
+                        return;
                     }
-
-                    Memory.season.scoreCollectors[creep.room.name] = {
-                        costMatrix: costMatrix.serialize(),
-                        targetWalls: targetWalls,
-                        totalHits : totalHits
+                    if(creep.ticksToLive < 200 || (creep.memory.fief != 'W21S1' && creep.ticksToLive < 300)) {
+                        spawnCreep('bait','25m25c',creep.memory.fief,33,{job:'score',targetRoom:'W20S0'});
+                        creep.suicide();
+                        
                     }
-
-                    function mapWallHitsToCost(wallHits,maxWallHits) {
-                        return Math.min(254, Math.floor((wallHits / maxWallHits) * 254));
-                    }
+                    creep.travelTo(Game.rooms[creep.memory.fief].storage);
+                    return;
                 }
             }
+            if(creep.room.name != targetRoom){
+                creep.travelTo(new RoomPosition(28,21,targetRoom),{maxOps:20000,maxRooms:64,preferHighway:true});
+            }
+            else{
+                let collector = creep.room.find(FIND_SCORE_COLLECTORS)[0]
+                if(!collector) return
+                creep.travelTo(collector,{maxOps:20000});
+                let g = creep.transfer(collector,RESOURCE_SCORE);
+                }
+            return;
+        }
+        if(creep.memory.job == 'mirScore'){
+            targetRoom = 'W30N10';
+            if(creep.store.getUsedCapacity()==0){
+
+                if(creep.room.name == creep.memory.fief){
+                    if(creep.room.storage.store[RESOURCE_SCORE] > 0){
+                        creep.travelTo(creep.room.storage);
+                        creep.withdraw(creep.room.storage,RESOURCE_SCORE)
+                        return;
+                    }
+                    else if(creep.room.terminal.store[RESOURCE_SCORE] > 0){
+                        creep.travelTo(creep.room.terminal);
+                        creep.withdraw(creep.room.terminal,RESOURCE_SCORE)
+                        return;
+                    }
+
+                }
+                else{
+                    let cans = creep.room.find(FIND_SCORE_CONTAINERS);
+                    if(cans.length){
+                        creep.travelTo(cans[0]);
+                        if(creep.pos.getRangeTo(cans[0])){
+                            creep.withdraw(cans[0],RESOURCE_SCORE)
+                        }
+                        return;
+                    }
+                    const droppedResources = creep.room.find(FIND_DROPPED_RESOURCES).filter(r=>r.resourceType == RESOURCE_SCORE && r.amount > 100);
+                    if(droppedResources.length){
+                        creep.travelTo(droppedResources[0]);
+                        if(creep.pos.getRangeTo(droppedResources[0])){
+                            creep.pickup(droppedResources[0])
+                        }
+                        return;
+                    }
+                    if(creep.ticksToLive < 350) {
+                        spawnCreep('bait','25m25c','W30N10',33,{job:'mirScore',targetRoom:'W30N10'});
+                        creep.suicide();
+                        
+                    }
+                    creep.travelTo(Game.rooms[creep.memory.fief].storage);
+                    return;
+                }
+            }
+            if(creep.room.name != targetRoom){
+                creep.travelTo(new RoomPosition(28,38,targetRoom),{maxOps:20000,maxRooms:64});
+            }
+            else{
+                let collector = creep.room.find(FIND_SCORE_COLLECTORS)[0]
+                if(!collector) return
+                creep.travelTo(collector,{maxOps:20000});
+                let g = creep.transfer(collector,RESOURCE_SCORE);
+                }
+            return;
+        }
+        if(creep.memory.job == 'dakScore'){
+            targetRoom = 'W30S0'
+            if(creep.store.getUsedCapacity()==0){
+
+                if(creep.room.name == creep.memory.fief){
+                    if(creep.room.terminal && creep.room.terminal.store[RESOURCE_SCORE] > 0){
+                        creep.travelTo(creep.room.terminal);
+                        creep.withdraw(creep.room.terminal,RESOURCE_SCORE)
+                        return;
+                    }
+                    creep.travelTo(creep.room.storage);
+                    creep.withdraw(creep.room.storage,RESOURCE_SCORE)
+                    return;
+                }
+                else{
+                    let cans = creep.room.find(FIND_SCORE_CONTAINERS);
+                    if(cans.length){
+                        creep.travelTo(cans[0]);
+                        if(creep.pos.getRangeTo(cans[0])){
+                            creep.withdraw(cans[0],RESOURCE_SCORE)
+                        }
+                        return;
+                    }
+                    if(creep.ticksToLive < 300) {
+                        spawnCreep('bait','25m25c','W27N3',33,{job:'dakScore',targetRoom:'W30S0'});
+                        creep.suicide();
+                        
+                    }
+                    creep.travelTo(Game.rooms[creep.memory.fief].storage);
+                    return;
+                }
+            }
+            if(creep.room.name != targetRoom){
+                creep.travelTo(new RoomPosition(28,21,targetRoom),{maxOps:20000,maxRooms:64,preferHighway:true});
+            }
+            else{
+                let collector = creep.room.find(FIND_SCORE_COLLECTORS)[0]
+                if(!collector) return
+                creep.travelTo(collector,{maxOps:20000});
+                let g = creep.transfer(collector,RESOURCE_SCORE);
+                }
+            return;
+        }
+        if(creep.memory.job == 'gopher'){
+            if(!creep.memory.step)creep.travelTo(new RoomPosition(20,13,'W25S0'))
+            else if(!creep.memory.step2)creep.travelTo(new RoomPosition(48,26,'W26S2'))
+            else{creep.travelTo(new RoomPosition(14,15,'W23S3'))}
+            if(creep.room.name == 'W25S0') creep.memory.step = true;
+            if(creep.room.name == 'W26S2') creep.memory.step2 = true;
+            if(creep.room.name != 'W23S3') return;
+            creep.memory = {fief:creep.room.name,targetRoom:creep.room.name,job:'remote',role:'generalist',homeRoom:'creep.room.name'}
+            return;
+            
         }
         if(creep.store.getFreeCapacity() > 0){
             if(creep.room.name != targetRoom){

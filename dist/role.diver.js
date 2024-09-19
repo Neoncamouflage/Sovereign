@@ -1,10 +1,105 @@
 const helper = require('functions.helper');
 const registry = require('registry');
+const supplyDemand = require('supplyDemand')
 var roleDiver = {
-
+    
     /** @param {Creep} creep **/
     run: function(creep) {
-        if(creep.memory.job == 'goTo'){
+        if(creep.memory.job == 'dig'){
+            if(creep.ticksToLive < 200 && !creep.memory.call){
+                spawnCreep('diver','25m25w','W21S1',33,{job:'dig'});
+                creep.memory.call = true;
+            }
+            let targetRoom = creep.memory.targetRoom || 'W20S0';
+            if(creep.room.name == creep.memory.fief){
+                if(creep.memory.boosted){
+                    creep.travelTo(new RoomPosition(26,48,targetRoom))
+                    return;
+                }
+                let body = creep.body.filter(part => part.type == WORK && !part.boost);
+                //console.log("REAVER",body)
+                if(!body.length){
+                    creep.memory.boosted = true;
+                    creep.travelTo(new RoomPosition(26,48,targetRoom))
+                    return;
+                }
+                let labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'XZH2O' && lab.store['XZH2O'] >30);
+                if(!labs.length){
+                    labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'ZH2O' && lab.store['ZH2O'] >30);
+                    if(!labs.length) creep.memory.boosted = true;
+                }
+                let tLab = creep.pos.findClosestByRange(labs);
+                if(creep.pos.getRangeTo(tLab) == 1){
+                    tLab.boostCreep(creep);
+                    body = body.filter(part => part.type == WORK && !part.boost);
+                    if(!body.length){
+                        creep.memory.boosted = true;
+                        creep.travelTo(new RoomPosition(26,48,targetRoom));
+                    }
+                    else{
+                        labs = labs.filter(lab => lab.id != tLab.id);
+                        tLab = creep.pos.findClosestByRange(labs);
+                        if(tLab && creep.pos.getRangeTo(tLab) > 1) creep.travelTo(tLab);
+                        return;
+                    }
+                }
+                else{
+                    creep.travelTo(tLab)
+                }
+                return;
+            }
+            else if(creep.room.name != targetRoom){
+                creep.travelTo(new RoomPosition(26,48,targetRoom))
+                return;
+            }
+            if(!creep.memory.targetID || !Game.getObjectById(creep.memory.targetID)){
+                for(i=0;i<Memory.season.scoreCollectors[targetRoom].targetWalls.length;i++){
+                    let spot = Memory.season.scoreCollectors[targetRoom].targetWalls[i]
+                    //console.log("SPOT CHECK",JSON.stringify(spot))
+                    let spotCheck = creep.room.lookForAt(LOOK_STRUCTURES,spot.x,spot.y).filter(struct => struct.structureType == STRUCTURE_WALL);
+                    //console.log("CHECK",JSON.stringify(spotCheck))
+                    if(spotCheck.length){
+                        creep.memory.targetID = spotCheck[0].id;
+                        break;;
+                    }
+                }
+            }
+            let target = Game.getObjectById(creep.memory.targetID);
+            if(target && creep.pos.getRangeTo(target) == 1){
+                creep.dismantle(target);
+
+                if(!global.reaverTick || Game.time - global.reaverTick > 7 ){
+                    global.reaverTick = Game.time;
+                    let droppedResources = creep.room.find(FIND_DROPPED_RESOURCES);
+                    //console.log("Checking drops in",remote.name,"and found",droppedResources.length)
+                    //Retrieve current tasks to check against
+                    droppedResources.forEach(resource => {
+                        const { id, amount, resourceType } = resource;
+                
+                        //Details object for the addRequest call
+                        let details = {
+                            type: 'pickup',
+                            targetID: id,
+                            amount: amount,
+                            resourceType: resourceType,
+                            international : true,
+                            priority: 5
+                        };
+                        //console.log("Attempting to add",JSON.stringify(details))
+                        const taskID = supplyDemand.addRequest(Game.rooms[creep.memory.fief], details);
+                        //console.log('Holding added new task:', taskID);
+                    });
+                }
+            }
+            else if(target){
+                creep.travelTo(target,{maxRooms:1,maxOps:20000});
+            }
+            return;
+        }
+        if(creep.memory.job == 'pull'){
+
+        }
+        if(creep.memory.job == 'dropoff'){
             let targetRoom = creep.memory.targetRoom;
             if(creep.room.name != targetRoom){
                 creep.travelTo(new RoomPosition(25,25,targetRoom))

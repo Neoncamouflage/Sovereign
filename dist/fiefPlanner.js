@@ -1,5 +1,6 @@
 const helper = require('functions.helper');
 const minCut = require('minCut');
+const profiler = require('screeps-profiler');
 const fiefPlanner = {
     //Generates a distance transform for a room and sets it to test memory
     distanceTransform: function(terrain){
@@ -2113,6 +2114,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
 }
 
 module.exports = fiefPlanner;
+profiler.registerObject(fiefPlanner, 'fiefPlanner');
 global.getFiefPlan = fiefPlanner.getFiefPlan;
 //global.testGenerateRoomPlan = fiefPlanner.generateRoomPlan.bind(fiefPlanner);
 //global.testRampartGroups = fiefPlanner.getRampartGroups;

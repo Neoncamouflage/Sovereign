@@ -1,12 +1,12 @@
 const Troupe = require('Troupe');
 const DEFAULT_MISSION_PRIORITY = 5;
-
+const profiler = require('screeps-profiler');
 const marshal = {
     //Assign missions to troupes and run them
     run: function(kingdomCreeps){
         //Before we do anything, clear any old alarms. 1500 ticks expiration
         for(let [room,alarm] of Object.entries(global.heap.alarms)){
-            if(Game.time - alarm.tick > 1500) delete global.heap.alarms[room]
+            if(Game.time - alarm.tick > 1500 || (alarm.expiry && Game.time > alarm.expiry)) delete global.heap.alarms[room]
         }
         for(let mission of Object.values(global.heap.missions)){
             if(!mission.assigned){
@@ -21,7 +21,16 @@ const marshal = {
         for(let crp of global.heap.army.reserve){
             let creep = Game.getObjectById(crp)
             let injured = creep.room.find(FIND_MY_CREEPS).filter(crp => crp.hits < crp.hitsMax)
-            if(injured.length){
+            let hostiles = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp.owner.username))
+            let attk = creep.getActiveBodyparts(ATTACK);
+            let rng = creep.getActiveBodyparts(RANGED_ATTACK);
+            if(hostiles.length && (attk>1 || rng>1)){
+                let target = creep.pos.findClosestByRange(hostiles);
+                creep.travelTo(target,{range:rng > 1 ? 3 : 1});
+                creep.attack(target);
+                creep.rangedAttack(target);
+            }
+            else if(injured.length && creep.getActiveBodyparts(HEAL) > 1){
                 creep.travelTo(injured[0])
                 if(creep.pos.getRangeTo(injured[0]) > 1){
                     creep.rangedHeal(injured[0])
@@ -29,11 +38,13 @@ const marshal = {
                     creep.heal(injured[0])
                 }
             }
-            if(creep.room.name != creep.memory.fief){
-                creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
-            }
-            else if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
-                creep.travelTo(Game.rooms[creep.memory.fief].controller);
+            else{
+                if(creep.room.name != creep.memory.fief){
+                    creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
+                }
+                else if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
+                    creep.travelTo(Game.rooms[creep.memory.fief].controller);
+                }
             }
         }
     },
@@ -69,9 +80,9 @@ const marshal = {
             roomName:roomName
         })
     },
-    MineSKMineral(roomName){
+    skMining(roomName){
         marshal.addMission({
-            type:'mineSKMineral',
+            type:'skMining',
             roomName:roomName
         })
     }
@@ -112,3 +123,4 @@ function generateMissionID(){
 }
 global.addMission = marshal.addMission;
 module.exports = marshal;
+profiler.registerObject(marshal, 'marshal');

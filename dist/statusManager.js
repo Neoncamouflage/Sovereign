@@ -4,9 +4,8 @@ const profiler = require('screeps-profiler');
 By default this module references an object stored in global that is updated by the rest of the bot.
 The object must conform to the following schema.
 kingdomStatus: {
+    wares: {resourceType:amount,resourceType2:amount ...},
     'roomName' : {
-        roomLevel:roomLevel,
-        wares: totalWares(room),
         totalCreeps: totalCreeps,
         fiefCreeps: fiefCreeps,
         hostileCreeps: roomBaddies,
@@ -64,8 +63,18 @@ const SCROLL_CYCLE_TICKS = 5;
 const statusManager = {
 
     run: function() {
+        //The overall status object. As long as this is properly assigned, all the rest will work as-is.
         let kingdomStatus = global.heap.kingdomStatus;
+        //Take a custom cycleTicks value from the status object, or default to the constant
+        let cycleTicks = kingdomStatus.cycleTicks || SCROLL_CYCLE_TICKS;
         let rVis = new RoomVisual();
+        //Cycle the scrolls based on the cycle constant. Wares scroll will cycle through:
+        //Boosts - T1/T2/T3
+        //Base minerals and energy
+        //Factory commodities
+        let cycleOptions = ['Basic','T1','T2','T3','Factory']
+
+
         drawScrolls();
         return;
         //Loop through status of each fief for wares
@@ -367,14 +376,11 @@ const statusManager = {
         return;
 
         function drawScrolls(){
-            //Cycle the scrolls based on the cycle constant. Wares scroll will cycle through:
-            //Boosts - T1/T2/T3
-            //Base minerals and energy
-            //Factory commodities
             
             //Minimum length of 1 if empty, otherwise extend the scroll up to the maximum
-            let totalFiefLength = SCROLL_LENGTH + Math.min(MAXIMUM_FIEFS_DISPLAYED,Math.max(1,Object.keys(kingdomStatus.fiefs).length))
-            let totalWaresLength = SCROLL_LENGTH + Math.min(MAXIMUM_FIEFS_DISPLAYED,Math.max(1,Object.keys(kingdomStatus.fiefs).length))
+            let totalFiefLength = SCROLL_LENGTH + Math.min(MAXIMUM_FIEFS_DISPLAYED,Math.max(9,Object.keys(kingdomStatus.fiefs).length))
+            let totalWaresLength = SCROLL_LENGTH + 5
+            let fiefStart = totalWaresLength + 3
             //Build wares scroll top
             rVis.circle(SCROLL_WIDTH-.4,0.20,{
                 radius: .75,
@@ -416,40 +422,43 @@ const statusManager = {
                 opacity: ROLL_OPACITY,
                 stroke: SCROLL_FILL_COLOR
             });
-            //Build kingdom scroll below wares
-            rVis.circle(SCROLL_WIDTH-.4,totalFiefLength+3,{
+
+            //Build fief scroll below wares
+            //Top of scroll
+            rVis.circle(SCROLL_WIDTH-.4,fiefStart,{
                 radius: .75,
                 fill:SCROLL_FILL_COLOR,
                 opacity: 1,
                 stroke: SCROLL_FILL_COLOR
             });
-            rVis.rect(-0.25, totalFiefLength+2.205,SCROLL_WIDTH, 1.59,{
+            rVis.rect(-0.25, fiefStart-0.79,SCROLL_WIDTH, 1.59,{
                 opacity: 1,
                 fill:SCROLL_FILL_COLOR
             }); 
-            rVis.circle(-0.25,totalFiefLength+3,{
+            rVis.circle(-0.25,fiefStart,{
                 radius: .75,
                 fill:SCROLL_END_COLOR,
                 opacity: 1,
                 stroke: SCROLL_FILL_COLOR
             });
+            
             //Middle of scroll
-            rVis.rect(-0.5, totalFiefLength+0.75, SCROLL_WIDTH+0.2, totalFiefLength,{
+            rVis.rect(-0.5, fiefStart+0.75, SCROLL_WIDTH+0.2, totalFiefLength+1,{
                 opacity: 0.5,
                 fill:SCROLL_FILL_COLOR
             }); 
             //Bottom of scroll
-            rVis.circle(SCROLL_WIDTH-.4,totalFiefLength.length+2,{
+            rVis.circle(SCROLL_WIDTH-.4,fiefStart+totalFiefLength+2,{
                 radius: .70,
                 fill:SCROLL_FILL_COLOR,
                 opacity: ROLL_OPACITY,
                 stroke: SCROLL_FILL_COLOR
             });
-            rVis.rect(-0.25, totalFiefLength.length+1.25,SCROLL_WIDTH, 1.5,{
+            rVis.rect(-0.25, fiefStart+totalFiefLength+1.25,SCROLL_WIDTH, 1.5,{
                 opacity: ROLL_OPACITY,
                 fill:SCROLL_FILL_COLOR
             }); 
-            rVis.circle(-0.25,totalFiefLength.length+2,{
+            rVis.circle(-0.25,fiefStart+totalFiefLength+2,{
                 radius: .70,
                 fill:SCROLL_END_COLOR,
                 opacity: ROLL_OPACITY,

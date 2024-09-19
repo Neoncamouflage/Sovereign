@@ -74,7 +74,19 @@ var roleUpgrader = {
             }
             if(gotTransfer) return;
             if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
-                if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                if(creep.room.terminal && creep.room.terminal.store[RESOURCE_ENERGY] > 0){
+                    let tRange = creep.pos.getRangeTo(creep.room.terminal);
+
+                    if(tRange <= 5){
+                        if(tRange == 1){
+                            creep.withdraw(creep.room.terminal,RESOURCE_ENERGY);
+                        }
+                        else if(creep.store.getUsedCapacity() == 0){
+                            creep.travelTo(creep.room.terminal)
+                        }
+                    }
+                }
+                else if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
             else{
                 if(creep.room.storage){
@@ -89,6 +101,12 @@ var roleUpgrader = {
                             else if(creep.store.getUsedCapacity() == 0){
                                 creep.travelTo(creep.room.terminal)
                             }
+                        }
+                        else if(storageRange == 1){
+                            creep.withdraw(creep.room.storage,RESOURCE_ENERGY);
+                        }
+                        else if(creep.store.getUsedCapacity() == 0){
+                            creep.travelTo(creep.room.storage)
                         }
                     }
                     else if(storageRange == 1){

@@ -28,7 +28,7 @@ if (!Creep.prototype._harvest) {
     Creep.prototype.harvest = function(target) {
         //Store whatever is lower, total energy of target or our total harvest
         let tEnergy = 0;
-        if(target.energy) tEnergy= Math.min(target.energy,(this.getActiveBodyparts(WORK) * HARVEST_POWER))
+        if(target && target.energy) tEnergy= Math.min(target.energy,(this.getActiveBodyparts(WORK) * HARVEST_POWER))
 
         //Call the actual harvest
         let harvCall = this._harvest(target);
@@ -49,7 +49,7 @@ if (!Creep.prototype._build) {
     Creep.prototype.build = function(target) {
         //Store whatever is lower, progress left to build or our build cost
         let tEnergy = 0;
-        if(target.progress) tEnergy= Math.min((target.progressTotal-target.progress),(this.getActiveBodyparts(WORK) * BUILD_POWER))
+        if(target && target.progress) tEnergy= Math.min((target.progressTotal-target.progress),(this.getActiveBodyparts(WORK) * BUILD_POWER))
         tEnergy = tEnergy*-1
         //Call the actual build
         let buildCall = this._build(target);
@@ -85,9 +85,15 @@ if (!Creep.prototype._upgradeController) {
 
 //#endregion
 //Respawns creep
-Creep.prototype.respawn = function({ticks=200,sev=50} = {}){
-    if(Game.time % 3 == 0 && this.ticksToLive <= ticks && !this.memory.respawn){
-        registry.requestCreep({sev:sev,body:this.body.map(part => part.type),memory:{role:this.memory.role,fief:this.memory.fief,preflight:false},respawn:this.id})
+Creep.prototype.respawn = function({ticks=250,sev=50} = {}) {
+    if(Game.time % 3 == 0 && this.ticksToLive <= ticks && !this.memory.respawn) {
+        const memoryCopy = JSON.parse(JSON.stringify(this.memory));
+        registry.requestCreep({
+            sev: sev,
+            body: this.body.map(part => part.type),
+            memory: memoryCopy,
+            respawn: this.id
+        });
     }
 }
 //Gets a resource up to a target amount
@@ -168,9 +174,8 @@ Creep.prototype.emptyStore = function () {
 };
 
 //Dumps creep inventory except for specified resource, to be used with terminal/storage
-Creep.prototype.dumpAndGet = function (target,resourceType, amount) {
+Creep.prototype.dumpAndGet = function (target,resourceType) {
     resourceType = resourceType || RESOURCE_ENERGY;
-    amount = amount || this.store.getCapacity();
     //If we're too far away, go to the target
     if(this.pos.getRangeTo(target) > 1){
         this.travelTo(target);
@@ -187,7 +192,8 @@ Creep.prototype.dumpAndGet = function (target,resourceType, amount) {
     }
     //If we're good, withdraw up to whatever we need
     else{
-        this.withdraw(target,resourceType,amount - this.store.getUsedCapacity(resourceType))
+        this.withdraw(target,resourceType)
+        this.memory.state = 'dropoff'
         return 'withdraw'
     }
 };

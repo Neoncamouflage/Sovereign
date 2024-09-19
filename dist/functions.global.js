@@ -55,6 +55,52 @@ global.setDiplomacy = function setDiplomacy(type,username){
         
     }
 }
+
+global.isMe = function isMe(target){
+    return target.toLowerCase() == Memory.me.toLowerCase()
+}
+
+global.getDiplomacy = function getDiplomacy(username){
+    for (let [type,members] of Object.entries(Memory.diplomacy)){
+        //Continue if we're not looking at one of the member lists
+        if(!['allies','ceasefire','outlaws'].includes(username)) continue;
+        //If they're on one of the lists, return their status
+        if(members.includes(username)) return type;
+    }
+    //Not on any list, return neutral
+    return 'neutral';
+}
+
+global.isFriend = function isFriend(target){
+    let checkVal;
+    if(target instanceof RoomObject){
+        if(target.owner && target.owner.username){
+            checkVal = target.owner.username;
+        }
+        else{
+            //If neither of these then something's weird. Log it and return false.
+            console.log("Unable to get diplo status of",target)
+            return false;
+        }
+    }
+    else if(typeof target === 'string' || target instanceof String){
+        checkVal = target;
+    }
+    else{
+        //If neither string or roomobject, something's weird again. Log it and return.
+        console.log("Diplo target is neither string nor object",target)
+        return false;
+    }
+    //Get diplo status and return friendly check
+    let diplo = getDiplomacy(checkVal);
+    if(diplo == 'allies' || diplo == 'ceasefire'){
+        return true;
+    }
+    else{
+        return false;
+    }
+}
+
 global.removeScoutData = function removeScoutData(roomName){
     if(global.heap && global.heap.scoutData && global.heap.scoutData[roomName]) delete global.heap.scoutData[roomName];
 }
@@ -95,18 +141,18 @@ global.getScoutData = function getScoutData(roomName=false){
     
 
     function convertData(roomName){
+        const roomData = scoutData[roomName] || {};
         return {
-            roomName: scoutData[roomName]['r'],
-            lastRecord: scoutData[roomName]['l'],
-            roomType: scoutData[roomName]['t'],
-            ownerType: scoutData[roomName]['o'],
-            owner: scoutData[roomName]['w'],
-            controller: scoutData[roomName]['c'],
-            controllerLevel: scoutData[roomName]['u'],
-            towers: scoutData[roomName]['t'],
-            sources: scoutData[roomName]['s'],
-            mineral: scoutData[roomName]['m'],
-            exits: scoutData[roomName]['e']
+            roomName: roomData.r || '',
+            lastRecord: roomData.l || '',
+            roomType: roomData.t || '',
+            ownerType: roomData.o || '',
+            owner: roomData.w || '',
+            controller: roomData.c || '',
+            controllerLevel: roomData.u || '',
+            towers: roomData.y || '',
+            sources: roomData.s || '',
+            mineral: roomData.m || ''
         };
     }
 }
@@ -146,12 +192,12 @@ global.setScoutData = function setScoutData(room,data={},force=false){
         r : room.name || '',
         l : Game.time || '',
         t: roomType || '',
-        o: ownerType || '',
-        w: ownerType ?  owner : '',
-        c: room.controller ? {x:room.controller.pos.x,y:room.controller.pos.y} : '',
-        u: roomType == 'fief' ? room.controller.level : '',
-        y: towerPositions || '',
-        s: sources || '',
+        ...(ownerType && { o: ownerType }),
+        ...(ownerType && owner && { w: owner }),
+        ...(room.controller && { c: room.controller.pos }),
+        ...(roomType === 'fief' && room.controller.level && { u: room.controller.level }),
+        ...(towerPositions.length && { y: towerPositions }),
+        ...(sources && { s: sources }),
         m: mineral ? {x:mineral.pos.x,y:mineral.pos.y,type:mineral.mineralType} : ''
     }
     if(Game.shard.name == 'shardSeason'){
@@ -200,6 +246,7 @@ global.parseRoomName = function parseRoomName(roomName) {
 }
 
 global.spawnCreep = function spawnCreep(role,body,fief,sev=50,memory = {}){
+    if(!Array.isArray(body)) body = parseBody(body)
     memory.role = role
     memory.fief = fief || Memory.kingdom.fiefs[Math.floor(Math.random() * Memory.kingdom.fiefs.length)]
     let plan = {
@@ -211,6 +258,36 @@ global.spawnCreep = function spawnCreep(role,body,fief,sev=50,memory = {}){
     if(!Memory.hardSpawns) Memory.hardSpawns = {};
     if(!Memory.hardSpawns[fief]) Memory.hardSpawns[fief] = []; 
     Memory.hardSpawns[fief].push(plan)
+}
+
+global.parseBody = function parseBody(bodyString){
+    const bodyParts = [];
+    const regex = /(\d+)([a-z]+)/gi; // Match a number followed by one or more letters
+    const partMap = {
+        'w': WORK,
+        'h': HEAL,
+        'm': MOVE,
+        'r': RANGED_ATTACK,
+        't': TOUGH,
+        'c': CARRY,
+        'a': ATTACK,
+        'p': CLAIM
+    };
+    
+    let match;
+    while((match = regex.exec(bodyString)) !== null) {
+        const count = parseInt(match[1]); // Get the number of repetitions
+        const partSequence = match[2].toLowerCase().split(''); // Split the sequence of letters
+        
+        // Collect the body parts for the sequence
+        const parts = partSequence.map(char => partMap[char]);
+        
+        // Repeat the entire sequence 'count' times
+        for (let i = 0; i < count; i++) {
+            bodyParts.push(...parts);
+        }
+    }
+    return bodyParts;
 }
 
 global.describeRoom = function describeRoom(name){

@@ -16,8 +16,6 @@ class Traveler {
      */
     static travelTo(creep, destination, options = {}) {
         if(options == 25)console.log(JSON.stringify(creep))
-        // uncomment if you would like to register hostile rooms entered
-        //this.updateRoomStatus(creep.room);
         if (!destination) {
             return ERR_INVALID_ARGS;
         }
@@ -38,13 +36,15 @@ class Traveler {
                     options.returnData.nextPos = destination;
                     options.returnData.path = direction.toString();
                 }
-                //Record movement intent
+                // -- Update this for creep move priority, relay flag/relay type, etc.
                 this.movementIntents[creep.name] = {
                     x: creep.pos.x,
                     y: creep.pos.y,
                     roomName: creep.room.name,
                     direction:direction
                 }
+                // -- Likely want to move this to the end, where we resolve intents. No need to call move() if we don't know
+                // -- Make sure nothing we use depends on the move() return value, since that won't be returned
                 return creep.move(direction);
             }
             return OK;
@@ -86,6 +86,12 @@ class Traveler {
                 delete travelData.path;
             }
         }
+        // -- Pull a new CM and path if we're entering a live SK room, to avoid pathing issues
+        if ([0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y) && describeRoom(creep.room.name) == ROOM_SOURCE_KEEPER && !options.military){
+            options.freshMatrix = true;
+            delete travelData.path;
+       }
+
         if (options.repath && Math.random() < options.repath) {
             // add some chance that you will find a new path randomly
             delete travelData.path;
@@ -166,6 +172,7 @@ class Traveler {
      * @returns {RoomMemory|number}
      */
     static checkAvoid(roomName) {
+        if(Memory.manualAvoid && Memory.manualAvoid.includes(roomName)) return true;
         if(global.heap.alarms[roomName]) return true;
         else {return false}
     }
@@ -289,7 +296,7 @@ class Traveler {
                         matrix.set(obstacle.pos.x, obstacle.pos.y, 0xff);
                     }
                 }
-                let hostiles = room.find(FIND_HOSTILE_CREEPS);
+                /*let hostiles = room.find(FIND_HOSTILE_CREEPS);
                 if(hostiles.length){
                     for(let badCreep of hostiles){
                         if(!helper.isSoldier(badCreep)) continue;
@@ -299,7 +306,7 @@ class Traveler {
                             }
                         }
                     }
-                }
+                }*/
             }
             if (options.roomCallback) {
                 if (!matrix) {
@@ -463,6 +470,7 @@ class Traveler {
      * @returns {CostMatrix}
      */
     static addStructuresToMatrix(room, matrix, roadCost) {
+        const terrain = new Room.Terrain(room.name);
         let impassibleStructures = [];
         for (let structure of room.find(FIND_STRUCTURES)) {
             if (structure instanceof StructureRampart) {
@@ -490,22 +498,9 @@ class Traveler {
         for (let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
-        if(Memory.kingdom.fiefs[room.name] && Memory.kingdom.fiefs[room.name].sources){
-            for (let source of Object.values(Memory.kingdom.fiefs[room.name].sources)) {
-                for(let x = -1;x<=1;x++){
-                    for(let y = -1;y<=1;y++){
-                        if(x!=0 && y!=0) matrix.set(source.x+x, source.y+y, 25);
-                    }
-                }
-            }
-        }
-        else if(Memory.kingdom.holdings[room.name] && Memory.kingdom.holdings[room.name].sources){
-            for (let source of Object.values(Memory.kingdom.holdings[room.name].sources)) {
-                for(let x = -1;x<=1;x++){
-                    for(let y = -1;y<=1;y++){
-                        if(x!=0 && y!=0) matrix.set(source.x+x, source.y+y, 25);
-                    }
-                }
+        for(let crp of room.find(FIND_MY_CREEPS)){
+            if(crp.memory.stay){
+                matrix.set(crp.pos.x,crp.pos.y,200)
             }
         }
         return matrix;
@@ -601,7 +596,7 @@ class Traveler {
                         return target.getActiveBodyparts(MOVE) === (target.store.getUsedCapacity() > 0 ? target.body.length : target.body.length - target.getActiveBodyparts(CARRY)) / 2
                     }
                     
-                    if(!equalMove(blocker) && equalMove(Game.creeps[creep])){
+                    if(false && !equalMove(blocker) && equalMove(Game.creeps[creep])){
                         //blocker.say("🐖🔄",true);
                         //Game.creeps[creep].say("🐖🔄",true)
                         let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
@@ -721,6 +716,7 @@ Traveler.structureMatrixCache = {};
 Traveler.creepMatrixCache = {};
 Traveler.movementIntents = {};
 module.exports = Traveler;
+profiler.registerClass(Traveler, 'Traveler');
 // this might be higher than you wish, setting it lower is a great way to diagnose creep behavior issues. When creeps
 // need to repath to often or they aren't finding valid paths, it can sometimes point to problems elsewhere in your code
 const REPORT_CPU_THRESHOLD = 1000;

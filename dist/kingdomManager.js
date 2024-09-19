@@ -95,7 +95,7 @@ const kingdomManager = {
 }
 
 module.exports = kingdomManager;
-
+profiler.registerObject(kingdomManager, 'kingdomManager');
 function runRoles(kingdomCreeps){
     let cRoles = {};
     for(creep in kingdomCreeps){
@@ -212,7 +212,8 @@ function sortCreeps(){
         'sapper',
         'archer',
         'pikeman',
-        'skirmisher'
+        'skirmisher',
+        'halberdier'
     ]
     for(let creepName in Game.creeps){
         let creep = Game.creeps[creepName];

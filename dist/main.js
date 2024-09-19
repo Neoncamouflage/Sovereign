@@ -1,25 +1,28 @@
 //Imports
 const helper = require('functions.helper'); //Helper functions
 require('constants')
+require('packrat')
 require('prototypes.room');
 require('prototypes.creep');
 require('prototypes.spawn');
 require('prototypes.roomposition');
 require('prototypes.military');
 require('functions.global');
+const supplyDemand = require('supplyDemand')
+global.chronicle = require('chronicle');
 const spinup = require('spinup')
 const kingdomManager = require('kingdomManager'); //Top level kingdom manager system
 const Traveler = require('Traveler');
 const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner')
-profiler.enable();
+//profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 
 //Set Memory reference for building numbers
 
 
 //Set scoring weights for room planning
-
+Memory.lastReset = 0 || Memory.globalReset;
 Memory.globalReset = Game.time;
 module.exports.loop = function () {
     profiler.wrap(function() {
@@ -46,6 +49,18 @@ module.exports.loop = function () {
         global.heap = {fiefs:{},alarms:{},stock:{},kingdomStatus:{fiefs:{},holdings:{},wares:{}},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]},funnelTarget:null};
         if(Game.shard.name == 'shardSeason'){
             global.heap.scoreContainers = [];
+            if(Memory.globalReset - Memory.lastReset < 3 &&(!global.heap.shipping || !Object.keys(global.heap.shipping)) && Memory.shipping){
+                console.log("RESETTING SHIPPING")
+                global.heap.shipping = {};
+                for(let [roomName,batch] of Object.entries(Memory.shipping)){
+                    global.heap.shipping[roomName] = {utilization:Memory.shipping[roomName].utilization,requests:{}};
+                    for(let [taskID,task] of batch){
+                        let nTask = supplyDemand.makeTask(task);
+                        global.heap.shipping[roomName].requests[taskID] = nTask;
+                    }
+
+                }
+            }
         }
         /*for(let fief in Memory.kingdom.fiefs){
             global.heap.fiefs[fief] = {};
@@ -358,6 +373,12 @@ module.exports.loop = function () {
         Traveler.resolveMovement();
         let endCPU = Game.cpu.getUsed();
         //Record CPU utilization over last 100 ticks
+
+        if(Game.shard.name == 'shardSeason'){
+            global.heap.scoreContainers = [];
+            if(global.heap.shipping) Memory.shipping = global.heap.shipping;
+        }
+
         let trailingCPU = Memory.trailingCPU || [];
         trailingCPU = trailingCPU.filter(item =>{
             return Game.time - item.gameTime <= 100;
@@ -469,7 +490,9 @@ global.clearQueue = function clearQueue(room='all'){
     }
 }
 global.getDistance = function getDistance(pos1,pos2){
-    let route = PathFinder.search(pos1,{pos:pos2,range:1,
+    let route = PathFinder.search(pos1,{pos:pos2,range:1},{
+        maxOps:20000,
+        maxRooms:64,
         roomCallback: function(roomName) {
       
             let room = Game.rooms[roomName];
@@ -513,11 +536,11 @@ function profileMemory(root = Memory, depth = 1) {
     RawMemory.segments[9] = JSON.stringify(sizes, undefined, '\t');
 }
 
-global.purgeOldScoutData = function purgeOldScoutData(){
+global.purgeOldScoutData = function purgeOldScoutData(amt = 20000){
     let data = global.heap && global.heap.scoutData;
     if(!data) return false;
     for(let [room,roomData] of Object.entries(getScoutData())){
-        if(Game.time - roomData.lastRecord > 20000) removeScoutData(room)
+        if(Game.time - roomData.lastRecord > amt) removeScoutData(room)
     }
     RawMemory.segments[0] = JSON.stringify(global.heap.scoutData)
     global.heap.newScoutData = false;

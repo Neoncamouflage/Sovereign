@@ -31,7 +31,7 @@ const roleClaimer = {
                     creep.travelTo(new RoomPosition(creep.memory.target.x,creep.memory.target.y,creep.memory.holding));
             }
             else {
-                if(creep.room.controller.reservation && creep.room.controller.reservation.username != Memory.me){
+                if(creep.room.controller.reservation && !isMe(creep.room.controller.reservation.username)){
                     if(creep.attackController(creep.room.controller) == ERR_NOT_IN_RANGE) {
                         creep.travelTo(creep.room.controller)
                     }

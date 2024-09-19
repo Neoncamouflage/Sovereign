@@ -1,4 +1,5 @@
 if(!Memory.visuals) Memory.visuals = {};
+const profiler = require('screeps-profiler');
 const painter = {
     //Paints visuals based on flags set in memory
     run: function(kingdomCreeps){
@@ -200,6 +201,34 @@ const painter = {
         for(let troupe of global.heap.army.troupes){
             if(troupe.mission && troupe.mission.targets){
                 //console.log("Painting targets",JSON.stringify(troupe.mission.targets))
+                if(troupe.mission.type == 'skMining'){
+                    let liveTargets = [];
+                    for(let target of troupe.mission.targets){
+                        let targetObj = Game.getObjectById(target);
+                        if(targetObj){
+                            liveTargets.push(targetObj)
+                            new RoomVisual(targetObj.room.name).circle(targetObj.pos.x,targetObj.pos.y,{fill: 'transparent', radius: 0.5, stroke: 'red'});
+                            new RoomVisual(targetObj.room.name).line(targetObj.pos.x-0.4,targetObj.pos.y-0.4, targetObj.pos.x+0.4,targetObj.pos.y+0.4,{color: 'red'});
+                            new RoomVisual(targetObj.room.name).line(targetObj.pos.x+0.4,targetObj.pos.y-0.4, targetObj.pos.x-0.4,targetObj.pos.y+0.4,{color: 'red'});
+                        }
+                    }
+                    let mineral = Game.rooms[troupe.mission.room] ? Game.rooms[troupe.mission.room].find(FIND_MINERALS)[0].pos : {x:25,y:25};
+                    if(troupe.remoteHarvester && Game.getObjectById(troupe.remoteHarvester)){
+                        let h = Game.getObjectById(troupe.remoteHarvester);
+                        new RoomVisual(h.room.name).text(troupe.name.split(' ')[1]+' Support',h.pos.x,h.pos.y-1, {color:'#ffa500',font:'0.5 Bridgnorth'})
+                        new RoomVisual(h.room.name).text('Delver',h.pos.x,h.pos.y-0.5, {color:'#ffa500',font:'0.5 Bridgnorth'})
+                    }
+                    if(troupe.remoteBuilder && Game.getObjectById(troupe.remoteBuilder)){
+                        let h = Game.getObjectById(troupe.remoteBuilder);
+                        new RoomVisual(h.room.name).text(troupe.name.split(' ')[1]+' Support',h.pos.x,h.pos.y-1, {color:'#ffa500',font:'0.5 Bridgnorth'})
+                        new RoomVisual(h.room.name).text('Carpenter',h.pos.x,h.pos.y-0.5, {color:'#ffa500',font:'0.5 Bridgnorth'})
+                    }
+                    
+                    new RoomVisual(troupe.mission.room).text('Mine SK Mineral',mineral.x,mineral.y-2, {color:'#ffa500',font:'0.5 Bridgnorth'});
+                    new RoomVisual(troupe.mission.room).text(troupe.name,mineral.x,mineral.y-1.5, {color:'#ffa500',font:'0.5 Bridgnorth'});
+
+                    continue;
+                }
                 let liveTargets = [];
                 for(let target of troupe.mission.targets){
                     let targetObj = Game.getObjectById(target);
@@ -246,83 +275,4 @@ function calculateCentroid(targets) {
 }
 
 module.exports = painter;    
-
-/**
- * 
- * drawVisuals: function(fief,fiefType=null){
-        //Return if no visuals
-        if(!Memory.rotatingVisuals) return;
-        //Drawing shifts per game tick
-        //Keep track of what is used which tick or this is a mess
-
-        let type = fiefType;
-        //Number of visuals we cycle though. Must manually update each time.
-        let tickMod = 2
-        if(!type){
-            return -1;
-        }
-
-        //Draw visuals based on what tick
-        switch(Game.time % tickMod){
-
-            //Holding Remote Roads
-            case 0:
-                if(type == 'holding'){
-                    let holding = Memory.kingdom.holdings[fief];
-                    if(holding.remoteRoad){
-                        for(let i = 0; i < holding.remoteRoad.length-1; i++){
-                            const startPos = holding.remoteRoad[i];
-                            const endPos = holding.remoteRoad[i + 1];
-                        
-                            // Draw a line between each pair of adjacent positions
-                            if(startPos.fiefName == endPos.fiefName){
-                                new FiefVisual(startPos.fiefName).line(startPos, endPos, { color: 'blue', width: 0.2 });
-                            }
-                        }
-                    }
-                }
-                break;
-            //Established roads and structures according to Cost Matrix
-            case 1:
-                let cm;
-                if(type == 'fief'){
-                    cm = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[fief].costMatrix);
-                }else if(type == 'holding'){
-                    cm = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[fief].costMatrix);
-                }
-                if(!cm) return -1;
-                for(let x=0;x<50;x++){
-                    for(let y=0;y<50;y++){
-                        //new FiefVisual(fief).text(cm.get(x,y),x,y+0.25)
-                        let score = cm.get(x,y);
-                        if(score == 1){
-                            new FiefVisual(fief).circle(x,y,{fill:'red'})
-                        }else if(score == 255){
-                            new FiefVisual(fief).circle(x,y,{fill:'black'})
-                        }else if(score == 25){
-                            new FiefVisual(fief).circle(x,y,{fill:'orange'})
-                        }
-                    }
-                }
-                break;
-            
-            //Fief Fief Plans
-            case 2:
-                if(type == 'fief'){
-                    //Visuals
-                    //Pull plan and split into array
-                    let plan = JSON.parse(Memory.kingdom.fiefs[fief].fiefPlan)
-                    for(let building in plan){
-                        if(Array.isArray(plan[building])){
-                            plan[building].forEach(coordinate => {
-                                Game.fiefs[fief].visual.structure(coordinate.x,coordinate.y,building);
-                            });
-                        }
-                    }
-                }
-                break;
-        }
-        
-        
-    }
- */
+profiler.registerObject(painter, 'painter');

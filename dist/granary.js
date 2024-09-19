@@ -1,3 +1,4 @@
+const profiler = require('screeps-profiler');
 const granary = {
     GRAN_MAX: 12,
     //Calculates planned and trailing average energy income/expense for a room
@@ -22,7 +23,7 @@ const granary = {
             return;
         }
         //If a room object, get its room name. Otherwise it's a creep, so get its fief.
-        let fief = source instanceof RoomObject ? source.room.name : source.memory.fief;
+        let fief = source instanceof Creep ? source.memory.fief : source.room.name;
         if(!global.heap.granary[fief]) global.heap.granary[fief] = []
         let track = global.heap.granary[fief];
         //Pulls track[0] if it's from this tick, otherwise makes a new one
@@ -39,3 +40,4 @@ const granary = {
 }
 
 module.exports = granary;
+profiler.registerObject(granary, 'granary');
