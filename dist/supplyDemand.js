@@ -29,7 +29,7 @@ const supplyDemand = {
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_TOWER
         ]
-        const MAX_IDLE = 0.12;
+        const MAX_IDLE = 0.08;
 
         //global.heap.shipping[roomName].forEach(task =>{
             //console.log(JSON.stringify(task));
@@ -129,18 +129,19 @@ const supplyDemand = {
             global.heap.shipping[roomName].utilization.unshift(idleCount/totalCount)
 
             //If utilization is past our tracking length, trim
-            if(global.heap.shipping[roomName].utilization.length > 50) global.heap.shipping[roomName].utilization.length = 50;
+            if(global.heap.shipping[roomName].utilization.length > MAX_SHIPPING_UTILIZATION) global.heap.shipping[roomName].utilization.length = MAX_SHIPPING_UTILIZATION;
         }
         //If no haulers, utilization is set to 0 by default
         else{
             global.heap.shipping[roomName].utilization.unshift(0)
         }
         if(Game.time % 3 == 0){
+        
         //Calculate utilization and request more haulers if needed
             let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length
             //Extra check, no spawning if half or more haulers are currently idle
             if(MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5){
-                registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : fiefCreeps.length > 2 ? 60 : 50,memory:{role:'hauler',fief:roomName,preflight:false,state:'idle'}})
+                registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : room.storage && room.storage.store[RESOURCE_ENERGY] > 100 ? 100 :  fiefCreeps.length > 2 ? 50 : 60,memory:{role:'hauler',fief:roomName,preflight:false,state:'idle'}})
             }
             console.log(`${roomName} hauler utilization: ${utilization}`)
         }
@@ -395,13 +396,13 @@ const supplyDemand = {
 
         //If a hauler is next to an empty spawn/extension, fill
         //Also get upgraders and builders
-        let fills = room.find(FIND_MY_STRUCTURES).filter(struct => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(struct.structureType) && struct.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
-        let buildUps = []
+
+        let fills = [];
+        
+        //Only need to do fills if there's missing energy
+        if(room.energyAvailable < room.energyCapacityAvailable) fills = room.find(FIND_MY_STRUCTURES).filter(struct => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(struct.structureType) && struct.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
         //Track IDs of fills so we can clear their tasks
         let fillTransfers = []
-        for(let role of ['upgrader','builder']){
-            if(fiefCreeps[role]) buildUps.push(...fiefCreeps[role])
-        }
         for(let haul of energyHauls){
             let tFlag = false;
             for(let fill of fills){
@@ -414,6 +415,7 @@ const supplyDemand = {
                 }
             }
             if(tFlag) continue;
+            let buildUps = haul.room.find(FIND_MY_CREEPS).filter(c=>(c.memory.role == 'upgrader' || c.memory.role == 'builder') && c.store.getFreeCapacity()>c.store.getCapacity()/2)
             for(let targetCrp of buildUps){
                 if(haul.pos.isNearTo(targetCrp)){
                     haul.transfer(targetCrp,RESOURCE_ENERGY);
@@ -455,7 +457,7 @@ const supplyDemand = {
                 let utilization = global.heap.shipping[room.name].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[room.name].utilization.length
                 
                 //Check utilization to make sure we aren't respawning when not needed
-                if(utilization < 0.25){
+                if(utilization < 0.15){
                     registry.requestCreep({sev:35,memory:{role:'hauler',fief:room.name,preflight:false},respawn:creep.id})
                 }
             }

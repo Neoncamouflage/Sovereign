@@ -87,7 +87,7 @@ const helper = {
         //No sign if it's one of my rooms or we've already marked it
         console.log("Getting sign")
         
-        if(Memory.kingdom.fiefs[room.name] || (Memory.kingdom.holdings[room.name] && !Memory.kingdom.holdings[room.name].standby) || !room.controller || (room.controller && room.controller.sign && (Memory.diplomacy.allies.includes(room.controller.sign.username) || [Memory.me.toLowerCase(),"Screeps".toLowerCase()].includes(room.controller.sign.username.toLowerCase())))){
+        if((Memory.kingdom.fiefs[room.name] && room.controller.sign && isMe(room.controller.sign.username) ) || (Memory.kingdom.holdings[room.name] && !Memory.kingdom.holdings[room.name].standby) || !room.controller || (room.controller && room.controller.sign && (Memory.diplomacy.allies.includes(room.controller.sign.username) || [Memory.me.toLowerCase(),"Screeps".toLowerCase()].includes(room.controller.sign.username.toLowerCase())))){
             return false;
         }
 
@@ -226,18 +226,19 @@ const helper = {
             if(Memory.diplomacy.allies.includes(room.controller.owner.username)){
                 return ['fief','ally',room.controller.owner.username]
             }
-            else if(room.controller.owner.username == Memory.me){
-                return ['fief','ally',room.controller.owner.username]
+            else if(isMe(room.controller.owner.username)){
+                return ['fief','me',room.controller.owner.username]
             }
             else{
                 return ['fief','enemy',room.controller.owner.username]
             }
         }
-        if(room.controller.reservation && room.controller.reservation.username != Memory.me){
+        if(room.controller.reservation){
             if(Memory.diplomacy.allies.includes(room.controller.reservation.username)){
                 return ['holding','ally',room.controller.reservation.username]
-            }else if(room.controller.reservation.username == Memory.me){
-                return ['fief','ally',room.controller.reservation.username]
+            }
+            else if(isMe(room.controller.reservation.username)){
+                return ['holding','me',room.controller.reservation.username]
             }else{
                 return ['holding','enemy',room.controller.reservation.username]
             }

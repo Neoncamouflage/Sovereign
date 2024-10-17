@@ -190,7 +190,7 @@ function destroyCoreLogic(troupe){
     }
     //If no target but we have vision, acquire targets
     else if(!targets.length && room){
-        let targetFind = room.find(FIND_HOSTILE_STRUCTURES).filter(structure => structure.structureType != STRUCTURE_CONTROLLER)
+        let targetFind = room.find(FIND_HOSTILE_STRUCTURES).filter(structure => structure.structureType == STRUCTURE_INVADER_CORE)
         //If none, mission over
         if(!targetFind.length) troupe.mission.complete();
         //Otherwise, assign them to the mission
@@ -671,3 +671,4 @@ function rangedHarassLogic(troupe){
 }
 
 module.exports = Troupe;
+

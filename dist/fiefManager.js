@@ -33,7 +33,7 @@ const fiefManager = {
         }
         if(!fief.rclTimes['storage'] && room.storage) fief.rclTimes['storage'] = Game.time - fief.rclTimes.tick
         if(!fief.rampTarget) fief.rampTarget = 50000;
-        let spawns = fief.spawns;
+        
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let starterCreeps = []
         let mySpawns = room.find(FIND_MY_SPAWNS).map(spawn => spawn.id);
@@ -46,15 +46,16 @@ const fiefManager = {
             8:800000
         }
         let extractor = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_EXTRACTOR).length;
-        let noBuild = [STRUCTURE_FACTORY,STRUCTURE_NUKER]
-        fief.spawns = mySpawns
+        let noBuild = [STRUCTURE_NUKER]
+        fief.spawns = mySpawns;
+        let spawns = fief.spawns;
         let [plannedNet,averageNet] = granary.getIncome(room.name);
         //Create harvest spot if none exists
         //console.log(room.name,"income",plannedNet,averageNet)
 
         if(!fief.roomPlan || fief.roomPlan == 'null'){
             //restartFlag = true;
-            let roomPlans = JSON.parse(RawMemory.segments[1]);
+            let roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS]);
             if(roomPlans[room.name]){
                 [fief.roomPlan, fief.rampartPlan] = roomPlans[room.name]
             }
@@ -196,7 +197,7 @@ const fiefManager = {
                                 if(roomSpawns[0].name == "Origin Keep"){
                                     console.log("Origin spawn detected")
                                     //If we have storage and energy to build a new one
-                                    if(room.storage && room.storage.store[RESOURCE_ENERGY] > 30000){
+                                    if(room.storage && room.storage.my && room.storage.store[RESOURCE_ENERGY] > 30000){
                                         console.log("Storage good")
                                         //If we have at least one builder with TTL to spare
                                         if(fiefCreeps.builder && fiefCreeps.builder.some(crp => crp.ticksToLive > 1000)){
@@ -270,7 +271,7 @@ const fiefManager = {
                 //If no source containers and no construction sites, make containers
                 for(let source of Object.values(fief.sources)){
                     console.log(JSON.stringify(source))
-                    if(!source.ca && room.storage){
+                    if(!source.ca && room.storage && room.storage.my){
                         console.log("Nocan")
                         let spotInfo = room.lookAt(source.spotx,source.spoty);
                         let hasCan = spotInfo.find(s => s.structure && s.structure.structureType === STRUCTURE_CONTAINER);
@@ -466,20 +467,14 @@ const fiefManager = {
             });
 
             //-- Upgrader --
-            const MAX_STARTERS = roomLevel >=2 ? 4 : 5;
+            let upMax = 0;
+            for(let each of Object.values(fief.controllerSpots)){
+                if(Array.isArray(each)) upMax+=each.length;
+            }
             //Pre and post storage logic
 
             //Spawn operations when storage is available
-            if(room.storage){
-                if(Game.shard.name == 'shardSeason' && room.storage){
-                    let scoreCans = room.find(FIND_SCORE_CONTAINERS);
-                    if(scoreCans.length){
-                        for(let can of scoreCans){
-                            if(can.ticksToDecay < 100) continue;
-                            addSupplyRequest(room,{type:'pickup',resourceType:RESOURCE_SCORE,amount:can.store.getUsedCapacity(RESOURCE_SCORE),targetID:can.id,international:false,priority:7})
-                        }
-                    }
-                }
+            if(room.storage && room.storage.my){
                 let upgradersNeeded;
                 if(roomLevel == 8){
                     if(room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE/2) registry.requestCreep({sev:35,body:[MOVE,CARRY,WORK,MOVE,WORK],memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
@@ -493,7 +488,7 @@ const fiefManager = {
                 }
                 else{
                     let tStore = room.terminal ? room.terminal.store[RESOURCE_ENERGY] : 0;
-                    upgradersNeeded = room.controller.level > 5 ? Math.ceil((room.storage.store[RESOURCE_ENERGY]+tStore)/100000) : Math.ceil(room.storage.store[RESOURCE_ENERGY]/100000);
+                    upgradersNeeded = Math.min(upMax,room.controller.level > 5 ? Math.ceil((room.storage.store[RESOURCE_ENERGY]+tStore)/100000) : Math.ceil(room.storage.store[RESOURCE_ENERGY]/100000));
                 }
                 if(!cSites.length && upgradersNeeded > 0 && (!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded)){
                     registry.requestCreep({sev:35,memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
@@ -522,6 +517,17 @@ const fiefManager = {
                         registry.requestCreep({sev:31,memory:{role:'builder',job:'fortifier',fief:room.name,status:'spawning',preflight:false}})
                     }
                 }              
+
+                //If we need a remote builder and there isn't one or it's dead, request one
+                if(fief.remoteBuild && room.storage.store['energy'] > 30000){
+                    let remo = fiefCreeps.builder || [];
+                    //Check for remote builders that aren't part of the army
+                    remo = remo.filter(crp => crp.memory.job == 'remoteBuilder' && !crp.memory.troupe)
+                    if(!remo.length) registry.requestCreep({sev:30,memory:{role:'builder',job:'remoteBuilder',fief:room.name,targetRoom:fief.remoteBuild,status:'spawning',preflight:false}})
+                    
+                }
+
+
                 if(roomLevel >=6 && extractor){
                     let mineral = Game.getObjectById(fief.mineral.id)
                     if(!Memory.kingdom.mineralNeed) Memory.kingdom.mineralNeed = {};
@@ -531,8 +537,19 @@ const fiefManager = {
                             registry.requestCreep({sev:33,memory:{role:'harvester',job:'mineralHarvester',fief:room.name,target:mineral.id,status:'spawning',preflight:false}})
                         }
                     }
-    
                 }
+
+
+
+                //Room crash check
+                //If no creeps, storage, and energy in storage, get a hauler
+                //console.log("OBJKEYS",Object.keys(kingdomCreeps).length)
+                //console.log(JSON.stringify(kingdomCreeps))
+                //if(!Object.keys(kingdomCreeps).length){
+                //    if(room.storage.store[RESOURCE_ENERGY] > 200){
+                //        registry.requestCreep({sev:100,memory:{role:'hauler',fief:room.name,preflight:false,state:'idle'}})
+                //    }
+                //}
             }
             //Don't need to check for harvesters because we use strict priorities now
             else{
@@ -547,7 +564,7 @@ const fiefManager = {
                 else if(plannedNet > 0 && averageNet > 0){
                     //Make sure they're all doing something. If so we can justify another
                     let workingUps = fiefCreeps.upgrader.filter(up => up.store.getUsedCapacity() > 0);
-                    if(workingUps.length == fiefCreeps.upgrader.length){
+                    if(workingUps.length == fiefCreeps.upgrader.length && fiefCreeps.upgrader.length < upMax){
                         registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
                     }
 
@@ -556,7 +573,7 @@ const fiefManager = {
         }
 
         //Non-spawn room operations for after storage
-        if(room.storage){
+        if(room.storage  && room.storage.my){
             //If no construction sites and positive income, start raising the ramp target as long as they're all at the last one
             if(Game.time % (Math.round(roomLevel*1.3)*1000) == 0){
                 //If we aren't yet RCL8 and we're over 3M hits, then no raising unless we have a war override
@@ -618,12 +635,9 @@ const fiefManager = {
                         fief.labs.sourceLabs[labIDs[i]] = ingredients[i]
                     }
                     //If we're short on labs, add them
-                    if(fief.labs.targetLabs.length+2 < CONTROLLER_STRUCTURES[STRUCTURE_LAB][room.controller.level] ){
-                        //If we're building stuff still, skip
-                        if(!cSites.length){
-                            console.log("ADDING LABS FOR",room.name)
-                            fief.labs.targetLabs = room.find(FIND_STRUCTURES).filter(s=>s.structureType == STRUCTURE_LAB && !Object.keys(fief.labs.sourceLabs).includes(s.id)).map(s=>s.id)
-                        }
+                    if(!fief.labs.targetLabs || fief.labs.targetLabs.length+2 < CONTROLLER_STRUCTURES[STRUCTURE_LAB][room.controller.level] ){
+                        console.log("ADDING LABS FOR",room.name)
+                        fief.labs.targetLabs = room.find(FIND_STRUCTURES).filter(s=>s.structureType == STRUCTURE_LAB && !Object.keys(fief.labs.sourceLabs).includes(s.id)).map(s=>s.id)
                     }
                     
                     for(let [labID,part] of Object.entries(fief.labs.sourceLabs)){
@@ -679,15 +693,30 @@ const fiefManager = {
                     }
                     console.log(log)
                 }
+                else{
+                    for(let targetID of fief.labs.targetLabs){
+                        let target = Game.getObjectById(targetID);
+                        let occupied = Object.keys(fief.labs.boostLabs) || [];
+                        if(!occupied.includes(targetID) && target.mineralType){
+                            let t = supplyDemand.addRequest(room,{type:'pickup',targetID:targetID,resourceType:target.mineralType,amount:target.store[target.mineralType],priority:6})
+                            log+=`\n${target.id} needs emptied of mineral ${target.mineralType}, pickup request ${t}`
+                        }
+                    }
+                }
             }
 
             if(room.terminal){
+                //Maintain terminal levels as needed. Default energy amount set if the import manager hasn't assigned anything
+                if(!fief.termNeeds) fief.termNeeds = {[RESOURCE_ENERGY]:DEFAULT_TERMINAL_ENERGY};
                 let termNeeds = fief.termNeeds;
-                //Default behavior if nothing is set
-                if(!termNeeds){
-                    if(room.terminal.store[RESOURCE_ENERGY] < 40000){
-                        supplyDemand.addRequest(room,{type:'dropoff',amount:50000-room.terminal.store[RESOURCE_ENERGY],targetID:room.terminal.id});
-                    }
+                //Check every 25 ticks to fill terminal if below any of the needs
+                if(Game.time % 25 == 0){
+                    for(let resource of Object.keys(termNeeds)){
+                        let amount = termNeeds[resource];
+                        if(room.terminal.store[resource] < amount){
+                            supplyDemand.addRequest(room,{type:'dropoff',amount:50000-room.terminal.store[RESOURCE_ENERGY],targetID:room.terminal.id});
+                        }
+                    }  
                 }
             }
 
@@ -1093,154 +1122,6 @@ const fiefManager = {
 
 
         }
-        //RCL 6 checks
-        if(false && roomLevel >= 6){
-            let mineMineral = false;
-            let mineral = Game.getObjectById(fief.mineral.id);
-            let mineralTotal = 0;
-
-            let mineralGoal = 0;
-
-            /*switch(mineral.mineralType){
-                case RESOURCE_UTRIUM:
-                    mineralGoal = 100000;
-                    break;
-                case RESOURCE_HYDROGEN:
-                    mineralGoal = 100000;
-                    break;
-                case RESOURCE_ZYNTHIUM:
-                    mineralGoal = 50000;
-                    break;
-                case RESOURCE_OXYGEN:
-                    mineralGoal = 130000;
-                    break;
-                default:
-                    mineralGoal = 50000;
-            }*/
-
-
-            //Add total mineral mined
-            if(room.storage){
-                mineralTotal += room.storage.store[mineral.mineralType];
-            }
-            if(room.terminal){
-                mineralTotal += room.terminal.store[mineral.mineralType];
-            }
-
-            //If total mined is less than needed, mine more
-            if(mineralTotal < mineralGoal){
-                mineMineral = true;
-            }
-            //Need more logic for whether we actually want the mineral. For now, assume we do.
-            let exFind = room.lookForAt(LOOK_STRUCTURES,mineral)
-            let exSpot = exFind.filter(structure => structure.structureType === STRUCTURE_EXTRACTOR)[0]
-            //If no ongoing construction and no extractor, build an extractor
-            if(!cSites.length && !exSpot){
-                //console.log("NOEX")
-                room.createConstructionSite(mineral.pos.x,mineral.pos.y,STRUCTURE_EXTRACTOR);
-            }
-            //Check if we need to find a spot and can
-
-            
-            if(false && !fief.mineral.can){
-                //Can only build once we have a free can, so check sources.
-                let freeCan = false;
-                fiefSources.forEach(source =>{
-                    let thisSource = fief.sources[source];
-                    //If link and no can, we good
-                    if(thisSource.link && !thisSource.can) freeCan = true;
-                });
-                //console.log("FREE",freeCan)
-                //If there's a free can, find a spot and build
-                if(freeCan){
-                    //If no path, get one and assign canspot to mineral.
-                    if(!fief.paths.mineral){
-                        fief.paths.mineral = PathFinder.search(room.storage.pos,{pos:Game.getObjectById(fief.mineral.id).pos,range:1},{
-                            plainCost: 10,
-                            swampCost: 11,
-                            maxOps:6000,
-                            roomCallback: function(roomName) {
-                              let room = Game.rooms[roomName];
-                              //Use our costmatrix because we're staying in the room.
-                              let costs;
-                              if(Memory.kingdom.fiefs[roomName]){
-                                costs = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[roomName].costMatrix);
-                              }else{
-                                costs = new PathFinder.CostMatrix
-                              }
-                              if (room){
-                                room.find(FIND_STRUCTURES).forEach(function(struct) {
-                                    if (struct.structureType === STRUCTURE_ROAD) {
-                                      costs.set(struct.pos.x, struct.pos.y, 1);
-                                    }else if (struct.structureType !== STRUCTURE_CONTAINER &&
-                                        (struct.structureType !== STRUCTURE_RAMPART ||
-                                         !struct.my)) {
-                                    // Can't walk through non-walkable buildings
-                                    costs.set(struct.pos.x, struct.pos.y, 0xff);
-                                    }
-                                  });
-                              }else{
-                                return;
-                              }
-                              return costs;
-                            },
-                        }).path;
-                        //Update room cost matrix with new roads
-                        let cm = PathFinder.CostMatrix.deserialize(fief.costMatrix)
-                        fief.paths.mineral.forEach(spot =>{
-                            //Double check to make sure it's in our room, always
-                            if(spot.roomName == room.name){
-                                cm.set(spot.x,spot.y,1)
-                                
-                            }
-                            
-                        });
-                        fief.costMatrix = cm.serialize();
-                        fief.mineral.spot = fief.paths.mineral[fief.paths.mineral.length-1]
-                    }
-                    //Check if a can already exists. If not, see if we're building one
-                    //If we aren't building a can already, set a cSite
-                    let canFind = room.lookForAt(LOOK_STRUCTURES,fief.mineral.spot.x,fief.mineral.spot.y)
-                    let canSpot = canFind.filter(structure => structure.structureType === STRUCTURE_CONTAINER)[0]
-                    let canSite = room.lookForAt(LOOK_CONSTRUCTION_SITES,fief.mineral.spot.x,fief.mineral.spot.y)[0]
-                    if(canSpot){
-                        fief.mineral.can = canSpot.id;
-                    }
-                    //Only build if we have few enough cSites
-                    else if(!canSite && cSites.length < 8){
-                        room.createConstructionSite(fief.mineral.spot.x,fief.mineral.spot.y,STRUCTURE_CONTAINER);
-                    }
-                }
-            }
-
-            //If we have an extractor, can, and mineral is ready to be mined and wanted. Spawn creeps for it
-            //Mess with this when one is regenerating so I know if I actually need all these
-            else if(mineMineral && exSpot && mineral && mineral.mineralAmount > 0){
-                
-                //Spawn worker to go harvest, porter to haul
-                if(!Game.creeps[fief.mineral['harvester']] && !spawnQueue[fief.mineral['harvester']]){
-                    let newName = 'Gemcutter '+helper.getName()+' of House '+room.name;
-                    spawnQueue[newName] = {
-                        sev:getSev('mineralHarvester',room.name),body:getBody('harvester',room.name,'mineralHarvester'),
-                        memory:{role:'harvester',job:'mineralHarvester',fief:room.name,homeRoom:room.name,target:fief.mineral.id,preflight:false}}
-                    fief.mineral['harvester'] = newName;
-                }
-                if(!Game.creeps[fief.mineral['hauler']] && !spawnQueue[fief.mineral['hauler']]){
-                    if(fief.mineral.can){
-                        let newName ='Porter '+helper.getName()+' of House '+room.name;
-                        spawnQueue[newName] = {
-                            sev:getSev('mineralHauler',room.name),body:getBody('hauler',room.name,'mineralHauler',mineral.id),
-                            memory:{role:'hauler',job:'mineralHauler',source:fief.mineral.id,preflight:false}}
-                        fief.mineral['hauler'] = newName;
-                    }                    
-                }
-            }
-            
-            
-
-            
-
-        }
         //#region Factory
 
         //#endregion
@@ -1397,7 +1278,7 @@ const fiefManager = {
 
         //Return data for kingdomStatus
         let storageLevel;
-        if(room.storage){
+        if(room.storage && room.storage.my){
             storageLevel = room.storage.store.getUsedCapacity();
         }
         let totalCreeps = 0;
@@ -1481,6 +1362,8 @@ function manageResourceCollection(room) {
         const { id, amount, resourceType } = resource;
         //Check if this resource is already targeted by an existing task
         if(resourceType==RESOURCE_ENERGY && amount<50) return
+        //If no active/usable storage, don't pick up non energy resources
+        if(resourceType != RESOURCE_ENERGY && (!room.storage || !room.storage.my)) return
 
         //Details object for the addRequest call
         let details = {
@@ -1497,6 +1380,7 @@ function manageResourceCollection(room) {
     const droppedTombstones = room.find(FIND_TOMBSTONES);
     droppedTombstones.forEach(stone =>{
         Object.entries(stone.store).forEach(([resource,amount]) => {
+            if(resource != RESOURCE_ENERGY && (!room.storage || !room.storage.my)) return
             let details = {
                 type: 'pickup',
                 targetID: stone.id,

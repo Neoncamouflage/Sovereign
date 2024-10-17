@@ -1,32 +1,61 @@
 const supplyDemand = require('supplyDemand')
 const upgrader = require('role.upgrader');
+const helper = require('functions.helper')
 const roleBuilder = {
     /** @param {Creep} creep **/
     run: function(creep) {
         let ramps = 'None'
         if(!creep.memory.preflight){
-            if(creep.memory.role == 'remoteBuilder'){
-                //If we're a remote builder, our preflight is setting our id to our troupe.
-                if(global.heap && global.heap.army && global.heap.army.troupes){
+            if(creep.memory.job == 'remoteBuilder'){
+                //If we're an army remote builder, our preflight is setting our id to our troupe.
+                if(creep.memory.troupe && global.heap && global.heap.army && global.heap.army.troupes){
                     for(let troupe of global.heap.army.troupes){
                         if(troupe.name == creep.memory.troupe){
                             troupe.remoteBuilder = creep.id;
                         }
                     }
                 }
-                else{
-                    return;
-                }
+                
             }
             creep.memory.preflight = true;
         }
+
+        //Non-army remote builder check for alarms
+        if(creep.memory.job == 'remoteBuilder' && !creep.memory.troupe && global.heap.alarms[creep.memory.targetRoom]){     
+            if(creep.room.name != creep.memory.fief){
+                creep.memory.stay = false;
+                creep.memory.status = 'flee';
+                creep.travelTo(Game.rooms[creep.memory.fief].controller)
+                let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
+                creep.say(words.join(''))
+            }
+            else{
+                //console.log("AYE")
+                if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
+                    creep.travelTo(Game.rooms[creep.memory.fief].controller);
+                }
+            }
+            return;
+        }
+
+
         if(creep.memory.job == 'remoteBuilder' && creep.room.name != creep.memory.targetRoom){
             let tRoom = Game.rooms[creep.memory.targetRoom];
             //If we have vision in the room, go to a site
             if(tRoom){
                 let target = tRoom.find(FIND_MY_CONSTRUCTION_SITES)[0];
-                creep.travelTo(target);
-                return;
+                if(target){
+                    creep.travelTo(target);
+                    return;
+                }
+                //If no target and we're not an army builder, see if we need a new target room
+                else if(!creep.memory.troupe){
+                    let fief = Memory.kingdom.fiefs[creep.memory.fief];
+                    if(fief.remoteBuild && fief.remoteBuild != creep.memory.targetRoom){
+                        creep.memory.targetRoom = fief.remoteBuild;
+                    }
+                    return;
+                }
             }
             //Otherwise just go to 25,25
             creep.travelTo(new RoomPosition(25, 25, creep.memory.targetRoom))
@@ -49,8 +78,13 @@ const roleBuilder = {
                 return;
             }
             else{
+                //If no target and we're a remote builder, keep checking to see if one is needed elsewhere
                 if(creep.memory.job == 'remoteBuilder'){
-                    delete creep.memory.job;
+                    if(creep.memory.troupe) delete creep.memory.troupe
+                    let fief = Memory.kingdom.fiefs[creep.memory.fief];
+                    if(fief.remoteBuild && fief.remoteBuild != creep.memory.targetRoom){
+                        creep.memory.targetRoom = fief.remoteBuild;
+                    }
                     return;
                 }
                 let spawns = Memory.kingdom.fiefs[creep.memory.fief].spawns.map(spw => Game.getObjectById(spw))
@@ -74,7 +108,7 @@ const roleBuilder = {
 
         //Submit order if not close to storage
         if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
-            if((!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5)){
+            if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
                 let orderDetails = {
                     targetID:creep.id,
                     amount:creep.store.getCapacity(),
@@ -83,6 +117,7 @@ const roleBuilder = {
                 if(creep.memory.job == 'remoteBuilder'){
                     orderDetails.international = true;
                     orderDetails.priority = 6
+                    orderDetails.amount *= 2;
                 }
                 if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2 || creep.memory.job == 'remoteBuilder') supplyDemand.addRequest(creep.room,orderDetails)
             }
@@ -118,6 +153,37 @@ const roleBuilder = {
         let rampSites = room.find(FIND_MY_CONSTRUCTION_SITES)
         let ramps = room.find(FIND_MY_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_RAMPART && struct.hits < fief.rampTarget);
         for(let creep of creeps){
+            if(room.controller.level >= 6 && !creep.memory.boosted){
+                let body = creep.body.filter(part => part.type == WORK && !part.boost);
+                //console.log("REAVER",body)
+                if(!body.length){
+                    creep.memory.boosted = true;
+                    return;
+                }
+                let labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'XLH2O' && lab.store['XLH2O'] >30);
+                if(!labs.length){
+                    labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'LH2O' && lab.store['LH2O'] >30);
+                    if(!labs.length) creep.memory.boosted = true;
+                }
+                let tLab = creep.pos.findClosestByRange(labs);
+                if(creep.pos.getRangeTo(tLab) == 1){
+                    tLab.boostCreep(creep);
+                    body = body.filter(part => part.type == WORK && !part.boost);
+                    if(!body.length){
+                        creep.memory.boosted = true;
+                    }
+                    else{
+                        labs = labs.filter(lab => lab.id != tLab.id);
+                        tLab = creep.pos.findClosestByRange(labs);
+                        if(tLab && creep.pos.getRangeTo(tLab) > 1) creep.travelTo(tLab);
+                        return;
+                    }
+                }
+                else{
+                    creep.travelTo(tLab)
+                }
+                return;
+            }
             let target = Game.getObjectById(creep.memory.targetID)
             //If we have a target, we repair or build it if below max hits
             //console.log("Buildtarget: ",target)

@@ -21,7 +21,8 @@ const registry = {
         'pikeman'   :'Pikeman',
         'mineralHarvester': 'Gemcutter',
         'remoteHarvest' : 'Delver',
-        'halberdier' : 'Halberdier'
+        'halberdier' : 'Halberdier',
+        'crasher'    : 'Undertaker'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -70,7 +71,7 @@ const registry = {
             
             
             //Check if spawn has energy
-            //console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
+            console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
                 //If spawning, continue
@@ -180,7 +181,7 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             return getReserver(room,fiefCreeps);  
             break;
         case 'miner':
-            return getMiner(plan.memory.holding)
+            return getMiner(plan)
             break;
         case 'hauler':
             return getHauler(room,fiefCreeps);
@@ -228,7 +229,7 @@ function getEHarvester(room,fiefCreeps){
     let maxWorkParts = 6;
     let [tickNet,avgNet] = granary.getIncome(room.name)
     //If we have 0 average and planned, and no harvesters, the energy is what we have now, otherwise max
-    let energyAvailable = tickNet > 0 || avgNet > 0 || fiefCreeps['harvester'] ? room.energyCapacityAvailable : room.energyAvailable;
+    let energyAvailable = fiefCreeps['harvester'] ? room.energyCapacityAvailable : room.energyAvailable;
     //Default 1 move part
     partsCost += BODYPART_COST[MOVE]+BODYPART_COST[WORK];
     //Fill with work parts until we max out on energy or hit the cap
@@ -261,35 +262,56 @@ function getGeneralist(room) {
 }
 
 //Miner - Yeoman
-function getMiner(holding){
-    let isReserved = Game.rooms[holding] && Game.rooms[holding].controller.reservation && Game.rooms[holding].controller.reservation.username == Memory.me;
-    let newBody = Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level >= 4 ? [MOVE,MOVE,CARRY,WORK,WORK] : [MOVE,WORK];
-    let partsCost = 0
-    let maxWorkParts = Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level >= 4 ? 6 : 3;
-    let energyAvailable = Game.rooms[Memory.kingdom.holdings[holding].homeFief].energyCapacityAvailable;
-    let workPartsCount = newBody.filter(part => part === WORK).length;
-
-    //Set costs
+function getMiner(plan){
+    let holding = plan.memory.holding;
+    let distance = Memory.kingdom.holdings[holding].sources[plan.memory.target].path.length
+    let carrySize;
+    let workSize;
+    let moveSize;
+    /*
+    Distance Ref
+    30:2,
+    60:3,
+    80:4,
+    110:5,
+    130:6
+    */
+    if(distance >= 130) carrySize = 6
+    else if(distance >= 110) carrySize = 5
+    else if(distance >= 80) carrySize = 4
+    else if(distance >= 60) carrySize = 3
+    else if(distance >= 30) carrySize = 2
+    else{ carrySize = 2}
+    if(carrySize>4){
+        workSize = 10;
+        moveSize = Math.ceil((carrySize+workSize)/2);
+    }
+    else{
+        workSize = 6;
+        moveSize = 2;
+    }
+    let partsCost = 0;
+    let optimalEnergy = (carrySize*50)+(workSize*100)+(moveSize*50)
+    let homeFief = Game.rooms[Memory.kingdom.holdings[holding].homeFief];
+    let energyAvailable = homeFief.energyCapacityAvailable;
+    let newBody;
+    //Body choice depends on capacity available
+    if(energyAvailable >= optimalEnergy){
+        newBody = [...Array(carrySize).fill(CARRY),...Array(moveSize).fill(MOVE),...Array(workSize).fill(WORK)];
+        plan.memory.doRepair = true;
+    }
+    else if(energyAvailable >= 800){
+        newBody = [MOVE,MOVE,MOVE,WORK,WORK,WORK,WORK,WORK,WORK,CARRY];
+    }
+    else if(energyAvailable >= 500){
+        newBody = [MOVE,MOVE,MOVE,CARRY,WORK,WORK,WORK];
+    }
+    else{
+        newBody = [MOVE,MOVE,WORK,WORK];
+    }
     newBody.forEach(part =>{
         partsCost += BODYPART_COST[part]
     })
-    //Fill with work parts until we max out on energy or hit the cap
-    //Also move parts if we're below RCL 4 and thus remote roads
-    if(false && Game.rooms[Memory.kingdom.holdings[holding].homeFief].controller.level >= 4 && Game.rooms[Memory.kingdom.holdings[holding].homeFief].storage ){
-        while (workPartsCount < maxWorkParts && partsCost + BODYPART_COST[WORK] <= energyAvailable) {
-            newBody.push(WORK);
-            partsCost += BODYPART_COST[WORK];
-            workPartsCount++;
-        }
-    } else {
-        while (workPartsCount < maxWorkParts && partsCost + BODYPART_COST[WORK] + BODYPART_COST[MOVE] <= energyAvailable) {
-            newBody.push(WORK);
-            newBody.push(MOVE);
-            partsCost += BODYPART_COST[WORK] + BODYPART_COST[MOVE];
-            workPartsCount++;
-        }
-    }
-    
 
     return [newBody,partsCost];
 }
@@ -376,8 +398,8 @@ function getSkirmisher(room,plan){
 
 //General hauler - Porter
 function getHauler(room,fiefCreeps){
-    let partsCap = global.cpuAverage > 90 ? 36 : 28;
-    let parts = room.controller.level > 3 && room.storage ? [MOVE, CARRY] : [MOVE,CARRY];
+    let parts = room.storage && room.storage.my ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
+    let partsCap = global.cpuAverage > 90 || room.controller.level == 8 ? 36 : parts.length == 2 ? 28 : 21;
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let maxCap = global.cpuAverage > 90 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable/2)
     let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? maxCap : room.energyAvailable;

@@ -1,6 +1,6 @@
 const Lance = require('Lance')
 const registry = require('registry')
-
+const helper = require('functions.helper')
 //Blinky Lance
 function BlinkyLance(name,details){
     //Inherit from lance
@@ -41,9 +41,12 @@ BlinkyLance.prototype.runCreeps = function(myCreeps){
             if(creep.pos.getRangeTo(target) <=3){
                 console.log("Range to creep <=3")
                 let g = creep.rangedAttack(target);
-                let oppositeDirection = creep.pos.getDirectionTo(target);
-                let moveDirection = (oppositeDirection + 3) % 8 + 1;
-                creep.move(moveDirection);
+                if(helper.isSoldier(target)){
+                    let oppositeDirection = creep.pos.getDirectionTo(target);
+                    let moveDirection = (oppositeDirection + 3) % 8 + 1;
+                    creep.move(moveDirection);
+                }
+
             }
             //If target but no specific place to stand, just travel towards it until range 3
             else{

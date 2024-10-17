@@ -47,6 +47,9 @@ var roleHarvester = {
                 if(creep.pos.isEqualTo(targetPos)){
                     let can = creep.room.lookForAt(LOOK_STRUCTURES,creep.pos).filter(struct => struct.structureType == STRUCTURE_CONTAINER)[0];
                     if(!can) return;
+
+
+
                     if(target && Game.time % 6 == 0 && can.store.getFreeCapacity() > 50){
                         creep.harvest(target);
                     }else{
@@ -102,8 +105,8 @@ var roleHarvester = {
                         creep.travelTo(target);
                     }
                     else{
-                        creep.memory.stay = true;
-                        creep.memory.status = 'harvest'
+                        //creep.memory.stay = true;
+                        //creep.memory.status = 'harvest'
                     }
                 }
                 //Else, harvest

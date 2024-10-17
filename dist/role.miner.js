@@ -27,7 +27,6 @@ var roleMiner = {
             else{
                 //console.log("AYE")
                 if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
-                    //console.log("TWO")
                     creep.travelTo(Game.rooms[creep.memory.fief].controller);
                 }
             }
@@ -36,6 +35,25 @@ var roleMiner = {
 
         //Otherwise move to position
         if(creep.memory.status != 'harvesting'){
+            if(creep.memory.doRepair){
+                if(!creep.memory.filled && creep.room.name == creep.memory.fief && creep.store[RESOURCE_ENERGY] == 0){
+                    if(creep.pos.getRangeTo(creep.room.storage) > 1){
+                        creep.travelTo(creep.room.storage);
+                        return;
+                    }
+                    else{
+                        creep.withdraw(creep.room.storage,RESOURCE_ENERGY);
+                        creep.memory.filled = true;
+                    }
+                }
+                if(creep.room.name != creep.memory.fief && creep.store[RESOURCE_ENERGY]){
+                    let badRoad = creep.pos.lookFor(LOOK_STRUCTURES).filter(str => str.structureType == STRUCTURE_ROAD)[0];
+                    if(badRoad && badRoad.hits < (badRoad.hitsMax*0.9)){
+                        creep.repair(badRoad);
+                    }
+                }
+
+            }
             //Large creeps want their spot. Small creeps just go to the source.
             //Large creeps are immobile once placed, small are not
             if(creep.getActiveBodyparts(WORK) >=5){
@@ -51,7 +69,6 @@ var roleMiner = {
             }
             else{
                 if(targetSource){
-                    
                     if(creep.pos.getRangeTo(targetSource) ==1){
                         creep.memory.status = 'harvesting';
                         creep.memory.stay = true;

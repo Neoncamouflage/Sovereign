@@ -8,7 +8,7 @@ const roleClaimer = {
             if(!creep.memory.preflight){
                 creep.memory.preflight = true;
             }
-            if(global.heap.alarms[creep.memory.holding]){     
+            if(false && global.heap.alarms[creep.memory.holding]){     
                 if(creep.room.name != creep.memory.fief){
                     creep.memory.stay = false;
                     creep.memory.status = 'flee';
@@ -32,6 +32,11 @@ const roleClaimer = {
             }
             else {
                 if(creep.room.controller.reservation && !isMe(creep.room.controller.reservation.username)){
+                    if(creep.attackController(creep.room.controller) == ERR_NOT_IN_RANGE) {
+                        creep.travelTo(creep.room.controller)
+                    }
+                }
+                else if(creep.room.controller.owner && !isMe(creep.room.controller.owner.username)){
                     if(creep.attackController(creep.room.controller) == ERR_NOT_IN_RANGE) {
                         creep.travelTo(creep.room.controller)
                     }
@@ -81,7 +86,7 @@ const roleClaimer = {
                 }
                 else {
                     creep.travelTo(creep.room.controller)
-                    //creep.attackController(creep.room.controller)
+                    if(creep.memory.goFlag)creep.attackController(creep.room.controller)
                 }   
             }
         }

@@ -29,10 +29,6 @@ module.exports.loop = function () {
     if (hasRespawned() || !Memory.kingdom){
         spinup.run();
     }
-    
-    if(Game.shard.name == 'shardSeason' && Game.time % 150 && global.heap && global.heap.scoreCans){
-        global.heap.scoreCans = global.heap.scoreCans.filter(can => !!Game.getObjectById(can.id))
-    }
     //Reset movement
     Traveler.resetMovementIntents();
     //Check for global reset and action accordingly
@@ -47,21 +43,6 @@ module.exports.loop = function () {
         RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
         global.heap = {fiefs:{},alarms:{},stock:{},kingdomStatus:{fiefs:{},holdings:{},wares:{}},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]},funnelTarget:null};
-        if(Game.shard.name == 'shardSeason'){
-            global.heap.scoreContainers = [];
-            if(Memory.globalReset - Memory.lastReset < 3 &&(!global.heap.shipping || !Object.keys(global.heap.shipping)) && Memory.shipping){
-                console.log("RESETTING SHIPPING")
-                global.heap.shipping = {};
-                for(let [roomName,batch] of Object.entries(Memory.shipping)){
-                    global.heap.shipping[roomName] = {utilization:Memory.shipping[roomName].utilization,requests:{}};
-                    for(let [taskID,task] of batch){
-                        let nTask = supplyDemand.makeTask(task);
-                        global.heap.shipping[roomName].requests[taskID] = nTask;
-                    }
-
-                }
-            }
-        }
         /*for(let fief in Memory.kingdom.fiefs){
             global.heap.fiefs[fief] = {};
         }
@@ -79,10 +60,10 @@ module.exports.loop = function () {
             global.cpuAverage = Math.round(cpuUte/Memory.trailingCPU.length)
         }
         
-        let roomData = RawMemory.segments[1]
-        if(roomData == "")  RawMemory.segments[1] = "{}"
+        let roomData = RawMemory.segments[SEGMENT_ROOM_PLANS]
+        if(roomData == "")  RawMemory.segments[SEGMENT_ROOM_PLANS] = "{}"
         if(!global.heap.scoutData){
-            let scoutData = RawMemory.segments[0];
+            let scoutData = RawMemory.segments[SEGMENT_SCOUT_DATA];
             if(scoutData == ""){
                 global.heap.scoutData = {}
             }
@@ -95,7 +76,7 @@ module.exports.loop = function () {
             if(Game.time % 100 == 0 && global.heap.newScoutData){
                 console.log("--!!!Updating scout data!!!--")
                 try{
-                    RawMemory.segments[0] = JSON.stringify(global.heap.scoutData)
+                    RawMemory.segments[SEGMENT_SCOUT_DATA] = JSON.stringify(global.heap.scoutData)
                     global.heap.newScoutData = false;
                 }
                 catch(error){
@@ -374,11 +355,6 @@ module.exports.loop = function () {
         let endCPU = Game.cpu.getUsed();
         //Record CPU utilization over last 100 ticks
 
-        if(Game.shard.name == 'shardSeason'){
-            global.heap.scoreContainers = [];
-            if(global.heap.shipping) Memory.shipping = global.heap.shipping;
-        }
-
         let trailingCPU = Memory.trailingCPU || [];
         trailingCPU = trailingCPU.filter(item =>{
             return Game.time - item.gameTime <= 100;
@@ -533,7 +509,7 @@ function profileMemory(root = Memory, depth = 1) {
     const start = Game.cpu.getUsed();
     recursiveMemoryProfile(root, sizes, depth);
     console.log(`Time elapsed: ${Game.cpu.getUsed() - start}`);
-    RawMemory.segments[9] = JSON.stringify(sizes, undefined, '\t');
+    RawMemory.segments[SEGMENT_LOGGING_OTHER] = JSON.stringify(sizes, undefined, '\t');
 }
 
 global.purgeOldScoutData = function purgeOldScoutData(amt = 20000){
@@ -542,7 +518,7 @@ global.purgeOldScoutData = function purgeOldScoutData(amt = 20000){
     for(let [room,roomData] of Object.entries(getScoutData())){
         if(Game.time - roomData.lastRecord > amt) removeScoutData(room)
     }
-    RawMemory.segments[0] = JSON.stringify(global.heap.scoutData)
+    RawMemory.segments[SEGMENT_SCOUT_DATA] = JSON.stringify(global.heap.scoutData)
     global.heap.newScoutData = false;
 }
 

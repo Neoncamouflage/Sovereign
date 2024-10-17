@@ -185,9 +185,9 @@ const fiefPlanner = {
                     //Memory.testBasePlanCM = fiefPlanner.bestPlanCM;
                     //Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
                     //Save the plan in our segment and room
-                    global.heap.roomPlans = JSON.parse(RawMemory.segments[1]);
+                    global.heap.roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS]);
                     global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlan.ramparts];
-                    RawMemory.segments[1] = JSON.stringify(global.heap.roomPlans)
+                    RawMemory.segments[SEGMENT_ROOM_PLANS] = JSON.stringify(global.heap.roomPlans)
                     //Save the RCL plan
                     //Memory.testRCLPlan = rclPlan;
                 }
@@ -202,9 +202,9 @@ const fiefPlanner = {
                         //Memory.testBasePlanCM = fiefPlanner.bestPlanCM;
                         //Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
                         //Save the plan in our segment
-                        global.heap.roomPlans = JSON.parse(RawMemory.segments[1]);
+                        global.heap.roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS]);
                         global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlan.ramparts];
-                        RawMemory.segments[1] = JSON.stringify(global.heap.roomPlans)
+                        RawMemory.segments[SEGMENT_ROOM_PLANS] = JSON.stringify(global.heap.roomPlans)
                         //Save the RCL plan
                         //Memory.testRCLPlan = rclPlan;
                         return;
@@ -1690,13 +1690,13 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
         //Scores a room plan based on a number of factors
         /**
          * Score will take into account:
-         * Max extension range from storagex
-         * Average extension range from storagex
-         * Total rampart tiles x
-         * Total rampart groups ?
-         * Average range from rampart tile to storage x
-         * Range from storage to controller x
-         * Range from storage to sources x
+         * Max extension range from storage
+         * Average extension range from storage
+         * Total rampart tiles
+         * Total rampart groups
+         * Average range from rampart tile to storage
+         * Range from storage to controller
+         * Range from storage to sources
          * Sources/mineral/controller? outside of ramparts
          * Lowest score is best
          */
@@ -1725,8 +1725,8 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
             totalScore += getDistance(basePlan.storage,source)*scoreWeights.sourceDistWeight;
             scoreTracker.sourceDistanceScore += Math.round(getDistance(basePlan.storage,source)*scoreWeights.sourceDistWeight);
         }
-        //Increase score based on total range and max ranges for extensions. Max range should eventually use pathing
-        //If there are fewer than 60 extensions, increase score for each extension missing
+        //Increase score based on total range and max ranges for extensions. Max range should eventually use pathing to follow roads
+        //If there are fewer than 60 extensions, increase score for each extension missing - this was to address an old but that I think I fixed, but it doesn't hurt keeping in
         let maxExt = 0;
         let total = 0;
         for(ext of basePlan.extension){

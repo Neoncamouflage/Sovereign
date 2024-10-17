@@ -122,7 +122,7 @@ global.getScoutData = function getScoutData(roomName=false){
     let scoutData = global.heap && global.heap.scoutData;
     //If first tick or no scout data for a specific room, return false
     if(!scoutData || (roomName && !scoutData[roomName])){
-        console.log("No scout data available! Room?",JSON.stringify(roomName))
+        //console.log("No scout data available! Room?",JSON.stringify(roomName))
         return false;
     }
     //No room name means all data
@@ -273,7 +273,12 @@ global.parseBody = function parseBody(bodyString){
         'a': ATTACK,
         'p': CLAIM
     };
-    
+    if (/^[a-z]+$/i.test(bodyString)) {
+        // Map each letter to its corresponding body part and add to the array
+        const parts = bodyString.toLowerCase().split('').map(char => partMap[char]);
+        bodyParts.push(...parts);
+        return bodyParts;
+    }
     let match;
     while((match = regex.exec(bodyString)) !== null) {
         const count = parseInt(match[1]); // Get the number of repetitions
