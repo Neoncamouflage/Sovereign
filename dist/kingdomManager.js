@@ -54,8 +54,9 @@ const kingdomManager = {
             global.heap.funnelTarget = fRoom == null ? null : fRoom.name;
         }
 
-        global.heap.stock = { ...global.heap.kingdomStatus.wares };
-        global.heap.kingdomStatus.wares = {};
+        heap.stock = { ...global.heap.kingdomStatus.wares };
+        heap.kingdomStatus.wares = {};
+        heap.kingdomStatus.fiefs = {};
         for(const fief in Memory.kingdom.fiefs){
             supplyDemand.prepShipping(fief);
             kingdomCreeps[fief] = kingdomCreeps[fief] || [];
@@ -66,11 +67,11 @@ const kingdomManager = {
                 continue;
             }
             
-            global.heap.kingdomStatus[fief] = fiefManager.run(Game.rooms[fief],kingdomCreeps[fief]);
+            heap.kingdomStatus.fiefs[fief] = fiefManager.run(Game.rooms[fief],kingdomCreeps[fief]);
             //Manage shipping tasks
             supplyDemand.manageShipping(fief,kingdomCreeps[fief]['hauler'] || []);
             //Run spawn logic every 3 ticks
-            registry.calculateSpawns(Game.rooms[fief],kingdomCreeps[fief]);
+            if(Game.time % 3 == 0) registry.calculateSpawns(Game.rooms[fief],kingdomCreeps[fief]);
         }
 
         

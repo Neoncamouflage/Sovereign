@@ -191,7 +191,7 @@ const roleBuilder = {
                 //console.log()
                 if(target instanceof Structure){
                     //console.log(`Ramp hits: ${target.hits} Ramptarget: ${fief.rampTarget + (fief.rampTarget*0.15)}`)
-                    if(target.hits > fief.rampTarget + Math.min(100000,fief.rampTarget*0.15)){
+                    if(target.hits > fief.rampTarget + Math.min(100000,fief.rampTarget*0.15) || target.hits == RAMPART_HITS_MAX[room.controller.level]){
                         delete creep.memory.targetID;
                         continue;
                     }

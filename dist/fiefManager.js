@@ -14,7 +14,7 @@ const fiefManager = {
         let restartFlag = false;
         let fief = Memory.kingdom.fiefs[room.name];
         let factory = room.find(FIND_MY_STRUCTURES,{filter:{structureType:STRUCTURE_FACTORY}})[0];
-        let fiefHeap = global.heap[room.name];
+        let fiefHeap = heap[room.name];
         if(!fief.builders)fief.builders = [];
         if(!fief.rclTimes){
             fief.rclTimes = {tick:Game.time};
@@ -29,7 +29,7 @@ const fiefManager = {
         if(!fief.rclTimes[roomLevel]){
             fief.rclTimes[roomLevel] = Game.time - fief.rclTimes.tick;
             //If we were the funnel target and we leveled up, reset it
-            if(roomLevel == 7 && room.name == global.heap.funnelTarget) global.heap.funnelTarget = null;
+            if(roomLevel == 7 && room.name == heap.funnelTarget) heap.funnelTarget = null;
         }
         if(!fief.rclTimes['storage'] && room.storage) fief.rclTimes['storage'] = Game.time - fief.rclTimes.tick
         if(!fief.rampTarget) fief.rampTarget = 50000;
@@ -59,7 +59,7 @@ const fiefManager = {
             if(roomPlans[room.name]){
                 [fief.roomPlan, fief.rampartPlan] = roomPlans[room.name]
             }
-            else if(global && global.heap && (!global.heap.fiefPlanner || !global.heap.fiefPlanner.stage ||global.heap.fiefPlanner.stage == 0)){
+            else if(global && heap && (!heap.fiefPlanner || !heap.fiefPlanner.stage ||heap.fiefPlanner.stage == 0)){
                 fiefPlanner.getFiefPlan(room.name);
                 console.log("Getting plan for room")
             }
@@ -177,7 +177,6 @@ const fiefManager = {
             fief.controllerSpots = getControllerSpots(room,fief);
             fief.controllerSpots.rcl = room.controller.level
         }
-
         if(Game.time % 100 == 0 && fief.roomPlan && !cSites.length){
             //console.log("Checking for new constructions.")
             let cCount = 0;
@@ -476,13 +475,13 @@ const fiefManager = {
             //Spawn operations when storage is available
             if(room.storage && room.storage.my){
                 let upgradersNeeded;
-                if(roomLevel == 8){
-                    if(room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE/2) registry.requestCreep({sev:35,body:[MOVE,CARRY,WORK,MOVE,WORK],memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
+                if(roomLevel == 8 && !fiefCreeps.upgrader){
+                    if(room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE[roomLevel]/2) registry.requestCreep({sev:35,body:[MOVE,CARRY,WORK,MOVE,WORK],memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
                 else if(room.storage.store[RESOURCE_ENERGY] < 50000){
                     upgradersNeeded = 0;
                 }
-                else if([6,7].includes(roomLevel) && global.heap.funnelTarget && global.heap.funnelTarget != room.name && room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[roomLevel]/2){
+                else if([6,7].includes(roomLevel) && heap.funnelTarget && heap.funnelTarget != room.name && room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[roomLevel]/2){
                     //No upgrading if we're helping funnel and aren't in downgrade alert
                     upgradersNeeded = 0;
                 }
@@ -532,7 +531,7 @@ const fiefManager = {
                     let mineral = Game.getObjectById(fief.mineral.id)
                     if(!Memory.kingdom.mineralNeed) Memory.kingdom.mineralNeed = {};
                     let mineralNeed = Memory.kingdom.mineralNeed[mineral.mineralType] || DEFAULT_MINERAL_NEED
-                    if(!mineral.ticksToRegeneration && room.storage.store.getFreeCapacity() > STORAGE_SPACE_FOR_MINERAL_HARVEST && global.heap.stock[mineral.mineralType] < mineralNeed){
+                    if(!mineral.ticksToRegeneration && room.storage.store.getFreeCapacity() > STORAGE_SPACE_FOR_MINERAL_HARVEST && heap.stock[mineral.mineralType] < mineralNeed){
                         if(!fiefCreeps.harvester || !fiefCreeps.harvester.filter(crp => crp.memory.target == mineral.id).length){
                             registry.requestCreep({sev:33,memory:{role:'harvester',job:'mineralHarvester',fief:room.name,target:mineral.id,status:'spawning',preflight:false}})
                         }
@@ -577,9 +576,9 @@ const fiefManager = {
             //If no construction sites and positive income, start raising the ramp target as long as they're all at the last one
             if(Game.time % (Math.round(roomLevel*1.3)*1000) == 0){
                 //If we aren't yet RCL8 and we're over 3M hits, then no raising unless we have a war override
-                if(fief.rampTarget < 3000000 || roomLevel == 8 || fief.rampOverride){
-                    //If we're below the minimum for our RCL, bump it up
-                    fief.rampTarget = Math.max(fief.rampTarget,rampartMinimums[room.controller.level])
+                if(fief.rampTarget < RAMPART_HITS_MAX[room.controller.level] && (fief.rampTarget < RAMPART_LOWRCL_CAP || roomLevel == 8 || fief.rampOverride)){
+                    //If we're below the minimum for our RCL, bump it up with a cap of the max hits for our level
+                    fief.rampTarget = Math.min(RAMPART_HITS_MAX[room.controller.level],Math.max(fief.rampTarget,rampartMinimums[room.controller.level]))
                     if(averageNet > 0 || room.storage.store[RESOURCE_ENERGY] > 100000){
                         let ramps = room.find(FIND_MY_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_RAMPART && struct.hits < fief.rampTarget);
                         //Grow by 10% if there are none
@@ -722,15 +721,15 @@ const fiefManager = {
 
 
             //Funnelcheck - RCL 7 helps funnel to 6 as well
-            if(global.heap.funnelTarget && room.terminal && [6,7].includes(roomLevel)){
+            if(heap.funnelTarget && room.terminal && [6,7].includes(roomLevel)){
                 //If we are not the funnel target
-                if(room.name != global.heap.funnelTarget && !cSites.length){
+                if(room.name != heap.funnelTarget && !cSites.length){
                     if(room.storage.store[RESOURCE_ENERGY] > 50000){
                         supplyDemand.addRequest(room,{type:'dropoff',resourceType:'energy',amount:Math.min(room.storage.store[RESOURCE_ENERGY] - 50000,room.terminal.store.getFreeCapacity()),targetID:room.terminal.id,international:false,priority:4})
                     }
                     if(room.terminal.store[RESOURCE_ENERGY] > 50000){
-                        let fee = Math.ceil( room.terminal.store[RESOURCE_ENERGY] * ( 1 - Math.exp(-Game.map.getRoomLinearDistance(room.name,global.heap.funnelTarget,true)/30) ) )
-                        room.terminal.send(RESOURCE_ENERGY,room.terminal.store[RESOURCE_ENERGY]-fee,global.heap.funnelTarget)
+                        let fee = Math.ceil( room.terminal.store[RESOURCE_ENERGY] * ( 1 - Math.exp(-Game.map.getRoomLinearDistance(room.name,heap.funnelTarget,true)/30) ) )
+                        room.terminal.send(RESOURCE_ENERGY,room.terminal.store[RESOURCE_ENERGY]-fee,heap.funnelTarget)
                     }
                 }
                 //If we are the funnel target
@@ -835,9 +834,9 @@ const fiefManager = {
                     })
                 };
                 //If we don't have a queue for all the remote links, create them
-                if(!global.heap.remoteQueues) global.heap.remoteQueues = {};
-                if(!global.heap.remoteQueues[room.name]) global.heap.remoteQueues[room.name] = {};
-                let queues = global.heap.remoteQueues[room.name];
+                if(!heap.remoteQueues) heap.remoteQueues = {};
+                if(!heap.remoteQueues[room.name]) heap.remoteQueues[room.name] = {};
+                let queues = heap.remoteQueues[room.name];
                 if(fief.links.remoteLinks.length && Object.keys(queues).length != fief.links.remoteLinks.length){
                     remoteLinks.forEach(link =>{
                         //Create queue if missing
@@ -1329,7 +1328,7 @@ function totalWares(room) {
         for (const resourceType in room.storage.store) {
             if (room.storage.store.hasOwnProperty(resourceType)) {
                 totalResources[resourceType] = (totalResources[resourceType] || 0) + room.storage.store[resourceType];
-                global.heap.kingdomStatus.wares[resourceType] = (global.heap.kingdomStatus.wares[resourceType] || 0) + room.storage.store[resourceType];
+                heap.kingdomStatus.wares[resourceType] = (heap.kingdomStatus.wares[resourceType] || 0) + room.storage.store[resourceType];
             }
         }
     }
@@ -1339,7 +1338,7 @@ function totalWares(room) {
         for (const resourceType in room.terminal.store) {
             if (room.terminal.store.hasOwnProperty(resourceType)) {
                 totalResources[resourceType] = (totalResources[resourceType] || 0) + room.terminal.store[resourceType];
-                global.heap.kingdomStatus.wares[resourceType] = (global.heap.kingdomStatus.wares[resourceType] || 0) + room.terminal.store[resourceType];
+                heap.kingdomStatus.wares[resourceType] = (heap.kingdomStatus.wares[resourceType] || 0) + room.terminal.store[resourceType];
             }
         }
     }
@@ -1348,7 +1347,7 @@ function totalWares(room) {
     let mineral = Game.getObjectById(Memory.kingdom.fiefs[room.name].mineral.id);
     if(!totalResources[mineral.mineralType]){
         totalResources[mineral.mineralType] = 0;
-        global.heap.kingdomStatus.wares[mineral.mineralType] = 0;
+        heap.kingdomStatus.wares[mineral.mineralType] = 0;
     }
     return totalResources;
 }
@@ -1432,8 +1431,7 @@ function getDomainRooms(fief) {
         if(depth == MAX_RANGE) continue;
         console.log(`Depth is not at max of ${MAX_RANGE}, adding neighbors`)
         let exits = Game.map.describeExits(roomName);
-        console.log("EXITS:")
-        console.log(JSON.stringify(exits))
+        if(!exits) continue;
         for(let exitRoom of Object.values(exits)){
             if(!visited.has(exitRoom)){
                 queue.push({roomName:exitRoom,depth:depth+1});

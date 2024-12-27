@@ -110,6 +110,49 @@ var roleBait = {
                 }
             return;
         }
+        if(creep.memory.job == 'harScore'){
+            targetRoom = 'W20N0'
+            if(creep.store.getUsedCapacity()==0){
+
+                if(creep.room.name == creep.memory.fief){
+                    if(creep.room.terminal && creep.room.terminal.store[RESOURCE_SCORE] > 0){
+                        creep.travelTo(creep.room.terminal);
+                        creep.withdraw(creep.room.terminal,RESOURCE_SCORE)
+                        return;
+                    }
+                    creep.travelTo(creep.room.storage);
+                    creep.withdraw(creep.room.storage,RESOURCE_SCORE)
+                    return;
+                }
+                else{
+                    let cans = creep.room.find(FIND_SCORE_CONTAINERS);
+                    if(cans.length){
+                        creep.travelTo(cans[0]);
+                        if(creep.pos.getRangeTo(cans[0])){
+                            creep.withdraw(cans[0],RESOURCE_SCORE)
+                        }
+                        return;
+                    }
+                    if(creep.ticksToLive < 400) {
+                        spawnCreep('bait','25m25c','W17S3',33,{job:'harScore',targetRoom:'W20N0'});
+                        creep.suicide();
+                        
+                    }
+                    creep.travelTo(Game.rooms[creep.memory.fief].storage);
+                    return;
+                }
+            }
+            if(creep.room.name != targetRoom){
+                creep.travelTo(new RoomPosition(39,31,targetRoom),{maxOps:20000,maxRooms:64});
+            }
+            else{
+                let collector = creep.room.find(FIND_SCORE_COLLECTORS)[0]
+                if(!collector) return
+                creep.travelTo(collector,{maxOps:20000});
+                let g = creep.transfer(collector,RESOURCE_SCORE);
+                }
+            return;
+        }
         if(creep.memory.job == 'dakScore'){
             targetRoom = 'W30S0'
             if(creep.store.getUsedCapacity()==0){

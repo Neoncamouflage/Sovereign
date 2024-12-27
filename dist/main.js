@@ -8,6 +8,7 @@ require('prototypes.spawn');
 require('prototypes.roomposition');
 require('prototypes.military');
 require('functions.global');
+require('fiefPlannerNew');
 const supplyDemand = require('supplyDemand')
 global.chronicle = require('chronicle');
 const spinup = require('spinup')
@@ -17,9 +18,6 @@ const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner')
 //profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
-
-//Set Memory reference for building numbers
-
 
 //Set scoring weights for room planning
 Memory.lastReset = 0 || Memory.globalReset;

@@ -2,6 +2,7 @@ const registry = require('registry');
 const helper = require('functions.helper');
 const profiler = require('screeps-profiler');
 const intelManager = {
+    toScout:[],
     run: function(scouts,fiefs){
         let scoutData = global.heap.scoutData;
         const SCOUT_MAX = 3;

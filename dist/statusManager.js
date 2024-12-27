@@ -1,27 +1,32 @@
 const profiler = require('screeps-profiler');
 
+/**
+ * TODO
+ * 
+ * Have the width automatically calculate based on the icons and amounts for each row, using
+ * either the max width or minimum default scroll width
+ * 
+ */
+
 /*
 By default this module references an object stored in global that is updated by the rest of the bot.
-The object must conform to the following schema.
+The object must conform to the format shown in this example.
 kingdomStatus: {
-    wares: {resourceType:amount,resourceType2:amount ...},
-    'roomName' : {
-        totalCreeps: totalCreeps,
-        fiefCreeps: fiefCreeps,
-        hostileCreeps: roomBaddies,
-        controllerProgress: room.controller.progress,
-        safeMode: room.controller.safeMode,
-        spawnUse: fief.combinedSpawnUse,
-        currentlySpawning: Object.values(Game.spawns).filter(spawn => spawn.spawning && spawn.room.name == room.name).map(spawn => Game.creeps[spawn.spawning.name].memory.role),
-        storageLevel: storageLevel
+    displayAll: true, //Optional value to set whether we want to display all resources even with zero quantities
+    cycleTicks: 5,  //Optional value to set how frequently the visual cycles
+    wares: {'OH':27000,'utrium_bar':900 ...}, //Amounts for every resource type in storages/containers/terminals/whatever you want counted
+    fiefs: {
+        E1N1 : {
+            roomStatus: 'OK', //Optional value to indicate room status
+            fiefCreeps: 80,  //Total creeps associated with the room
+            hostileCreeps: true, //If hostile creeps are present in the room
+            spawnUse: 82.77, //Total spawn utilization as a percentage from 0-100
+        }
     }
 }
-
-
 */
 
 // --Constants --
-//These values can be changed to adjust the appearance of the scrolls
 
 //Base scroll dimensions and colors
 const ROLL_OPACITY = 1;
@@ -32,7 +37,7 @@ const SCROLL_FILL_COLOR = '#c99157';
 const SCROLL_END_COLOR = '#ffdd8a';
 //Max fiefs to display before it has to cycle
 //Lower this to take up less space, increasing past 7 causes it to extend past the bottom of the room
-const MAXIMUM_FIEFS_DISPLAYED = 7;
+const MAXIMUM_FIEFS_DISPLAYED = 5;
 
 //Icons
 const RCL_ICONS = {
@@ -59,23 +64,95 @@ const STATUS_ICONS = {
     2:'🛡️'  //Safemode
 };
 //How many ticks before the scroll changes to a new view
-const SCROLL_CYCLE_TICKS = 5;
+const SCROLL_CYCLE_TICKS = 2;
+//Which tick we're on out of the current cycle.
+let current_cycle_tick = 1;
+//Cycle the scrolls based on the cycle constant. Wares scroll will cycle through base minerals and boost tiers, no commodities at this time.
+let cycleOptions = ['Basic','T1','T2','T3']
+//Ranges for checking resources types with RESOURCES_ALL
+let resourceRanges = {
+    'Basic':[0,9],
+    'T1':[10,22],
+    'T2':[23,32],
+    'T3':[33,42]
+}
+//Which ware selection we're currently displaying.
+let current_ware = 0;
 const statusManager = {
 
     run: function() {
+
         //The overall status object. As long as this is properly assigned, all the rest will work as-is.
         let kingdomStatus = global.heap.kingdomStatus;
+        //console.log("ALLSTATUS",JSON.stringify(kingdomStatus))
+        //true  - Display all minerals and boosts, even with 0 quantity
+        //false - Display only minerals and boosts with a positive quantity, skip displaying resource sets with none of any in stock
+        const DISPLAY_ALL = kingdomStatus.displayAll || true;
+
         //Take a custom cycleTicks value from the status object, or default to the constant
         let cycleTicks = kingdomStatus.cycleTicks || SCROLL_CYCLE_TICKS;
+        current_cycle_tick++;
         let rVis = new RoomVisual();
-        //Cycle the scrolls based on the cycle constant. Wares scroll will cycle through:
-        //Boosts - T1/T2/T3
-        //Base minerals and energy
-        //Factory commodities
-        let cycleOptions = ['Basic','T1','T2','T3','Factory']
 
 
-        drawScrolls();
+        //Process the current tick
+        if(current_cycle_tick > cycleTicks){
+            current_cycle_tick = 1;
+            current_ware++;
+        }
+
+        //Get the current ware selection and update them, moving to the next type if we have none of the current cycle type
+        //We bypass this if the DISPLAY_ALL option is set to true, since we don't care if we display zeroes in that case
+        let hasWares = Object.keys(kingdomStatus.wares).length
+        let wareSet = [];
+        if(!DISPLAY_ALL && hasWares){
+            let safety = 0
+            while(safety < 6){
+                safety++
+                console.log("Ware check! Safety is at",safety)
+                if(current_ware >= cycleOptions.length){
+                    current_ware = 0;
+                }
+                console.log("Current ware is",current_ware,cycleOptions[current_ware])
+                //Check if any of our wares are of the type we need
+                let [startIndex, endIndex] = resourceRanges[cycleOptions[current_ware]];
+                let wareKeys = Object.keys(kingdomStatus.wares);
+                let resourcesInRange = RESOURCES_ALL.slice(startIndex, endIndex + 1);
+                let wareCheck = wareKeys.some(ware => resourcesInRange.includes(ware));
+                console.log("Check result:",wareCheck)
+                if(wareCheck){
+                    wareSet = Object.entries(kingdomStatus.wares)
+                    .filter(([key]) => resourcesInRange.includes(key))
+                    .map(([key, value]) => [key, value]);
+                    break;
+                }
+                else{
+                    console.log("NO WARES, NEXT");
+                    current_cycle_tick = 1;
+                    current_ware++;
+                }
+            }
+        }
+        else if(DISPLAY_ALL){
+            if(current_ware >= cycleOptions.length){
+                current_ware = 0;
+            }
+            let [startIndex, endIndex] = resourceRanges[cycleOptions[current_ware]];
+            let resourcesInRange = RESOURCES_ALL.slice(startIndex, endIndex + 1);
+            for(let resType of resourcesInRange){
+                wareSet.push([resType,kingdomStatus.wares[resType] || 0]);
+            }
+        }
+        //Draw the base decorations
+        drawScrolls(Object.keys(wareSet).length);
+        drawBanners();
+
+        //Update kingdom wares if applicable
+        if(hasWares)updateWares(wareSet);
+        //console.log("PREFUNCTION",JSON.stringify(kingdomStatus),Object.keys(kingdomStatus.fiefs))
+        //Update fiefs
+        //if (Object.keys(kingdomStatus.fiefs).length) updateFiefs()
+        
         return;
         //Loop through status of each fief for wares
         Object.keys(kingdomStatus.fiefs).forEach(fief => {
@@ -353,9 +430,7 @@ const statusManager = {
 
 
 
-        //Scroll Labels ----------------------//
-        rVis.text('📦Wares', SCROLL_WIDTH/2, 0.5, {color: 'black', font: 'bold 1 Bridgnorth'});
-        rVis.text('🏰Fiefs '+Object.keys(Memory.kingdom.fiefs).length+'/'+Game.gcl.level, SCROLL_WIDTH/2, SCROLL_LENGTH+0.3, {color: 'black', font: 'bold 1 Bridgnorth'});
+
         //Room inventory
         try{
             let waresCount = 0;
@@ -375,20 +450,143 @@ const statusManager = {
 
         return;
 
-        function drawScrolls(){
+        function formatNum(number) {
+            if (number >= 1000000) {
+                return (number / 1000000).toFixed(1) + 'M';
+            } else if (number >= 10000) {
+                return (number / 1000).toFixed(1) + 'K';
+            } else{
+                return number.toLocaleString();
+            }
+        }
+
+        function updateFiefs(){
+            let fiefText = [];
+            console.log(JSON.stringify(kingdomStatus.fiefs))
+            for(let fiefName of Object.keys(kingdomStatus.fiefs)){
+                console.log("STATUS FIEF",fiefName,kingdomStatus.fiefs[fiefName])
+                let fief = kingdomStatus.fiefs[fiefName];
+                let room = Game.rooms[fiefName]
+                //Start off the text status for this room with the name
+                let fiefStatus = fiefName;
+                //Get storage icon
+                if(room.storage){
+                    storePart = room.storage.store.getUsedCapacity()/10000
+                    if(storePart<25){
+                        fiefStatus+=STORAGE_ICONS[1];
+                    }
+                    else if(storePart <50){
+                        fiefStatus+=STORAGE_ICONS[2];
+                    }
+                    else if(storePart <75){
+                        fiefStatus+=STORAGE_ICONS[3];
+                    }
+                    else{
+                        fiefStatus+=STORAGE_ICONS[4];
+                    }
+                }
+                else{
+                    fiefStatus+=STORAGE_ICONS[0];
+                }
+
+                //Get room status from fief object
+                if(fief.roomStatus){
+                    if(fief.roomStatus == 'SAFEMODE'){
+                        fiefStatus += STATUS_ICONS[2]
+                    }
+                    else if(fief.roomStatus == 'ATTACK'){
+                        fiefStatus += STATUS_ICONS[1]
+                    }
+                    else{
+                        fiefStatus += STATUS_ICONS[0]
+                    }
+                }
+                //If not available in fief object, determine room status based on hostiles and safemode
+                else{
+                    if(room.controller.safeMode){
+                        fiefStatus += STATUS_ICONS[2]
+                    }
+                    else if(fief.hostileCreeps && fief.hostileCreeps.length){
+                        fiefStatus += STATUS_ICONS[1]
+                    }
+                    else{
+                        fiefStatus += STATUS_ICONS[0]
+                    }
+                }
+                fiefStatus += RCL_ICONS[room.controller.level]
+            
+
+            }
+            fiefText = '----------------'.join(fiefText)
+        }
+
+        function updateWares(wares){
+            console.log("WARES",JSON.stringify(wares))
+            if(Object.keys(wares).length == 0) return
+            let wareY = 2
+            let textOffset = 0.5
+            let iconOffset = 0
+            let wareX=0
+
+
+            //Wider boost icons need text adjustment
+            if(cycleOptions[current_ware] == 'T2'){
+                textOffset += 0.25;
+                iconOffset += 0.25;
+            }
+            else if(cycleOptions[current_ware] == 'T3'){
+                textOffset += 0.5;
+                iconOffset += 0.5;
+            }
+            for(let each of wares){
+                rVis.resource(each[0],wareX+iconOffset,wareY-0.25,0.45);
+                rVis.text(formatNum(each[1]), wareX+iconOffset+textOffset, wareY, {color: 'black', font: 'bold 0.8 Bridgnorth',align: 'left'});
+                if(wareX == 0){
+                    if(cycleOptions[current_ware] == 'T3'){
+                        wareX = 4;
+                    }
+                    else{
+                        wareX = 3.5;
+                    }
+                }
+                else{
+                    wareX = 0;
+                    wareY += 1.5;
+                }
+
+                
+            }
+        }
+
+        function drawBanners(){
+
+        }
+
+        function drawScrolls(wareLength){
             
             //Minimum length of 1 if empty, otherwise extend the scroll up to the maximum
             let totalFiefLength = SCROLL_LENGTH + Math.min(MAXIMUM_FIEFS_DISPLAYED,Math.max(9,Object.keys(kingdomStatus.fiefs).length))
-            let totalWaresLength = SCROLL_LENGTH + 5
+            let totalWaresLength = SCROLL_LENGTH + (Math.ceil(wareLength/2)*1.5)
             let fiefStart = totalWaresLength + 3
+            let wareWidth = SCROLL_WIDTH
+            //T3 boosts need more width
+            if(cycleOptions[current_ware] == 'T2'){
+                wareWidth += 0.5
+            }
+            else if(cycleOptions[current_ware] == 'T3'){
+                wareWidth += 1
+            }
+
+
+
             //Build wares scroll top
-            rVis.circle(SCROLL_WIDTH-.4,0.20,{
+            rVis.circle(wareWidth-.4,0.20,{
                 radius: .75,
                 fill:SCROLL_FILL_COLOR,
                 opacity: ROLL_OPACITY,
                 stroke: SCROLL_FILL_COLOR
             });
-            rVis.rect(-0.25, -0.5,SCROLL_WIDTH, 1.5,{
+            rVis.rect(-0.25, -0.5,wareWidth, 1.5,{
                 opacity: ROLL_OPACITY,
                 fill:SCROLL_FILL_COLOR
             }); 
@@ -400,19 +598,19 @@ const statusManager = {
             });
 
             //Middle of wares scroll
-            rVis.rect(-0.5, 0.9, SCROLL_WIDTH+0.2, totalWaresLength,{
+            rVis.rect(-0.5, 0.9, wareWidth+0.2, totalWaresLength,{
                 opacity: MIDDLE_OPACITY,
                 fill:SCROLL_FILL_COLOR
             }); 
 
             //Bottom of wares scroll
-            rVis.circle(SCROLL_WIDTH-.4,totalWaresLength+1,{
+            rVis.circle(wareWidth-.4,totalWaresLength+1,{
                 radius: .70,
                 fill:SCROLL_FILL_COLOR,
                 opacity: ROLL_OPACITY,
                 stroke: SCROLL_FILL_COLOR
             });
-            rVis.rect(-0.25, totalWaresLength+0.25,SCROLL_WIDTH, 1.5,{
+            rVis.rect(-0.25, totalWaresLength+0.25,wareWidth, 1.5,{
                 opacity: ROLL_OPACITY,
                 fill:SCROLL_FILL_COLOR
             }); 
@@ -464,6 +662,10 @@ const statusManager = {
                 opacity: ROLL_OPACITY,
                 stroke: SCROLL_FILL_COLOR
             });
+
+            //Scroll Labels ----------------------//
+            rVis.text('📦Wares', SCROLL_WIDTH/2, 0.5, {color: 'black', font: 'bold 1 Bridgnorth'});
+            rVis.text('🏰Fiefs '+Object.keys(Memory.kingdom.fiefs).length+'/'+Game.gcl.level, SCROLL_WIDTH/2, fiefStart+0.25, {color: 'black', font: 'bold 1 Bridgnorth'});
         }
     }
 }

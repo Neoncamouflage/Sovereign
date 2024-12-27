@@ -313,3 +313,11 @@ global.describeRoom = function describeRoom(name){
 		return ROOM_STANDARD
 	}
 }
+
+global.convertStructure = function convertStructure(structure){
+    //console.log("Converting",structure,'LEN',structure.length)
+    if(structure.length == 1){
+        return Memory.structureFromNumReference[structure];
+    }
+    return Memory.structureToNumReference[structure]
+}

@@ -162,7 +162,7 @@ const painter = {
     },
     drawTest(){
         // -- REMOTE ROAD TEST --
-        for(let holding of Object.values(Memory.kingdom.holdings)){
+        /*for(let holding of Object.values(Memory.kingdom.holdings)){
             if(!holding.remoteRoute) continue;
             Game.map.visual.poly(holding.remoteRoute)
         }
@@ -178,22 +178,22 @@ const painter = {
             roomVis.connectRoads()
             new RoomVisual(holding).text(names[tickPick].toLowerCase(),25,25,{color:'#ffa500',font:'1 Bridgnorth'})
             
-        }
+        }*/
 
 
         // -- TEST CM - USE THIS FOR ANY CM DRAWING --
-        /*let testCM = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings.E46N38.costMatrix);
+        let testCM = PathFinder.CostMatrix.deserialize(Memory.testCM1);
         for (let x = 0; x <= 49; x += 1) {
             for (let y = 0; y <= 49; y += 1) {
                 let weight = testCM.get(x,y);
                 if(weight == 0) continue;
-                new RoomVisual('E46N38').text(weight,x,y+0.25,{font:0.25});
-                //new RoomVisual('E46N38').rect(x - 0.5, y - 0.5, 1, 1, {
-                    //fill: `hsl(${200}${weight * 10}, 100%, 60%)`,
-                    //opacity: 0.4,
-                //})
+                new RoomVisual().text(weight,x,y+0.25,{font:0.25});
+                new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
+                    fill: `hsl(${360*(weight/255)}, 100%, 60%)`,
+                    opacity: 0.4,
+                })
             }
-        }*/
+        }
     },
     drawMilitary(kingdomCreeps){
         let reserve = global.heap.army.reserve;

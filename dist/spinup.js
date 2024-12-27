@@ -89,6 +89,43 @@ const spinup = {
             33:STRUCTURE_SPAWN,
             12:STRUCTURE_CONTAINER,
         };
+
+        Memory.structureFromNumReference = {
+            100:STRUCTURE_RAMPART,
+            15:STRUCTURE_NUKER,
+            14:STRUCTURE_FACTORY,
+            13:STRUCTURE_POWER_SPAWN,
+            12:STRUCTURE_LINK,
+            11:STRUCTURE_LAB,
+            10:STRUCTURE_TERMINAL,
+            9:STRUCTURE_WALL,
+            8:STRUCTURE_TOWER,
+            7:STRUCTURE_EXTRACTOR,
+            6:STRUCTURE_EXTENSION,
+            5:STRUCTURE_OBSERVER,
+            4:STRUCTURE_STORAGE,
+            3:STRUCTURE_SPAWN,
+            2:STRUCTURE_CONTAINER,
+            1:STRUCTURE_ROAD,
+        };
+        Memory.structureToNumReference = {
+            [STRUCTURE_RAMPART]:100,
+            [STRUCTURE_NUKER]:15,
+            [STRUCTURE_FACTORY]:14,
+            [STRUCTURE_POWER_SPAWN]:13,
+            [STRUCTURE_LINK]:12,
+            [STRUCTURE_LAB]:11,
+            [STRUCTURE_TERMINAL]:10,
+            [STRUCTURE_WALL]:9,
+            [STRUCTURE_TOWER]:8,
+            [STRUCTURE_EXTRACTOR]:7,
+            [STRUCTURE_EXTENSION]:6,
+            [STRUCTURE_OBSERVER]:5,
+            [STRUCTURE_STORAGE]:4,
+            [STRUCTURE_SPAWN]:3,
+            [STRUCTURE_CONTAINER]:2,
+            [STRUCTURE_ROAD]:1,
+        }
     }
 }
 

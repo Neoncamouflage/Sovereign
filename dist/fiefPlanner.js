@@ -1693,11 +1693,13 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
          * Max extension range from storage
          * Average extension range from storage
          * Total rampart tiles
-         * Total rampart groups
-         * Average range from rampart tile to storage
+         * Total rampart groups (clusters of up to 6 adjacent tiles)
+         * Average range from rampart tiles to storage
          * Range from storage to controller
          * Range from storage to sources
-         * Sources/mineral/controller? outside of ramparts
+         * If sources or controller are outside the ramparts
+         * Average tower damage to tiles outside ramparts
+         * Minimum tower damage to tiles outside ramparts
          * Lowest score is best
          */
         let scoreTracker = {};
