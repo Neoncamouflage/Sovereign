@@ -105,7 +105,32 @@ Troupe.prototype.run = function(kingdomCreeps) {
                 this.createLance('blinky',{unitsNeeded: 1});
                 break;
             case 'destroyCore':
-                this.createLance('melee');
+                let core = this.mission.targets && this.mission.targets.length ? this.mission.targets[0] : false;
+                let remote = Game.rooms[this.mission.room];
+                let roomEnergy = Game.rooms[this.baseFief].energyCapacityAvailable
+                let isRes = remote && remote.controller && remote.controller.reservation && isMe(remote.controller.reservation)
+                let reserveTime = isRes ? remote.controller.reservation.ticksToEnd : false;
+                let bodySize = 0;
+                if(core && reserveTime){
+                    let dist = getDistance(Game.getObjectById(Memory.kingdom.fiefs[this.baseFief].spawns[0]).pos,core.pos);
+                    bodySize = Math.ceil(100000/Math.round(reserveTime-dist/2));
+                    //80 Energy per Attack and 50 per Move needed
+                    bodyCap = Math.floor(roomEnergy/130);
+                    //Multiple units
+                    if(bodySize*2 > bodyCap){
+                        let totalUnits = Math.ceil(bodySize/bodyCap)
+                        this.createLance('melee',{body:parseBody(`${bodyCap}AM`),unitsNeeded:totalUnits});
+                    }
+                    //Good with one unit
+                    else{
+                        this.createLance('melee',{body:parseBody(`${bodySize}AM`)});
+                    }
+                    
+                }
+                else{
+                    this.createLance('melee');
+                }
+                
                 break;
             case 'skMining':
                 this.createLance('melee',{role:'halberdier',body:[MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,HEAL,HEAL,HEAL,HEAL,HEAL,MOVE,HEAL]});

@@ -1,6 +1,6 @@
 const helper = require('functions.helper');
 const registry = require('registry');
-
+const profiler = require('screeps-profiler');
 const supplyDemand = {
     makeTask: function(details={}){
         let newTask = new Task(details.type,details.resourceType,details.targetID,details.amount,details.priority,details.international,details.targetRoom,details.taskID,details.assignedHaulers,details.tick)
@@ -913,7 +913,7 @@ Task.prototype.unassign = function(hauler,reason) {
     //Delete hauler task
     delete hauler.memory.task
 };
-
+profiler.registerObject(supplyDemand, 'supplyDemand');
 module.exports = supplyDemand;
 global.addSupplyRequest = supplyDemand.addRequest;
 

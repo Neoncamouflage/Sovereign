@@ -43,7 +43,7 @@ module.exports.loop = function () {
         //Segment 9 is for ad-hoc logging
         RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
-        global.heap = {fiefs:{},alarms:{},stock:{},kingdomStatus:{fiefs:{},holdings:{},wares:{}},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]},funnelTarget:null};
+        global.heap = {fiefs:{},alarms:{},stock:{},kingdomStatus:{fiefs:{},activeHoldings:[],totalHoldings:0,lastReset:Game.time,wares:{}},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]},funnelTarget:null};
         global.heap.closedRooms = new Set();
         /*for(let fief in Memory.kingdom.fiefs){
             global.heap.fiefs[fief] = {};

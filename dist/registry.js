@@ -41,7 +41,7 @@ const registry = {
         for(let each of spawnQueue){
             qprint+=`${each.memory.role} - ${each.sev}\n`
         }
-        console.log(qprint)
+        //console.log(qprint)
         //Sort the queue's keys based on severity
         spawnQueue.sort((a, b) => b.sev - a.sev);
         
@@ -62,7 +62,7 @@ const registry = {
                 [body,cost] = getBody(newCreep.memory.role,room,(newCreep.memory.job || 'default'),fiefCreeps,newCreep)
                 //If cost is -1, log the body error and continue
                 if(cost == -1){
-                    console.log(body);
+                    //console.log(body);
                     continue;
                 }
                 newCreep.body = body
@@ -71,7 +71,7 @@ const registry = {
             
             
             //Check if spawn has energy
-            console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
+            //console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(room.energyAvailable >= cost){
                 let nextSpawn = freeSpawns.shift();
                 //If spawning, continue
@@ -94,7 +94,7 @@ const registry = {
                     }
                 } 
                 if(spawnTry != OK){
-                    console.log("Bad spawn:",spawnTry)
+                    //console.log("Bad spawn:",spawnTry)
                 }
                 //If no mre free spawns, break
             }
@@ -127,7 +127,7 @@ const registry = {
             }
             try{
                 let x = spawner.spawnCreep(plan.body,name,{memory:plan.memory});
-                console.log("SPAWN",name,x,plan.body)
+                //console.log("SPAWN",name,x,plan.body)
                 if(x == 0){
                     //console.log("SPAWN UPTIME TRACK")
                     //console.log(`RoomName ${spawner.room.name}, Uptime id ${spawner.id}, Body length ${plan.body.length}`)
@@ -138,7 +138,7 @@ const registry = {
                 return x;
             }
             catch(e){
-                console.log(name+'spawn error '+e)
+                //console.log(name+'spawn error '+e)
             }
             //Track spawn uptime by logging the spawn call
 
@@ -149,7 +149,7 @@ const registry = {
     requestCreep: function(plan){
         let roomName = plan.memory.fief;
         if(roomName == undefined){
-            console.log("Fief missing while trying to spawn",plan.memory.role);
+            //console.log("Fief missing while trying to spawn",plan.memory.role);
             return
         }
         global.heap.registry[roomName] = global.heap.registry[roomName] || [];
@@ -215,7 +215,7 @@ function getBody(role,room,job='default',fiefCreeps,plan){
             }
             break;
     }
-    console.log("GETBODY FAIL FOR",role,room,job,fiefCreeps,JSON.stringify(plan))
+    //console.log("GETBODY FAIL FOR",role,room,job,fiefCreeps,JSON.stringify(plan))
     return [[],-1]
 }
 //#endregion
@@ -266,7 +266,7 @@ function getSettler(room) {
 
     const totalPartsCost = newBod.reduce((sum, part) => sum + BODYPART_COST[part], 0);
 
-    console.log("SETTLERBODY", newBod);
+    //console.log("SETTLERBODY", newBod);
 
     return [newBod, totalPartsCost];
 }

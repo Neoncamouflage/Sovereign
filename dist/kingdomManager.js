@@ -50,8 +50,8 @@ const kingdomManager = {
         intelManager.run(kingdomCreeps.scouts ? kingdomCreeps.scouts : [],Object.keys(Memory.kingdom.fiefs))
         //Loop through all fiefs and holdings and run their respective manager
         //Holdings first so we can run the registry for each fief in the same loop
-        marshal.run(kingdomCreeps);
         holdingManager.run(kingdomCreeps);
+        marshal.run(kingdomCreeps);
         //Every 300 ticks, check for a funnel target
         if(false && Game.time % 300 == 0){
             let funnels = Object.values(Game.rooms).filter(rm => rm.controller && rm.controller.my && rm.controller.level == 6)
@@ -260,5 +260,5 @@ function sortCreeps(){
     }
     return kingdomCreeps;
 }
-
-addHolding = profiler.registerFN(runRoles, 'runRoles');
+sortCreeps = profiler.registerFN(sortCreeps, 'sortCreeps');
+runRoles = profiler.registerFN(runRoles, 'runRoles');

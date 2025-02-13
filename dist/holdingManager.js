@@ -9,7 +9,6 @@ const ADD_REMOVE_INTERVAL = 100
 var holdingManager = {
 
     run: function(kingdomCreeps){
-            //Limits at which we add or remove holdings
         const CPU_ADD_LIMIT = Game.cpu.limit * 0.8 //Add if we're below 80%
         const CPU_REMOVE_LIMIT = Game.cpu.limit * 0.9 //Remove if we're above 90%
         for(let ck of Object.keys(Memory.kingdom.holdings)){
@@ -28,15 +27,17 @@ var holdingManager = {
         //Second array of only active holdings
         let activeHoldings = []
         for(let key of holdings){
+            let data = getScoutData(key);
+            if(data.roomType == 'fief'){
+                delete Memory.kingdom.holdings[key]
+                continue;
+            }
             //console.log("CHECKING",key,"STANDBY: ",Memory.kingdom.holdings[key].standby)
             if(Memory.kingdom.holdings[key].standby){
                 //First we check to see if we should consider this a real standby addition. If not, we continue so the loop keeps going
 
                 //If overridden, continue
                 if(Memory.kingdom.holdings[key].override) continue;
-                //If it's a fief, skip it
-                let data = getScoutData(key);
-                if(data.roomType == 'fief') continue;
                 //If the room is at or over 90% spawn use then just ignore this one
                 if(Memory.kingdom.fiefs[Memory.kingdom.holdings[key].homeFief].combinedSpawnUse >= 90) continue;
 
@@ -69,7 +70,7 @@ var holdingManager = {
             //We call base work for every holding
             let holding = Memory.kingdom.holdings[each]
             //No point in running holdings that don't have a home room
-            if(holding.homeFief && Game.rooms[holding.homeFief]) this.baseWork(each);
+            if(holding && holding.homeFief && Game.rooms[holding.homeFief]) this.baseWork(each);
         }
         //Now we run operations for each active holding
         //Map of all home fiefs so we prioritize their spawns
@@ -180,7 +181,7 @@ var holdingManager = {
 
         //Cost matrix is calculated after the fief gets its room plan, make sure it's there
         //Tick limit so we don't reoute a million of these at once
-        if(fief && !holding.remoteRoute && Memory.kingdom.fiefs[fief].costMatrix && Game.cpu.tickLimit-Game.cpu.getUsed() > Game.cpu.tickLimit/2){
+        if(fief && !holding.remoteRoute && (!holding.remoteRouteFail || holding.remoteRouteFail < 3) && Memory.kingdom.fiefs[fief].costMatrix && Game.cpu.tickLimit-Game.cpu.getUsed() > Game.cpu.tickLimit/2){
             //Get storage position or pull from plan if not available
             let storePos = Game.rooms[fief].storage && Game.rooms[fief].storage.my ? Game.rooms[fief].storage.pos : new RoomPosition(Memory.kingdom.fiefs[fief].roomPlan[4].storage[0].x,Memory.kingdom.fiefs[fief].roomPlan[4].storage[0].y,fief);       
             //Create an array of room position objects for the road planner
@@ -219,7 +220,10 @@ var holdingManager = {
                     totalRoute.push(...route)
                 }
                 holding.distance = Object.keys(holding.sources).length == 2 ? totalRoute.length : totalRoute.length * 2;
-            } 
+            }
+            else{
+                holding.remoteRouteFail = (holding.remoteRouteFail || 0)+1
+            }
             //Update holding CM
             //Keep track of other room CMs we're updating
             let thisCM = PathFinder.CostMatrix.deserialize(holding.costMatrix)
@@ -292,6 +296,8 @@ var holdingManager = {
         }
         //Check for dropped resources and submit tasks as needed, only if not hostile
         if(remote && data.roomType != 'fief'){
+            let reserveCheck = remote.controller && remote.controller.reservation && isMe(remote.controller.reservation.username)
+            let resTime = reserveCheck ? remote.controller.reservation.ticksToEnd : false
             //Check for hostiles
             let hostiles = remote.find(FIND_HOSTILE_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_INVADER_CORE)
             if(hostiles.length && Game.rooms[holding.homeFief].controller.level > 2){
@@ -304,7 +310,7 @@ var holdingManager = {
                 }
                 if(!hasMission){
                     console.log("Requesting core mission",holdingName)
-                    marshal.destroyCore(holdingName);
+                    marshal.destroyCore(holdingName,hostiles[0].id,resTime);
                 }
             }
         }
@@ -425,12 +431,6 @@ var holdingManager = {
                 if(hostiles.length && !global.heap.alarms[holdingName]){
                     global.heap.alarms[holdingName] = {tick:Game.time,creeps:true,expiry:Game.time + Math.max(...hostiles.map(creep => creep.ticksToLive))}
                     let hasMission = false;
-                    //Heals don't get one yet
-                    let hasHeal = false
-                    for(let host of hostiles){
-                        if(host.getActiveBodyparts(HEAL) > 0) hasHeal = true;
-                    }
-                    if(hasHeal) return;
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                         for(let mission of global.heap.missionMap[holdingName]){
                             if(mission.type == 'defend') hasMission = true;

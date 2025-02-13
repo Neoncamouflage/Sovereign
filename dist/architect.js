@@ -458,7 +458,7 @@ const architect = {
 }
 
 module.exports = architect;
-profiler.registerObject(architect, 'architect');
+//profiler.registerObject(architect, 'architect');
 global.testFiefPlan = function testFiefPlan(roomName){
     let chromosome = JSON.parse(JSON.stringify(DEFAULT_GENES))
     let j = 0;

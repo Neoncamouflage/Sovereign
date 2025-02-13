@@ -4,7 +4,7 @@ let usedOnStart = 0;
 let enabled = false;
 let depth = 0;
 
-function AlreadyWrappedError() {
+function AlreadyWrappedError(name,originalFunction) {
   this.name = 'AlreadyWrappedError';
   this.message = 'Error attempted to double wrap a function.';
   this.stack = ((new Error())).stack;
@@ -83,7 +83,7 @@ const functionBlackList = [
 ];
 
 function wrapFunction(name, originalFunction) {
-  if (originalFunction.profilerWrapped) { throw new AlreadyWrappedError(); }
+  if (originalFunction.profilerWrapped) { throw new AlreadyWrappedError(name,originalFunction); }
   function wrappedFunction() {
     if (Profiler.isProfiling()) {
       const nameMatchesFilter = name === getFilter();

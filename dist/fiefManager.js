@@ -430,15 +430,16 @@ const fiefManager = {
         //#region Room Operation
         //#endregion
         //console.log("Spawn use:",combinedSpawnUse)
-        //Every 30 ticks add any scouted domain rooms to holdings
-        if(Game.time % 30 == 0){
+        //Add any scouted domain rooms to holdings, longer standing fiefs have a longer wait
+        if(Game.time % (150*room.controller.level) == 0){
             //Get scouted domain rooms, exclude SK for now
             let domainRooms = getDomainRooms(room.name).filter(dRoom => !Memory.kingdom.holdings[dRoom] && dRoom.type != ROOM_SOURCE_KEEPER);
             for(let dRoom of domainRooms){
-                if(!getScoutData(dRoom.roomName)) continue;
+                let dData = getScoutData(dRoom.roomName);
+                if(!dData) continue;
                 //If scouted, add to holdings and mark scouted in the domain
                 dRoom.scouted = true;
-                if(!Memory.kingdom.holdings[dRoom.roomName]) Memory.kingdom.holdings[dRoom.roomName] = {standby:true,homeFief:room.name};
+                if(!Memory.kingdom.holdings[dRoom.roomName] && !dData.roomType == 'fief') Memory.kingdom.holdings[dRoom.roomName] = {standby:true,homeFief:room.name};
             }
         }
 

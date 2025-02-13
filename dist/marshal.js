@@ -74,10 +74,12 @@ const marshal = {
             roomName:roomName,
         })
     },
-    destroyCore(roomName){
+    destroyCore(roomName,core,resTime){
         marshal.addMission({
             type:'destroyCore',
-            roomName:roomName
+            roomName:roomName,
+            targets: [core] || [],
+            resTime:'resTime'
         })
     },
     skMining(roomName){
