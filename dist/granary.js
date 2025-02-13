@@ -6,7 +6,7 @@ const granary = {
         if(!global.heap.granary[fief] || !global.heap.granary[fief].length) return [0,0]
         let fiefList = global.heap.granary[fief];
         let plannedNet = fiefList[0].total
-        let averageNet = fiefList.reduce((sum,item) => sum+item.total,0) / fiefList.length;
+        let averageNet = +(fiefList.reduce((sum,item) => sum+item.total,0) / fiefList.length).toPrecision(2);
 
         //Check how long the list is and trim if below our max
         if(fiefList.length > this.GRAN_MAX) fiefList.length = this.GRAN_MAX

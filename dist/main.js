@@ -16,7 +16,7 @@ const kingdomManager = require('kingdomManager'); //Top level kingdom manager sy
 const Traveler = require('Traveler');
 const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner')
-//profiler.enable();
+profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 
 //Set scoring weights for room planning
@@ -426,75 +426,6 @@ global.hasRespawned = function hasRespawned(){
     return true;
 }
 
-//Global functions
-//Spawn creep
-global.addCreep = function addCreep(room,name,body,memory,severity = 3){
-    let newName = name+' '+helper.getName()+' of House '+room;
-    Memory.kingdom.fiefs[room].spawnQueue[newName] = {sev:severity,body:body,memory:memory}
-}
-global.addHolding = function addHolding(room,standby=false,homeRoom=null){
-    //Reject if I've screwed up and set a fief or doubled up a holding
-    if(Memory.kingdom.fiefs[room] || Memory.kingdom.holdings[room]) return -1;
-    let pick;
-    let pickNum = 99;
-    //If no homeroom provided, loop through fiefs and find the closest room. Linear should generally work.
-    if(homeRoom == null){
-        Object.keys(Memory.kingdom.fiefs).forEach(fief => {
-            let dist = Game.map.getRoomLinearDistance(room, fief);
-            if(dist < pickNum){
-                pick = fief;
-                pickNum = dist;
-            }
-        });
-        Memory.kingdom.holdings[room] = {homeRoom:pick,standby:standby};
-    }else{
-        //Else use the homeroom provided
-        Memory.kingdom.holdings[room] = {homeRoom:homeRoom,standby:standby};
-    }
-    
-}
-global.standby = function standby(holding){
-    //Flip standby flag
-    Memory.kingdom.holdings[holding].standby = !Memory.kingdom.holdings[holding].standby
-    //Clear spawn queue of homeroom to remove holding creeps
-    clearQueue(Memory.kingdom.holdings[holding].homeRoom);
-}
-global.clearQueue = function clearQueue(room='all'){
-    if(room == 'all'){
-        Object.keys(Memory.kingdom.fiefs).forEach(fief =>{
-            Memory.kingdom.fiefs[fief].spawnQueue = {};
-        });
-    }else{
-        Memory.kingdom.fiefs[room].spawnQueue = {};
-    }
-}
-global.getDistance = function getDistance(pos1,pos2){
-    let route = PathFinder.search(pos1,{pos:pos2,range:1},{
-        maxOps:20000,
-        maxRooms:64,
-        roomCallback: function(roomName) {
-      
-            let room = Game.rooms[roomName];
-            let costs = new PathFinder.CostMatrix;    
-            if (room){
-              room.find(FIND_STRUCTURES).forEach(function(struct) {
-                  if (struct.structureType === STRUCTURE_ROAD) {
-                    costs.set(struct.pos.x, struct.pos.y, 1);
-                  } else if (struct.structureType !== STRUCTURE_CONTAINER &&
-                             (struct.structureType !== STRUCTURE_RAMPART ||
-                              !struct.my)) {
-                    costs.set(struct.pos.x, struct.pos.y, 255);
-                  }
-                });
-            }
-            return costs;
-          },
-    });
-    let dist = route.path.length;
-    let incomp = route.incomplete;
-    return [dist,incomp]
-}
-
 function recursiveMemoryProfile(memoryObject, sizes, currentDepth) {
     for (const key in memoryObject) {
         if (currentDepth == 0 || !_.keys(memoryObject[key]) || _.keys(memoryObject[key]).length == 0) {
@@ -515,16 +446,5 @@ function profileMemory(root = Memory, depth = 1) {
     RawMemory.segments[SEGMENT_LOGGING_OTHER] = JSON.stringify(sizes, undefined, '\t');
 }
 
-global.purgeOldScoutData = function purgeOldScoutData(amt = 20000){
-    let data = global.heap && global.heap.scoutData;
-    if(!data) return false;
-    for(let [room,roomData] of Object.entries(getScoutData())){
-        if(Game.time - roomData.lastRecord > amt) removeScoutData(room)
-    }
-    RawMemory.segments[SEGMENT_SCOUT_DATA] = JSON.stringify(global.heap.scoutData)
-    global.heap.newScoutData = false;
-}
-
 global.profileMemory = profileMemory;
 //#endregion
-addHolding = profiler.registerFN(addHolding, 'addHolding');

@@ -10,22 +10,29 @@ const profiler = require('screeps-profiler');
 
 /*
 By default this module references an object stored in global that is updated by the rest of the bot.
-The object must conform to the format shown in this example.
+The object must conform to the format shown in this example. Optional keys are marked as such and may be excluded without issue.
+Adding information or removing any non-optional information will require an adjustment to the visuals themselves.
+
 kingdomStatus: {
-    holdings:   7     //Total number of remotes currently active
-    cpuAverage: 14.5  //Average CPU used by the bot. Value can be calculated however is preferred.
-    displayAll: true, //Optional value to set whether we want to display all resources even with zero quantities
-    cycleTicks: 5,    //Optional value to set how frequently the visual cycles
-    wares: {'OH':27000,'utrium_bar':900 ...}, //Amounts for every resource type in storages/containers/terminals/whatever you want counted
+    activeHoldings: ['E2N1','E3N2'],           //Array of active remote room names
+    totalHoldings: 2,                          //Number of total remotes, active and inactive
+    cpuAverage: 14.5,                          //Average CPU used by the bot. Value can be calculated however is preferred.
+    displayAll: true,                          //Optional value to set whether we want to display all resources even with zero quantities
+    cycleTicks: 5,                             //Optional value to set how frequently the visual cycles
+    wares: {'OH':27000,'utrium_bar':900 ...},  //Amounts for every resource type in storages/containers/terminals/whatever you want counted
     fiefs: {
         E1N1 : {
-            roomStatus: 'OK', //Optional value to indicate room status
-            fiefCreeps: 80,  //Total creeps associated with the room
-            hostileCreeps: true, //If hostile creeps are present in the room
-            spawnUse: 82.77, //Total spawn utilization as a percentage from 0-100
+            roomStatus: 'OK',                  //Optional value to indicate room status
+            fiefCreeps: 80,                    //Total creeps associated with the room
+            hostileCreeps: true,               //If hostile creeps are present in the room
+            spawnUse: 82.77,                   //Current spawn utilization as a percentage from 0-100
+            energyUse: 19.9,                   //Average energy income for this room, calculated as preferred
+            shippingOrders: 45                 //Total supply/demand orders currently active for this room's haulers
+            shippingUse: 45                    //Current hauler utilization as a percentage from 0-100
         }
     }
 }
+
 */
 
 // --Constants --
@@ -33,11 +40,11 @@ kingdomStatus: {
 //Base scroll dimensions and colors
 const ROLL_OPACITY = 1;
 const MIDDLE_OPACITY = 0.5;
-const SCROLL_WIDTH = 6.25;
+const SCROLL_WIDTH = 7.25;
 const SCROLL_LENGTH = 0.75;
 const SCROLL_FILL_COLOR = '#c99157';
 const SCROLL_END_COLOR = '#ffdd8a';
-const BANNER_WIDTH = 15;
+const BANNER_WIDTH = 30;
 const BANNER_LENGTH = 1;
 //Max fiefs to display before it has to cycle
 //Lower this to take up less space, increasing past 7 causes it to extend past the bottom of the room
@@ -523,7 +530,10 @@ const statusManager = {
                 //RCL and and % if not fully upgraded
                 fiefStatus += RCL_ICONS[room.controller.level]
                 fiefStatus+=room.controller.level == 8 ? '' : ((room.controller.progress/CONTROLLER_LEVELS[room.controller.level])*100).toFixed(0)+'%';
-
+                //Push first line
+                fiefText.push(fiefStatus)
+                
+                fiefStatus =  `📈${fief.energyUse}📝${fief.shippingOrders}🚚${fief.shippingUse}%`
                 fiefText.push(fiefStatus)
 
             }
@@ -582,7 +592,7 @@ const statusManager = {
                 stroke:'black'
             }); 
 
-            rVis.text(`CPU:${(kingdomStatus.cpuAverage || 0)}/${Game.cpu.limit}  |  Pop:${Object.values(Game.creeps).length}  |  🌾 ${kingdomStatus.holdings.length}`, 50 - BANNER_WIDTH, 0.25, {color: 'black', align:'left', font: 'bold 0.75 Bridgnorth'});
+            rVis.text(`CPU:${(kingdomStatus.cpuAverage || 0)}/${Game.cpu.limit}  |  Pop:${Object.values(Game.creeps).length}  |  🌾 ${kingdomStatus.activeHoldings.length||'-'}/${kingdomStatus.totalHoldings||'-'}`, 50 - BANNER_WIDTH, 0.25, {color: 'black', align:'left', font: 'bold 0.75 Bridgnorth'});
         }
 
         function drawScrolls(wareLength){
@@ -590,10 +600,11 @@ const statusManager = {
             
             //Minimum length of 1 if empty, otherwise extend the scroll up to the maximum
             let fiefCount = Math.min(MAXIMUM_FIEFS_DISPLAYED,Object.keys(kingdomStatus.fiefs).length)
-            let totalFiefLength = SCROLL_LENGTH + fiefCount + (fiefCount > 1 ? (fiefCount-1) : 0) - 1
+            //Fiefs take 2 lines of information, so we multiple the count by 2 for the length, then add length for breaker lines
+            let totalFiefLength = SCROLL_LENGTH + (fiefCount*2) + (fiefCount > 1 ? (fiefCount-1) : 0) - 1
             let totalWaresLength = SCROLL_LENGTH + (Math.ceil(wareLength/2)*1.5)
             let fiefStart = totalWaresLength + 3
-            let wareWidth = SCROLL_WIDTH
+            let wareWidth = SCROLL_WIDTH-1
             //T3 boosts need more width
             if(cycleOptions[current_ware] == 'T2'){
                 wareWidth += 0.5

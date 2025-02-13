@@ -1349,7 +1349,10 @@ const fiefManager = {
             safeMode: room.controller.safeMode,
             spawnUse: fief.combinedSpawnUse,
             currentlySpawning: Object.values(Game.spawns).filter(spawn => spawn.spawning && spawn.room.name == room.name).map(spawn => Game.creeps[spawn.spawning.name].memory.role),
-            storageLevel: storageLevel
+            storageLevel: storageLevel,
+            energyUse: Math.round(averageNet),
+            shippingOrders: heap.shipping[room.name].requests && Object.keys(heap.shipping[room.name].requests).length || 0,
+            shippingUse:    heap.shipping[room.name].utilization ? Math.round(((heap.shipping[room.name].utilization.reduce((acc, num) => acc + num, 0)/heap.shipping[room.name].utilization.length)*100)) : 0
         };
         
 

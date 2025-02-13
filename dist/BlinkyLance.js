@@ -1,6 +1,7 @@
 const Lance = require('Lance')
 const registry = require('registry')
 const helper = require('functions.helper')
+const profiler = require('screeps-profiler');
 //Blinky Lance
 function BlinkyLance(name,details){
     //Inherit from lance
@@ -62,6 +63,6 @@ BlinkyLance.prototype.runCreeps = function(myCreeps){
 
     }
 }
-
+profiler.registerObject(BlinkyLance, 'BlinkyLance');
 global.BlinkyLance = BlinkyLance;
 module.exports = BlinkyLance;

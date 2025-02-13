@@ -1,6 +1,6 @@
 const Lance = require('Lance')
 const registry = require('registry')
-
+const profiler = require('screeps-profiler');
 const MAX_DEMOS = 3;
 
 //Demo specialist Lance
@@ -40,6 +40,6 @@ DemoLance.prototype.runCreeps = function(myCreeps){
         }
     }
 }
-
+profiler.registerObject(DemoLance, 'DemoLance');
 global.DemoLance = DemoLance;
 module.exports = DemoLance;

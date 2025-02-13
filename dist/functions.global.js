@@ -2,6 +2,7 @@ const registry = require('registry');
 const supplyDemand = require('supplyDemand');
 const helper = require('functions.helper');
 
+
 //Functions for a random integer(inclusive) and random array selection
 global.randomInt = function(max) {
     return Math.floor(Math.random() * (max + 1));
@@ -70,8 +71,13 @@ global.isMe = function(target){
 
 global.getDiplomacy = function(username){
     for (let [type,members] of Object.entries(Memory.diplomacy)){
+        //console.log("Type",type,'Members',members)
         //Continue if we're not looking at one of the member lists
-        if(!['allies','ceasefire','outlaws'].includes(username)) continue;
+        if(!['allies','ceasefire','outlaws'].includes(type)){
+            //console.log("Not valid, skip")
+            continue;
+
+        }
         //If they're on one of the lists, return their status
         if(members.includes(username)) return type;
     }
@@ -255,6 +261,13 @@ global.parseRoomName = function(roomName) {
 }
 
 global.spawnCreep = function(role,body,fief,sev=50,memory = {}){
+    //More robust sawning function needed at some point, to accept quick spawns and full detailed ones
+    //let opts = {};
+    //If string, get room name
+    //if (typeof args === 'string' || args instanceof String){
+
+    //}
+
     if(!Array.isArray(body)) body = parseBody(body)
     memory.role = role
     memory.fief = fief || Memory.kingdom.fiefs[Math.floor(Math.random() * Memory.kingdom.fiefs.length)]
@@ -408,4 +421,78 @@ global.bigTest = function(){
     }
     console.log(wallsOnly[0]);
     console.log(wallsToRepair[0]);
+}
+
+global.getDistance = function(pos1,pos2){
+    let route = PathFinder.search(pos1,{pos:pos2,range:1},{
+        maxOps:20000,
+        maxRooms:64,
+        roomCallback: function(roomName) {
+      
+            let room = Game.rooms[roomName];
+            let costs = new PathFinder.CostMatrix;    
+            if (room){
+              room.find(FIND_STRUCTURES).forEach(function(struct) {
+                  if (struct.structureType === STRUCTURE_ROAD) {
+                    costs.set(struct.pos.x, struct.pos.y, 1);
+                  } else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                             (struct.structureType !== STRUCTURE_RAMPART ||
+                              !struct.my)) {
+                    costs.set(struct.pos.x, struct.pos.y, 255);
+                  }
+                });
+            }
+            return costs;
+          },
+    });
+    let dist = route.path.length;
+    let incomp = route.incomplete;
+    return [dist,incomp]
+}
+
+global.purgeOldScoutData = function(amt = 20000){
+    let data = global.heap && global.heap.scoutData;
+    if(!data) return false;
+    for(let [room,roomData] of Object.entries(getScoutData())){
+        if(Game.time - roomData.lastRecord > amt) removeScoutData(room)
+    }
+    RawMemory.segments[SEGMENT_SCOUT_DATA] = JSON.stringify(global.heap.scoutData)
+    global.heap.newScoutData = false;
+}
+
+global.addHolding = function(room,standby=false,homeRoom=null){
+    //Reject if I've screwed up and set a fief or doubled up a holding
+    if(Memory.kingdom.fiefs[room] || Memory.kingdom.holdings[room]) return -1;
+    let pick;
+    let pickNum = 99;
+    //If no homeroom provided, loop through fiefs and find the closest room. Linear should generally work.
+    if(homeRoom == null){
+        Object.keys(Memory.kingdom.fiefs).forEach(fief => {
+            let dist = Game.map.getRoomLinearDistance(room, fief);
+            if(dist < pickNum){
+                pick = fief;
+                pickNum = dist;
+            }
+        });
+        Memory.kingdom.holdings[room] = {homeRoom:pick,standby:standby};
+    }else{
+        //Else use the homeroom provided
+        Memory.kingdom.holdings[room] = {homeRoom:homeRoom,standby:standby};
+    }
+    
+}
+global.standby = function(holding){
+    //Flip standby flag
+    Memory.kingdom.holdings[holding].standby = !Memory.kingdom.holdings[holding].standby
+    //Clear spawn queue of homeroom to remove holding creeps
+    clearQueue(Memory.kingdom.holdings[holding].homeRoom);
+}
+global.clearQueue = function(room='all'){
+    if(room == 'all'){
+        Object.keys(Memory.kingdom.fiefs).forEach(fief =>{
+            Memory.kingdom.fiefs[fief].spawnQueue = {};
+        });
+    }else{
+        Memory.kingdom.fiefs[room].spawnQueue = {};
+    }
 }

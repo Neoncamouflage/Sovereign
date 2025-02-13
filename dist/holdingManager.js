@@ -76,7 +76,8 @@ var holdingManager = {
         let fiefMap = {}
 
         //Update kingdomStatus with holdings
-        heap.kingdomStatus.holdings = [...activeHoldings]
+        heap.kingdomStatus.activeHoldings = [...activeHoldings]
+        heap.kingdomStatus.totalHoldings = Object.keys(Memory.kingdom.holdings).length
 
         for(const each of activeHoldings){
             //If we're about to hit CPU limit, just abandon
