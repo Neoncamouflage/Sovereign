@@ -8,7 +8,7 @@ require('prototypes.spawn');
 require('prototypes.roomposition');
 require('prototypes.military');
 require('functions.global');
-require('fiefPlannerNew');
+require('architect')
 const supplyDemand = require('supplyDemand')
 global.chronicle = require('chronicle');
 const spinup = require('spinup')
@@ -23,6 +23,9 @@ console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 Memory.lastReset = 0 || Memory.globalReset;
 Memory.globalReset = Game.time;
 module.exports.loop = function () {
+    //RawMemory._parsed = {};
+    //Memory = {};
+    //return;
     profiler.wrap(function() {
     if (hasRespawned() || !Memory.kingdom){
         spinup.run();
@@ -41,6 +44,7 @@ module.exports.loop = function () {
         RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
         //Global heap
         global.heap = {fiefs:{},alarms:{},stock:{},kingdomStatus:{fiefs:{},holdings:{},wares:{}},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]},funnelTarget:null};
+        global.heap.closedRooms = new Set();
         /*for(let fief in Memory.kingdom.fiefs){
             global.heap.fiefs[fief] = {};
         }
@@ -98,6 +102,8 @@ module.exports.loop = function () {
                 global.heap.fiefs[myRoom.name] = {};
             }
         }
+
+        //Record hostile actions
     }
 
     //Garbage collection
@@ -109,7 +115,6 @@ module.exports.loop = function () {
             }
         }
     }
-        
     if(Game.time % 1000 === 0){
         purgeOldScoutData()
         //Every 1000 ticks clear room memory

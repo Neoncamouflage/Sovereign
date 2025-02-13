@@ -31,6 +31,14 @@ module.exports = function(grunt) {
             token: config.token,
             branch: 'Sovereign',
             server: 'season'
+        },
+        panda:{
+            email: config.localEmail,
+            password: config.password,
+            branch: 'default',
+            server: {host: 'server.pandascreeps.com',
+                    port:21025,
+                    http:true}
         }
     }
 

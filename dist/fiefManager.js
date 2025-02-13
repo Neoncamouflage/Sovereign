@@ -9,9 +9,13 @@ const registry = require('registry');
 const buildRole = require('role.builder');
 const fiefManager = {
     run:function(room,fiefCreeps){
+        heap.fiefs[room.name].buildQueue = heap.fiefs[room.name].buildQueue || {}
+        let buildQueue = heap.fiefs[room.name].buildQueue
+        //console.log("BUILDQUEUE",JSON.stringify(buildQueue))
         let cpuStart = Game.cpu.getUsed();
         //Set Reference
         let restartFlag = false;
+        let sourceHold;
         let fief = Memory.kingdom.fiefs[room.name];
         let factory = room.find(FIND_MY_STRUCTURES,{filter:{structureType:STRUCTURE_FACTORY}})[0];
         let fiefHeap = heap[room.name];
@@ -61,17 +65,20 @@ const fiefManager = {
             }
             else if(global && heap && (!heap.fiefPlanner || !heap.fiefPlanner.stage ||heap.fiefPlanner.stage == 0)){
                 fiefPlanner.getFiefPlan(room.name);
-                console.log("Getting plan for room")
+                //console.log("Getting plan for room")
             }
+            //If no spawn, kick us out til the plan is done
+            if((!spawns ||!spawns.length)) return;
+
             //fief.roomPlanLevel = room.controller.level;
             //console.log(`${room.name} has no room plan!`)
         }
         
 
         if(!fief.sources || !Object.keys(fief.sources).length){
-            console.log("NO SOURCES")
+            //console.log("NO SOURCES")
             restartFlag = true;
-            fief.sources = {}
+            fief.sources = {};
             let sources = room.find(FIND_SOURCES);
             sources.forEach(source => {
                 let area = source.room.lookForAtArea(LOOK_TERRAIN,
@@ -127,57 +134,136 @@ const fiefManager = {
 
         //If no spawns in the room, check for settlers and request from our support room if needed
         if(!spawns || !spawns.length){
-            console.log("NO SPAWNS")
-            //Sanity check for a support room
-            if(!fief.support || room.controller.level > 1){
-                let spawnSite = fief.roomPlan[1][STRUCTURE_SPAWN][0]
-                let spotInfo = room.lookAt(spawnSite.x,spawnSite.y);
-                let hasSpawn = spotInfo.find(s => s.structure && s.structure.structureType === STRUCTURE_CONTAINER);
-                let hasConstructionSite = spotInfo.some(s => s.constructionSite);
-                if(!hasSpawn && !hasConstructionSite){
-                    console.log("SPAWNSITE",JSON.stringify(spawnSite))
-                    let spawnName = helper.getName({isSpawn:true})+' Keep';
-                    console.log("Spawnname",spawnName)
-                    console.log("X",spawnSite.x)
-                    console.log("Y",spawnSite.y)
-                    let y = room.createConstructionSite(spawnSite.x,spawnSite.y,STRUCTURE_SPAWN,spawnName);
-                    console.log(y)
-                    return;
-                }
-
-            }
-            else if (fief.support){
-                if(!fief.settlers) fief.settlers = [];
-                let liveSettlers = [];
-                for(settler of fief.settlers){
-                    //If settler is alive or waiting to spawn, add it to the live settler counter
-                    if(Game.creeps[settler] || Memory.kingdom.fiefs[fief.support].spawnQueue[settler]){
-                        liveSettlers.push(settler);
-                    }
-                }
-                //Swap settler list for the list of confirmed living/spawning settlers
-                fief.settlers = liveSettlers;
-                //2 settlers per source for the moment. Spawn more if we need
-                if(fief.settlers < (Object.keys(fief.sources).length * 2)){
-                    let newName = 'Settler '+helper.getName()+' of House '+room.name;
-                    Memory.kingdom.fiefs[fief.support].spawnQueue[newName] = {
-                        sev:50,body:[MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,WORK,WORK,WORK,WORK,WORK,CARRY,CARRY,CARRY,CARRY,CARRY], //Default body for now, can update later
-                        memory:{role:'generalist',job:'remote',fief:room.name,homeRoom:room.name,targetRoom:room.name,preflight:false}}
-                    fief.settlers.push(newName);
-                }
-    
-                //Return as there's no room handling past this point until we get a spawn
+            //console.log("NO SPAWNS")
+            let spawnSite = fief.roomPlan[1][STRUCTURE_SPAWN][0]
+            let spotInfo = room.lookAt(spawnSite.x,spawnSite.y);
+            let hasSpawn = spotInfo.find(s => s.structure && s.structure.structureType === STRUCTURE_SPAWN);
+            let hasConstructionSite = spotInfo.some(s => s.constructionSite);
+            if(!hasSpawn && !hasConstructionSite){
+                //console.log("SPAWNSITE",JSON.stringify(spawnSite))
+                let spawnName = helper.getName({isSpawn:true})+' Keep';
+                //console.log("Spawnname",spawnName)
+                //console.log("X",spawnSite.x)
+                //console.log("Y",spawnSite.y)
+                let y = room.createConstructionSite(spawnSite.x,spawnSite.y,STRUCTURE_SPAWN,spawnName);
+                //console.log(y)
                 return;
             }
+
 
         }
 
         if(!fief.controllerSpots || (fief.controllerSpots && fief.controllerSpots.rcl < room.controller.level)){
-            if(!fief.roomPlan) return;
-            fief.controllerSpots = getControllerSpots(room,fief);
-            fief.controllerSpots.rcl = room.controller.level
+            if(fief.roomPlan){
+                fief.controllerSpots = getControllerSpots(room,fief);
+                fief.controllerSpots.rcl = room.controller.level
+            }
+
         }
-        if(Game.time % 100 == 0 && fief.roomPlan && !cSites.length){
+        //If we have some controller progress for a buffer, check if we need to build the next site
+        if(room.controller.progress > 100 && Object.keys(buildQueue).length && !cSites.length){
+            let toBuild;
+            //Spawns > Storage > Towers > Extensions > Roads > Labs
+            let structOrder = [STRUCTURE_SPAWN,STRUCTURE_STORAGE,STRUCTURE_TOWER,STRUCTURE_EXTENSION,STRUCTURE_ROAD,STRUCTURE_LAB,STRUCTURE_CONTAINER,STRUCTURE_LINK,STRUCTURE_EXTRACTOR,STRUCTURE_OBSERVER,STRUCTURE_TERMINAL,STRUCTURE_FACTORY,STRUCTURE_POWER_SPAWN,STRUCTURE_NUKER]
+            for(let each of structOrder){
+                //console.log("Checking to build:",each)
+                if(buildQueue[each]){
+                    //console.log(each,'found!')
+                    //Safety check to make sure it's not empty
+                    if(!buildQueue[each].length){
+                        delete buildQueue[each];
+                        continue;
+                    }
+                    //Specific check for origin spawn
+                    let firstSpawn = room.find(FIND_MY_SPAWNS)[0];
+                    if(each == STRUCTURE_SPAWN && firstSpawn.name == 'Origin Keep'){
+                        //console.log("Origin spawn detected")
+                        //If we're replacing the origin spawn but aren't ready with energy, skip it
+                        if(!room.storage || !room.storage.my || !room.storage.store[RESOURCE_ENERGY] > 30000){
+                            //console.log("Storage pass")
+                            continue;
+                        }
+                        //If we're ready with energy but no builder, get the builder, otherwise we're good
+                        if(fiefCreeps.builder && fiefCreeps.builder.some(crp => crp.ticksToLive > 1200 && !['remoteBuilder','fortifier'].includes(crp.memory.job))){
+                            //Blow it up
+                            firstSpawn.destroy();
+                        }
+                        else{
+                            if(!Memory.hardSpawns) Memory.hardSpawns = {};
+                            if(!Memory.hardSpawns[room.name]) Memory.hardSpawns[room.name] = [];
+                            //If there isn't a builder already requested, get one.
+                            if(Memory.hardSpawns[room.name].some(req => req.memory && req.memory.originMove !== undefined)){
+                                Memory.hardSpawns[room.name].push({sev:45,hardSpawn:true,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false,originMove:true}});
+                            }
+                            continue;
+                            
+                        }
+                    }
+                    toBuild = [each,buildQueue[each].pop()]
+                    break;
+                }
+            }
+            //console.log("toBuild",toBuild)
+            if(toBuild){
+                //console.log("Building valid!")
+                //Check if whatever we're building was the last. If so, remove the key
+                if(!buildQueue[toBuild[0]].length){
+                    delete buildQueue[toBuild[0]];
+                }
+                //Build
+                let [building,coordinate] = toBuild;
+                //If it isn't a spawn, just build it.
+                //console.log("Attempting to place",building,"at",coordinate.x,coordinate.y)
+                if(building != STRUCTURE_SPAWN){
+                    let g = room.createConstructionSite(coordinate.x,coordinate.y,building)
+                    //console.log("Result:",g)
+                }
+                //If a spawn, get name and check for moving
+                else{
+                    let keepSpawn;
+                    let manorSpawn;
+                    let hallSpawn;
+                    let roomSpawns = room.find(FIND_MY_SPAWNS);
+                    if(roomSpawns.length > 0){
+                        for(let spawn of roomSpawns){
+                            let spawnType = spawn.name.split(" ")[1];
+                            switch(spawnType){
+                                case 'Keep':
+                                    keepSpawn = true;
+                                    break;
+                                case 'Manor':
+                                    manorSpawn = true;
+                                    break;
+                                case 'Hall':
+                                    hallSpawn = true;
+                                    break;
+                            }
+                            
+                        }
+                    };
+                    let name = ''
+                    if(!keepSpawn){
+                        name = helper.getName({isSpawn:true})+' Keep';
+                    }
+                    else if(!manorSpawn){
+                        name = helper.getName({isSpawn:true})+' Manor';
+                    }else if(!hallSpawn){
+                        name = helper.getName({isSpawn:true})+' Hall';
+                    }else{
+                        //console.log(room.name,"unable to name spawn, all types found")
+                    }
+
+                    let l = room.createConstructionSite(coordinate.x,coordinate.y,building,name)
+                    cCount++;
+                    //console.log("SITE1")
+                    Memory.spawnBuild = l
+                }
+            }
+            
+        }
+
+        //Every 100 ticks, check to see if we need to fill the build queue
+        if(Game.time % 100 == 0 && fief.roomPlan && !Object.keys(buildQueue).length){
             //console.log("Checking for new constructions.")
             let cCount = 0;
             let plan = fief.roomPlan
@@ -189,94 +275,43 @@ const fiefManager = {
                         let spotSite = room.lookForAt(LOOK_CONSTRUCTION_SITES,coordinate.x,coordinate.y);
                         let floor = room.lookForAt(LOOK_TERRAIN,coordinate.x,coordinate.y);
                         if((!spot.length || !spot.some(element => element.structureType == building)) && (floor != 'wall' || building == STRUCTURE_EXTRACTOR) && !spotSite.length){
-                            //If the structure is a spawn, name it
-                            if(building == STRUCTURE_SPAWN){
-                                let roomSpawns = room.find(FIND_MY_SPAWNS);
-                                //See if it's our first spawn that needs to move
-                                if(roomSpawns[0].name == "Origin Keep"){
-                                    console.log("Origin spawn detected")
-                                    //If we have storage and energy to build a new one
-                                    if(room.storage && room.storage.my && room.storage.store[RESOURCE_ENERGY] > 30000){
-                                        console.log("Storage good")
-                                        //If we have at least one builder with TTL to spare
-                                        if(fiefCreeps.builder && fiefCreeps.builder.some(crp => crp.ticksToLive > 1000)){
-                                            //Blow it up
-                                            roomSpawns[0].destroy()
-                                        }
-                                        //If not, request a builder via hardspawns since this is only every 100 ticks
-                                        else{
-                                            if(!Memory.hardSpawns) Memory.hardSpawns = {};
-                                            if(!Memory.hardSpawns[room.name]) Memory.hardSpawns[room.name] = [];
-                                            Memory.hardSpawns[room.name].push({sev:45,hardSpawn:true,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false}})
-                                        }
-                                    }
-                                    continue;
+                            
+                            //If it's a road we don't build until room level 3
+                            if(building != STRUCTURE_ROAD || roomLevel >= 3){
+                                //let g =room.createConstructionSite(coordinate.x,coordinate.y,building)
+                                if(buildQueue[building]){
+                                    buildQueue[building].push({x:coordinate.x,y:coordinate.y});
                                 }
-                                let keepSpawn;
-                                let manorSpawn;
-                                let hallSpawn;
-                                if(roomSpawns.length > 0){
-                                    for(spawn of roomSpawns){
-                                        let spawnType = spawn.name.split(" ")[1];
-                                        switch(spawnType){
-                                            case 'Keep':
-                                                keepSpawn = true;
-                                                break;
-                                            case 'Manor':
-                                                manorSpawn = true;
-                                                break;
-                                            case 'Hall':
-                                                hallSpawn = true;
-                                                break;
-                                        }
-                                        
-                                    }
-                                };
-                                let name = ''
-                                if(!keepSpawn){
-                                    name = helper.getName({isSpawn:true})+' Keep';
+                                else{
+                                    buildQueue[building] = [{x:coordinate.x,y:coordinate.y}]
                                 }
-                                else if(!manorSpawn){
-                                    name = helper.getName({isSpawn:true})+' Manor';
-                                }else if(!hallSpawn){
-                                    name = helper.getName({isSpawn:true})+' Hall';
-                                }else{
-                                    console.log(room.name,"unable to name spawn, all types found")
-                                }
-    
-                                let l = room.createConstructionSite(coordinate.x,coordinate.y,building,name)
                                 cCount++;
-                                //console.log("SITE1")
-                                Memory.spawnBuild = l
                             }
-                            //Else if it's a road we don't build until room level 3
-                            else {
-                                if(building != STRUCTURE_ROAD || roomLevel >= 3){
-                                    let g =room.createConstructionSite(coordinate.x,coordinate.y,building)
-                                    console.log(g,'ROOMBUILD')
-                                    cCount++;
-                                }
-                                
-                                //console.log("SITE2",building,room.name,':',coordinate.x,coordinate.y)
-                            }
+                            
+                            //console.log("SITE2",building,room.name,':',coordinate.x,coordinate.y)
                             
                         }
                     };
                 }
             }
             //If no new sites, do further checks
-            console.log("CCOUNT",cCount)
             if(cCount == 0){
                 //If no source containers and no construction sites, make containers
                 for(let source of Object.values(fief.sources)){
-                    console.log(JSON.stringify(source))
-                    if(!source.ca && room.storage && room.storage.my){
-                        console.log("Nocan")
+                    //console.log(JSON.stringify(source))
+                    if(!source.can && room.storage && room.storage.my){
+                        //console.log("Nocan")
                         let spotInfo = room.lookAt(source.spotx,source.spoty);
                         let hasCan = spotInfo.find(s => s.structure && s.structure.structureType === STRUCTURE_CONTAINER);
                         let hasConstructionSite = spotInfo.some(s => s.constructionSite);
                         if (!hasCan && !hasConstructionSite){
-                            room.createConstructionSite(source.spotx,source.spoty,STRUCTURE_CONTAINER);
+                            //room.createConstructionSite(source.spotx,source.spoty,STRUCTURE_CONTAINER);
+                            if(buildQueue[STRUCTURE_CONTAINER]){
+                                buildQueue[STRUCTURE_CONTAINER].push({x:source.spotx,y:source.spoty});
+                            }
+                            else{
+                                buildQueue[STRUCTURE_CONTAINER] = [{x:source.spotx,y:source.spoty}]
+                            }
                         }
                         else if(hasCan){
                             source.can = hasCan.structure.id;
@@ -289,15 +324,6 @@ const fiefManager = {
         
         //Create room plan, spawns, and spawn queue if none exists, then return
         //
-
-
-
-
-        
-        if(!fief.spawns || !fief.spawns.length) {
-            fief.spawns = room.find(FIND_MY_SPAWNS).map(spawn => spawn.id)
-            restartFlag = true;
-        };
         
         if(!fief.costMatrix && fief.roomPlan){
             //Get new cost matrix
@@ -338,7 +364,7 @@ const fiefManager = {
                 }
             }
             Object.keys(fief.sources).forEach(x=>{
-                console.log("Before source! isFinite",JSON.stringify(fief.sources[x]))
+                //console.log("Before source! isFinite",JSON.stringify(fief.sources[x]))
             })
             //Set 1 tile higher cost border around sources
             sources.forEach(source =>{
@@ -407,7 +433,7 @@ const fiefManager = {
         //Every 30 ticks add any scouted domain rooms to holdings
         if(Game.time % 30 == 0){
             //Get scouted domain rooms, exclude SK for now
-            let domainRooms = getDomainRooms(room.name).filter(dRoom => !dRoom.scouted && dRoom.type != ROOM_SOURCE_KEEPER);
+            let domainRooms = getDomainRooms(room.name).filter(dRoom => !Memory.kingdom.holdings[dRoom] && dRoom.type != ROOM_SOURCE_KEEPER);
             for(let dRoom of domainRooms){
                 if(!getScoutData(dRoom.roomName)) continue;
                 //If scouted, add to holdings and mark scouted in the domain
@@ -447,10 +473,12 @@ const fiefManager = {
             }
             else{
                 noHarvs = true;
+                //console.log("Noharvs!")
             }
 
             //For each source, see if we have enough harvest power or enough space for a new harvester
             Object.entries(fief.sources).forEach(([sourceID,source])=>{
+                //console.log("CHECKING",sourceID,"Open spots",source.openSpots,'Harvs',targetSources[sourceID].harvs,'Power',targetSources[sourceID].power,'Flag',targetSources[sourceID].ttlFlag)
                 //If there's no room, or if we have enough harvest power, return
 
                 if((source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= SOURCE_ENERGY_CAPACITY/ENERGY_REGEN_TIME) && !targetSources[sourceID].ttlFlag) return;
@@ -460,23 +488,29 @@ const fiefManager = {
                 if(source.closest) sev+= 1
                 let opts = {sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}}
                 if(targetSources[sourceID].ttlFlag) opts.respawn = targetSources[sourceID].ttlFlag
-                //console.log("Adding harv to spawnQueue")
+                //console.log("Adding harv to spawnQueue. Opts:")
+                //console.log(JSON.stringify(opts))
                 registry.requestCreep(opts)
                 
             });
 
             //-- Upgrader --
             let upMax = 0;
-            for(let each of Object.values(fief.controllerSpots)){
-                if(Array.isArray(each)) upMax+=each.length;
+            if(fief.controllerSpots){
+                for(let each of Object.values(fief.controllerSpots)){
+                    if(Array.isArray(each)) upMax+=each.length;
+                }
+            }
+            else{
+                upMax = 0;
             }
             //Pre and post storage logic
 
             //Spawn operations when storage is available
             if(room.storage && room.storage.my){
                 let upgradersNeeded;
-                if(roomLevel == 8 && !fiefCreeps.upgrader){
-                    if(room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE[roomLevel]/2) registry.requestCreep({sev:35,body:[MOVE,CARRY,WORK,MOVE,WORK],memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
+                if(roomLevel == 8){
+                    if(!fiefCreeps.upgrader && room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE[roomLevel]/2) registry.requestCreep({sev:35,body:[MOVE,CARRY,WORK,MOVE,WORK],memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
                 else if(room.storage.store[RESOURCE_ENERGY] < 50000){
                     upgradersNeeded = 0;
@@ -536,6 +570,29 @@ const fiefManager = {
                             registry.requestCreep({sev:33,memory:{role:'harvester',job:'mineralHarvester',fief:room.name,target:mineral.id,status:'spawning',preflight:false}})
                         }
                     }
+                }
+
+                //Support room check
+                if(fief.support){
+                    //console.log("SUPPORTING!",fief.support)
+                    let settlement = Game.rooms[fief.support];
+                    //console.log("SETTLEMENT!",settlement)
+                    if(settlement){
+                        //If the room has a spawn, we cut our support
+                        if(settlement.find(FIND_MY_SPAWNS).length){
+                            delete fief.support;
+                        }
+                        else{
+                            let settlers = fiefCreeps.settler ? fiefCreeps.settler.filter(crp => crp.memory.targetRoom == fief.support && (crp.ticksToLive > 400 || crp.spawning)) : [];
+                            //console.log("SETTLERS!",settlers,settlers.length)
+                            //console.log("SETTLERS",settlers.length, "S1",Object.keys(Memory.kingdom.fiefs[fief.support].sources).length * 2,"S2",settlement.find(FIND_SOURCES).length * 2,"S3",settlers.length < (Memory.kingdom.fiefs[fief.support].sources ? Memory.kingdom.fiefs[fief.support].sources.length * 2 : settlement.find(FIND_SOURCES).length * 2))
+                            if(settlers.length < (Memory.kingdom.fiefs[fief.support].sources ? Object.keys(Memory.kingdom.fiefs[fief.support].sources).length * 2 : settlement.find(FIND_SOURCES).length * 2)){
+                                let opts = {sev:28.5,memory:{role:'settler',fief:room.name,targetRoom:fief.support,preflight:false}}
+                                registry.requestCreep(opts)
+                            }
+                        }
+                    }
+
                 }
 
 
@@ -635,7 +692,7 @@ const fiefManager = {
                     }
                     //If we're short on labs, add them
                     if(!fief.labs.targetLabs || fief.labs.targetLabs.length+2 < CONTROLLER_STRUCTURES[STRUCTURE_LAB][room.controller.level] ){
-                        console.log("ADDING LABS FOR",room.name)
+                        //console.log("ADDING LABS FOR",room.name)
                         fief.labs.targetLabs = room.find(FIND_STRUCTURES).filter(s=>s.structureType == STRUCTURE_LAB && !Object.keys(fief.labs.sourceLabs).includes(s.id)).map(s=>s.id)
                     }
                     
@@ -690,7 +747,7 @@ const fiefManager = {
                             target.runReaction(sources[0],sources[1])
                         }
                     }
-                    console.log(log)
+                    //console.log(log)
                 }
                 else{
                     for(let targetID of fief.labs.targetLabs){
@@ -1320,6 +1377,10 @@ function getSev(role){
     return sevList[role] || 50;
 }
 
+function plantCSite(){
+
+}
+
 function totalWares(room) {
     let totalResources = {};
 
@@ -1418,18 +1479,18 @@ function getDomainRooms(fief) {
     let queue = [{roomName: fief, depth: 0}];
     let visited = new Set();
     let domainRooms = [];
-    console.log("Starting domain search")
+    //console.log("Starting domain search")
     
     while (queue.length > 0){
         let { roomName, depth } = queue.shift();
         if(visited.has(roomName)) continue;
-        console.log(`Visiting ${roomName} at depth ${depth}`)
+        //console.log(`Visiting ${roomName} at depth ${depth}`)
         //If we're within range, save the room
         if(depth <= MAX_RANGE) domainRooms.push({roomName:roomName,depth:depth});
 
         //If we're at max range, continue. Otherwise add neighbors
         if(depth == MAX_RANGE) continue;
-        console.log(`Depth is not at max of ${MAX_RANGE}, adding neighbors`)
+        //console.log(`Depth is not at max of ${MAX_RANGE}, adding neighbors`)
         let exits = Game.map.describeExits(roomName);
         if(!exits) continue;
         for(let exitRoom of Object.values(exits)){

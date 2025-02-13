@@ -139,7 +139,27 @@ const intelManager = {
             }
             else if(creep.memory.exitTarget){
                 let mem = creep.memory.exitTarget;
-                creep.travelTo(new RoomPosition(mem.x,mem.y,mem.roomName),{maxRooms:1})
+                let exitPos = new RoomPosition(mem.x,mem.y,mem.roomName);
+                if(creep.pos.isEqualTo(exitPos)){
+                    if(creep.memory.stuckCheck){
+                        let roomStatus = Game.map.getRoomStatus(mem.target).status;
+                        if(roomStatus == 'closed'){
+                            global.heap.closedRooms.add(mem.target);
+                            delete creep.memory.stuckCheck;
+                            getExit(creep);
+                            
+                        }
+                    }
+                    else{
+                        creep.memory.stuckCheck = true;
+                    }
+                }
+                else{
+                    if(creep.memory.stuckCheck){
+                        delete creep.memory.stuckCheck;
+                    }
+                }
+                creep.travelTo(exitPos,{maxRooms:1})
             }
             else{
                 console.log("SCOUT",creep.name,"HAVING ISSUES FINDING EXIT")
@@ -158,6 +178,8 @@ const intelManager = {
                 if(creep.memory.lastRoom == roomName) return false;
                 //If we're just crossing into another one of our fiefs, deny
                 if(Memory.kingdom.fiefs[roomName]) return false;
+                //If it's a dead room, deny
+                if(global.heap.closedRooms.has(roomName)) return false;
                 //If no data, it's good to scout
                 if(!roomData) return true;
                 //Only consider the room good if it isn't a fief belonging to an enemy, or if it is, if it's been longer than 20k ticks since we looked in on it
@@ -237,7 +259,7 @@ const intelManager = {
             //console.log("EXIT POS IS",exitPos)
 
             if (exitPos) {
-                creep.memory.exitTarget = {x:exitPos.x,y:exitPos.y,roomName:exitPos.roomName}
+                creep.memory.exitTarget = {x:exitPos.x,y:exitPos.y,roomName:exitPos.roomName,target:roomPick}
                 creep.travelTo(exitPos);
             }
         }

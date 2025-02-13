@@ -3,9 +3,9 @@ const constants = {
     //Memory Segment Assignment
     SEGMENT_SCOUT_DATA:0,       //All compressed scout data - Likely needs to be multiple segments
     SEGMENT_ROOM_PLANS:1,       //All finished room plans
-    SEGMENT_PLAN_GENERATIONS:1, //Best plans of each generation for the last fief planner run
-    SEGMENT_LOGGING_ERR:7,      //Error results from functions and modules
-    SEGMENT_LOGGING_STATUS:8,   //General status results from functions and modules
+    SEGMENT_PLAN_GENERATIONS:5, //New room planner generation history
+    SEGMENT_LOGGING_ERR:7,      //Error results from functions and modules - Logs that indicate a critical/fatal error
+    SEGMENT_LOGGING_WARN:8,     //Warning results from functions and modules - Logs that indicate unwanted or unexpected results
     SEGMENT_LOGGING_OTHER:9,    //Miscellaneous logging results
 
     //Room Definitions
@@ -42,6 +42,9 @@ const constants = {
         'n': 'nuker',
         'o': 'observer'
     },
+
+    //Misc
+    FLAG_MASK : 0x8000
 
 }
 

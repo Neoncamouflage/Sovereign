@@ -16,7 +16,7 @@ const registry = {
         'bait'     :'Rogue',
         'sapper'   :'Sapper',
         'archer'   :'Archer',
-        'generalist':'Settler',
+        'settler':'Settler',
         'skirmisher'    :'Skirmisher',
         'pikeman'   :'Pikeman',
         'mineralHarvester': 'Gemcutter',
@@ -143,7 +143,7 @@ const registry = {
             //Track spawn uptime by logging the spawn call
 
             //console.log(name+'\n'+)
-            console.log("SPAWN",name,x)
+            
         }
     },
     requestCreep: function(plan){
@@ -204,8 +204,8 @@ function getBody(role,room,job='default',fiefCreeps,plan){
         case 'pikeman':
             return getPikeman(room,plan);
             break;
-        case 'generalist':
-            return getGeneralist(room);
+        case 'settler':
+            return getSettler(room);
         case 'builder':
             switch(job){
                 case 'fortifier':
@@ -247,19 +247,30 @@ function getEHarvester(room,fiefCreeps){
 }
 
 //Generalist - Settler
-function getGeneralist(room) {
+function getSettler(room) {
     const parts = [MOVE, CARRY, MOVE, WORK];
-    let partsCost = 0;
-    for (let each of parts) {
-        partsCost += BODYPART_COST[each];
-    }
+    let partsCost = parts.reduce((sum, part) => sum + BODYPART_COST[part], 0);
     const engAvail = room.energyCapacityAvailable;
-    const mult = Math.floor(engAvail / partsCost);
-    const newBod = Array(mult).fill(parts).flat();
-    const totalPartsCost = partsCost * mult;
+
+    let mult = Math.floor(engAvail / partsCost);
+    let newBod = [];
+
+    // Manually concatenate arrays to avoid `.flat()`
+    for (let i = 0; i < mult; i++) {
+        newBod = newBod.concat(parts);
+        if (newBod.length >= 50) {
+            newBod = newBod.slice(0, 50);
+            break;
+        }
+    }
+
+    const totalPartsCost = newBod.reduce((sum, part) => sum + BODYPART_COST[part], 0);
+
+    console.log("SETTLERBODY", newBod);
 
     return [newBod, totalPartsCost];
 }
+
 
 //Miner - Yeoman
 function getMiner(plan){

@@ -55,7 +55,7 @@ const marshal = {
         let missionMap = global.heap.missionMap || setupMissionMap();
         let details = {};
         
-        details.roomName = options.roomName; //Room is the target or requester room, depending on mission
+        details.roomName = options.roomName || options.targetRoom; //Room is the target or requester room, depending on mission
         details.priority = options.priority || DEFAULT_MISSION_PRIORITY;
         if(options.type) details.type = options.type;
         if(options.targets) details.targets = options.targets || [];
@@ -83,6 +83,12 @@ const marshal = {
     skMining(roomName){
         marshal.addMission({
             type:'skMining',
+            roomName:roomName
+        })
+    },
+    settle(roomName){
+        marshal.addMission({
+            type:'settle',
             roomName:roomName
         })
     }

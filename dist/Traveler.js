@@ -90,7 +90,7 @@ class Traveler {
             }
         }
         // -- Pull a new CM and path if we're entering a live SK room, to avoid pathing issues
-        if ([0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y) && describeRoom(creep.room.name) == ROOM_SOURCE_KEEPER && !options.military){
+        if ([0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y) && describeRoom(creep.room.name) == ROOM_SOURCE_KEEPER && !options.allowSK){
             options.freshMatrix = true;
             delete travelData.path;
        }
@@ -174,9 +174,11 @@ class Traveler {
      * @param roomName
      * @returns {RoomMemory|number}
      */
-    static checkAvoid(roomName) {
+    static checkAvoid(roomName,military) {
+        let roomData = getScoutData(roomName)
         if(Memory.manualAvoid && Memory.manualAvoid.includes(roomName)) return true;
-        if(global.heap.alarms[roomName]) return true;
+        if(global.heap.alarms[roomName] && !military) return true;
+        if(roomData.roomType == 'fief' && !isFriend(roomData.owner)) return true;
         else {return false}
     }
     /**
@@ -270,8 +272,7 @@ class Traveler {
                     return false;
                 }
             }  
-            else if (Traveler.checkAvoid(roomName) && !options.military
-                && roomName !== destRoomName && roomName !== originRoomName) {
+            else if (Traveler.checkAvoid(roomName,options.military) && roomName !== destRoomName && roomName !== originRoomName) {
                 return false;
             }
             roomsSearched++;
@@ -380,7 +381,7 @@ class Traveler {
                     // room is too far out of the way
                     return Number.POSITIVE_INFINITY;
                 }
-                if (!options.allowHostile && Traveler.checkAvoid(roomName) &&
+                if (!options.allowHostile && Traveler.checkAvoid(roomName,options.military) &&
                     roomName !== destination && roomName !== origin) {
                     // room is marked as "avoid" in room memory
                     return Number.POSITIVE_INFINITY;
@@ -527,6 +528,7 @@ class Traveler {
      */
     static resetMovementIntents(){
         this.movementIntents = {};
+        if(global.heap)global.heap.relays = [];
     }
     /**
      * add creep movement intents to be executed after conflict resolution
@@ -543,6 +545,105 @@ class Traveler {
      */
     static getMovementIntent(creep){
         return this.movementIntents[creep];
+    }
+    /**
+     * check for relay opportunities between supply creeps
+     */
+    static relay(haulers){
+        let missionHaulers = [];
+        let emptyHaulers = [];
+        let emptyPos = {};
+        
+        
+        for(let each of haulers){
+            //Haulers on a task with inventory
+            if(each.memory.task && each.memory.state == 'dropoff' && each.store.getUsedCapacity() > 0){
+                let travelData = each.memory._trav;
+                if(travelData)missionHaulers.push(each);
+                
+            }
+            //Empty haulers without a task or picking up
+            if((!each.memory.task || each.memory.state == 'pickup') && each.store.getUsedCapacity() == 0){
+                emptyHaulers.push(each);
+                emptyPos[`${each.pos.x},${each.pos.y}`] = each.id;
+            }
+        }
+        //For each mission creep, check if there's an adjacent empty on the way with same size carry. If so, swap missions and cargo.
+        for(let each of missionHaulers){
+            if(!global.heap.relays || global.heap.relays.includes(each.id)) continue;
+            let path = each.memory._trav.path.substr(1);
+            let nextDirection = parseInt(path[0], 10);
+            let selfStore = each.store.getUsedCapacity();
+            //let empties = [];
+            //This just loops and checks every adjacency.
+            /*for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if(dx === 0 && dy === 0) continue;
+        
+                    let adjacentKey = `${creep.pos.x + dx},${creep.pos.y + dy}`;
+                    if(!emptyPos[adjacentKey]) continue;
+                    let emptyCreep = Game.getObjectById(emptyPos[adjacentKey]);
+                        //Check if there's room
+                        if(emptyCreep.store.getFreeCapacity() < selfStore) continue;
+                        //Add the creep to our empties options
+                        empties.push(emptyCreep)
+                }
+            }*/
+            const ax = [0, 0, 1, 1, 1, 0, -1, -1, -1];
+            const ay = [0, -1, -1, 0, 1, 1, 1, 0, -1];
+            let nextKey = `${each.pos.x + ax[nextDirection]},${each.pos.y + ay[nextDirection]}`;
+
+            if(!emptyPos[nextKey]) continue;
+            let targetCreep = Game.getObjectById(emptyPos[nextKey]);
+            if(targetCreep.store.getFreeCapacity() != selfStore) continue;
+            if(global.heap.relays.includes(targetCreep.id)) continue;
+            let fullMission = global.heap.shipping[each.memory.fief].requests[each.memory.task];
+            let target = Game.getObjectById(fullMission.targetID);
+            if(!target) continue;
+            if(getTileDistance(each.pos,target.pos) <= 3) continue;
+            let emptyMission = targetCreep.memory.task ? global.heap.shipping[targetCreep.memory.fief].requests[targetCreep.memory.task] : null;
+            /*console.log("SWAPPING")
+            console.log("Full:",JSON.stringify(fullMission))
+            console.log("Empty:",JSON.stringify(emptyMission))
+            console.log("Giver:",JSON.stringify(each.memory))
+            console.log("Taker:",JSON.stringify(targetCreep.memory))*/
+            //Take empty creep's mission
+            if(emptyMission){
+                //ID
+                each.memory.task = emptyMission.taskID;
+                //Copy assigned amount and assign self to mission
+                emptyMission.assignedHaulers[each.id] = emptyMission.assignedHaulers[targetCreep.id]
+                //Remove old creep
+                delete emptyMission.assignedHaulers[targetCreep.id]
+                each.memory.state = 'pickup'
+            }
+            //If no empty mission, just clear our task
+            else{
+                delete each.memory.task;
+                each.memory.state = 'idle'
+            }
+
+            //Give our mission to the empty
+            targetCreep.memory.task = fullMission.taskID
+            //Copy assignment to the empty and remove us
+            fullMission.assignedHaulers[targetCreep.id] = fullMission.assignedHaulers[each.id];
+            delete fullMission.assignedHaulers[each.id]
+            targetCreep.memory.state = 'dropoff'
+            
+
+            //Swap store
+            each.transfer(targetCreep,fullMission.resourceType);
+            //Set relay so the rest of the code knows they've already done it
+            global.heap.relays.push(each.id);
+            global.heap.relays.push(targetCreep.id);
+            /*console.log("END SWAP")
+            console.log("Full:",JSON.stringify(fullMission))
+            console.log("Empty:",JSON.stringify(emptyMission))
+            console.log("Giver:",JSON.stringify(each.memory))
+            console.log("Taker:",JSON.stringify(targetCreep.memory))*/
+        }
+
+
     }
     /**
      * resolve movement conflicts and execute moves
@@ -582,35 +683,9 @@ class Traveler {
             //If there is, and it isn't also intending to move, request to swap - Also a check for permanently stationed creeps like fast fillers
             if(blocker){
                 if(!this.movementIntents[blocker.name] && blocker.fatigue == 0 && blocker.memory && !blocker.memory.stay){
-                    //Log it for test
-                    //blocker.say("🔄",true);
-                    //Game.creeps[creep].say("🔄",true)
                     //Attempt swapping to the current creep
                     let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
-                    if(bMove != 0){
-                        //blocker.say("ERR -",bMove);
-                    }else{
-                        //blocker.say("🔄");
-                    }
                 }
-                //Fat creep check
-                else if(blocker.fatigue == 0 && blocker.memory && !blocker.memory.stay){
-                    function equalMove(target){
-                        return target.getActiveBodyparts(MOVE) === (target.store.getUsedCapacity() > 0 ? target.body.length : target.body.length - target.getActiveBodyparts(CARRY)) / 2
-                    }
-                    
-                    if(false && !equalMove(blocker) && equalMove(Game.creeps[creep])){
-                        //blocker.say("🐖🔄",true);
-                        //Game.creeps[creep].say("🐖🔄",true)
-                        let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
-                        if(bMove != 0){
-                            //blocker.say("ERR -",bMove);
-                        }else{
-                            //blocker.say("🔄");
-                        }
-                    }
-                }
-
             }
             //Second check for if it is going to move, but will generate fatigue. So that slow creeps will swap with fast creeps
         });

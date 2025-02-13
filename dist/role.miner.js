@@ -20,6 +20,7 @@ var roleMiner = {
             if(creep.room.name != creep.memory.fief){
                 creep.memory.stay = false;
                 creep.memory.status = 'flee';
+                creep.drop(RESOURCE_ENERGY)
                 creep.travelTo(Game.rooms[creep.memory.fief].controller)
                 let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
                 creep.say(words.join(''))

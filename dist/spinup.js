@@ -1,6 +1,7 @@
 const spinup = {
     run: function(){
         global.heap = {};
+        global.hardReset = Game.time;
         Memory.globalReset = Game.time;
         Memory.me = 'NeonCamouflage';
         Memory.diplomacy = {allies:[], ceasefire:[], outlaws:[],ledger:[]}

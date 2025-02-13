@@ -12,6 +12,7 @@ const roleDiver = require('role.diver');
 const roleRaider =  require('role.raider')
 const roleBait = require('role.bait');
 const roleDuo = require('role.duo')
+const roleSettler = require('role.settler')
 const statusManager = require('statusManager');
 const helper = require('functions.helper');
 const profiler = require('screeps-profiler');
@@ -21,6 +22,7 @@ const granary = require('granary');
 const intelManager = require('intelManager');
 const painter = require('painter');
 const marshal = require('marshal');
+const Traveler = require('Traveler');
 const kingdomManager = {
     run:function(){
         // - Assignments -
@@ -69,6 +71,7 @@ const kingdomManager = {
             
             heap.kingdomStatus.fiefs[fief] = fiefManager.run(Game.rooms[fief],kingdomCreeps[fief]);
             //Manage shipping tasks
+            Traveler.relay(kingdomCreeps[fief]['hauler'] || [])
             supplyDemand.manageShipping(fief,kingdomCreeps[fief]['hauler'] || []);
             //Run spawn logic every 3 ticks
             if(Game.time % 3 == 0) registry.calculateSpawns(Game.rooms[fief],kingdomCreeps[fief]);
@@ -91,7 +94,10 @@ const kingdomManager = {
 
         //Run status manager to draw room visuals
         //Separate from painter as it must be last thing run in kingdom for accurate details
-        if(Memory.visuals.drawStatus)statusManager.run();
+        heap.kingdomStatus.cpuAverage = global.cpuAverage ? cpuAverage : 0;
+        if(Memory.visuals.drawStatus){
+            statusManager.run();
+        }
     }
 }
 
@@ -162,6 +168,10 @@ function runRoles(kingdomCreeps){
             case 'generalist':
                 roleGeneralist.run(myCreep);
                 creepRole = '🚚';
+                break;
+            case 'settler':
+                roleSettler.run(myCreep);
+                creepRole = '⛺';
                 break;
             case 'hunter':
                 roleHunter.run(myCreep);

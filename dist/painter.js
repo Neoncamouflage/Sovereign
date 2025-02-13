@@ -6,7 +6,7 @@ const painter = {
         let visuals = Memory.visuals;
         let fiefs = Memory.kingdom.fiefs;
         let holdings = Memory.kingdom.holdings;
-
+        if(!visuals) Memory.visuals = {}
         //Loop through fiefs and holdings since some visuals are specific to those
         if(visuals.drawFiefCM || visuals.drawFiefPlan){
             for(let fief in fiefs){
@@ -261,6 +261,7 @@ const painter = {
 }
 
 function calculateCentroid(targets) {
+    if(!targets.length) return {x:25,y:25}
     const sum = targets.reduce((acc, target) => {
         acc.x += target.pos.x;
         acc.y += target.pos.y;

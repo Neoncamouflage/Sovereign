@@ -2,8 +2,16 @@ const registry = require('registry');
 const supplyDemand = require('supplyDemand');
 const helper = require('functions.helper');
 
+//Functions for a random integer(inclusive) and random array selection
+global.randomInt = function(max) {
+    return Math.floor(Math.random() * (max + 1));
+};
+global.randomChoice = function(array) {
+    return array[Math.floor(Math.random() * array.length)];
+};
+
 //Update diplomacy
-global.setDiplomacy = function setDiplomacy(type,username){
+global.setDiplomacy = function(type,username){
     //Memory.diplomacy = {allies:[], ceasefire:[], outlaws:[],ledger:[]}
     //Update the list based on which type. If ally or enemy, also update scout data
     switch (type) {
@@ -56,11 +64,11 @@ global.setDiplomacy = function setDiplomacy(type,username){
     }
 }
 
-global.isMe = function isMe(target){
+global.isMe = function(target){
     return target.toLowerCase() == Memory.me.toLowerCase()
 }
 
-global.getDiplomacy = function getDiplomacy(username){
+global.getDiplomacy = function(username){
     for (let [type,members] of Object.entries(Memory.diplomacy)){
         //Continue if we're not looking at one of the member lists
         if(!['allies','ceasefire','outlaws'].includes(username)) continue;
@@ -71,7 +79,7 @@ global.getDiplomacy = function getDiplomacy(username){
     return 'neutral';
 }
 
-global.isFriend = function isFriend(target){
+global.isFriend = function(target){
     let checkVal;
     if(target instanceof RoomObject){
         if(target.owner && target.owner.username){
@@ -84,6 +92,7 @@ global.isFriend = function isFriend(target){
         }
     }
     else if(typeof target === 'string' || target instanceof String){
+        if(target == 'me' || isMe(target)) return true;
         checkVal = target;
     }
     else{
@@ -101,11 +110,11 @@ global.isFriend = function isFriend(target){
     }
 }
 
-global.removeScoutData = function removeScoutData(roomName){
+global.removeScoutData = function(roomName){
     if(global.heap && global.heap.scoutData && global.heap.scoutData[roomName]) delete global.heap.scoutData[roomName];
 }
 //Scout Data Getter and Setter - Single is an optional string for a specific property
-global.getScoutData = function getScoutData(roomName=false){
+global.getScoutData = function(roomName=false){
         /**
      * roomName: r
      * lastRecord: l
@@ -156,7 +165,7 @@ global.getScoutData = function getScoutData(roomName=false){
         };
     }
 }
-global.setScoutData = function setScoutData(room,data={},force=false){
+global.setScoutData = function(room,data={},force=false){
     //console.log("Setting data for",room,JSON.stringify(data))
     let scoutData = global.heap.scoutData;
     //If first tick and no scout data, return
@@ -209,7 +218,7 @@ global.setScoutData = function setScoutData(room,data={},force=false){
 }
 
 //Get calculated tile distance across rooms
-global.getTileDistance = function getTileDistance(pos1, pos2) {
+global.getTileDistance = function(pos1, pos2) {
     const ROOM_SIZE = 50;
     let posX;
     let posY;
@@ -233,7 +242,7 @@ global.getTileDistance = function getTileDistance(pos1, pos2) {
 }
 
 //Parse room names into a world coordinate system
-global.parseRoomName = function parseRoomName(roomName) {
+global.parseRoomName = function(roomName) {
     const coord = { x: 0, y: 0 };
     const match = /([EW])(\d+)([NS])(\d+)/.exec(roomName);
 
@@ -245,7 +254,7 @@ global.parseRoomName = function parseRoomName(roomName) {
     return coord;
 }
 
-global.spawnCreep = function spawnCreep(role,body,fief,sev=50,memory = {}){
+global.spawnCreep = function(role,body,fief,sev=50,memory = {}){
     if(!Array.isArray(body)) body = parseBody(body)
     memory.role = role
     memory.fief = fief || Memory.kingdom.fiefs[Math.floor(Math.random() * Memory.kingdom.fiefs.length)]
@@ -260,9 +269,11 @@ global.spawnCreep = function spawnCreep(role,body,fief,sev=50,memory = {}){
     Memory.hardSpawns[fief].push(plan)
 }
 
-global.parseBody = function parseBody(bodyString){
+global.parseBody = function(bodyString){
+    // '2W2M' => WORK,WORK,MOVE,MOVE
+    // '2WM'  => WORK,MOVE,WORK,MOVE
     const bodyParts = [];
-    const regex = /(\d+)([a-z]+)/gi; // Match a number followed by one or more letters
+    const regex = /(\d+)([a-z]+)/gi;
     const partMap = {
         'w': WORK,
         'h': HEAL,
@@ -273,21 +284,16 @@ global.parseBody = function parseBody(bodyString){
         'a': ATTACK,
         'p': CLAIM
     };
+    let match;
     if (/^[a-z]+$/i.test(bodyString)) {
-        // Map each letter to its corresponding body part and add to the array
         const parts = bodyString.toLowerCase().split('').map(char => partMap[char]);
         bodyParts.push(...parts);
         return bodyParts;
     }
-    let match;
     while((match = regex.exec(bodyString)) !== null) {
-        const count = parseInt(match[1]); // Get the number of repetitions
-        const partSequence = match[2].toLowerCase().split(''); // Split the sequence of letters
-        
-        // Collect the body parts for the sequence
+        const count = parseInt(match[1]);
+        const partSequence = match[2].toLowerCase().split('');
         const parts = partSequence.map(char => partMap[char]);
-        
-        // Repeat the entire sequence 'count' times
         for (let i = 0; i < count; i++) {
             bodyParts.push(...parts);
         }
@@ -295,7 +301,7 @@ global.parseBody = function parseBody(bodyString){
     return bodyParts;
 }
 
-global.describeRoom = function describeRoom(name){
+global.describeRoom = function(name){
     const [EW, NS] = name.match(/\d+/g)
 	if (EW%10 == 0 && NS%10 == 0) {
 		return ROOM_CROSSROAD
@@ -320,4 +326,86 @@ global.convertStructure = function convertStructure(structure){
         return Memory.structureFromNumReference[structure];
     }
     return Memory.structureToNumReference[structure]
+}
+
+global.BigCostMatrix = function() {
+    this._bits = new Uint16Array(2500);
+};
+
+BigCostMatrix.prototype.set = function(xx, yy, val) {
+    xx = xx|0;
+    yy = yy|0;
+    this._bits[xx * 50 + yy] = Math.min(Math.max(0, val), 65535);
+};
+
+BigCostMatrix.prototype.get = function(xx, yy) {
+    xx = xx|0;
+    yy = yy|0;
+    return this._bits[xx * 50 + yy];
+};
+
+BigCostMatrix.prototype.serialize = function(){
+    let out = "";
+    const bits = this._bits;
+    const len = bits.length;
+    let i = 0;
+    while (i < len) {
+        const value = bits[i];
+        let run = 1;
+        while (i + run < len && bits[i + run] === value) {
+            run++;
+        }
+        if (run === 1) {
+            //For a run of 1, simply output the value.
+            //No flag is set the top bit remains clear
+            out += String.fromCharCode(value);
+        } else {
+            //For runs longer than 1, set the flag bit in the value, then output the run length in the following character.
+            out += String.fromCharCode(value | FLAG_MASK) + String.fromCharCode(run);
+        }
+        i += run;
+    }
+    return out;
+};
+
+BigCostMatrix.deserialize = function(serializedStr) {
+    const matrix = new BigCostMatrix();
+    const bits = matrix._bits;
+    let idx = 0;
+    for (let i = 0; i < serializedStr.length; i++) {
+        const charCode = serializedStr.charCodeAt(i);
+        if (charCode & FLAG_MASK) {
+            //If the top bit is set, then this character is a flagged value.
+            //Clear the flag to obtain the actual value.
+            const value = charCode & ~FLAG_MASK;
+            //The next character contains the run length.
+            const run = serializedStr.charCodeAt(++i);
+            for (let j = 0; j < run; j++) {
+                bits[idx++] = value;
+            }
+        } else {
+            //If the top bit is not set, it's a singleton value.
+            bits[idx++] = charCode;
+        }
+    }
+    return matrix;
+};
+
+global.bigTest = function(){
+    let targets = Game.rooms.W7N7.find(FIND_MY_STRUCTURES)
+    let wallsOnly = _.filter(targets, {structureType: STRUCTURE_RAMPART});
+    let wallsToRepair = [];
+    let i = 0;
+    for (var wall in wallsOnly)
+    {
+       if (wallsOnly[wall].hits < wallsOnly[wall].hitsMax)
+       {
+           console.log("BADWALL",wall,i)
+           wallsToRepair[i] = wallsOnly[wall];
+           console.log(wallsToRepair)
+           i++
+       }
+    }
+    console.log(wallsOnly[0]);
+    console.log(wallsToRepair[0]);
 }

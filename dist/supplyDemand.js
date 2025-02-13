@@ -439,7 +439,7 @@ const supplyDemand = {
             totalCarry += carryParts;
             
             if(global.heap.alarms[creep.room.name]){
-                if(creep.memory.task) getTaskByID(creep.memory.fief,creep.memory.task).unassign(creep)
+                if(creep.memory.task) getTaskByID(creep.memory.fief,creep.memory.task).unassign(creep,'Fleeing')
                 let words = helper.getSay({symbol:`${Game.time % 2 == 1 ? '🚨' : '📢'}`});
                 creep.say(words.join(''))
                 creep.memory.status = 'flee';
@@ -479,7 +479,7 @@ const supplyDemand = {
                 else if(checkTask.assignedHaulers[creep.id] <= 0 || checkTask.assignedHaulers[creep.id] == null){
                     //console.log(Game.time)
                    // console.log("Task ID",creep.memory.task,"in room",creep.memory.fief,"unassigning due to assigned inventory:",checkTask.assignedHaulers[creep.id],"in task",JSON.stringify(checkTask))
-                    checkTask.unassign(creep) 
+                    checkTask.unassign(creep,checkTask.assignedHaulers[creep.id] <= 0 ? "Assigned amount is <=0." : "No result for this creep in assigned haulers") 
                 }
             }
             //If no state, or no task but a non-idle state, assign idle
@@ -557,7 +557,7 @@ const supplyDemand = {
                     return;
                 }
                 else if(task.assignedHaulers[creep.id] < 20 && task.resourceType == RESOURCE_ENERGY && Game.rooms[creep.memory.fief].controller.level > 2){
-                    task.unassign(creep)
+                    task.unassign(creep,"Assigned amount is low energy.")
                 }
                 //Are we on a pickup task? If so, head to the target and take the resource
                 if(task.type == 'pickup'){
@@ -602,7 +602,7 @@ const supplyDemand = {
                         //If pulling energy, no amount specified so we multi-fill
                         //If no amount anywhere, drop task
                         if(((room.storage && room.storage.id != task.targetID && room.storage.store[resourceType])|| 0) + ((room.terminal && room.terminal.id != task.targetID && room.terminal.store[resourceType])|| 0) == 0){
-                            task.unassign(creep)
+                            task.unassign(creep,"No resources to get")
                         }
                         if(Memory.kingdom.fiefs[creep.room.name] && creep.room.storage && creep.room.terminal){
                             //Take from storage if it has more and is not the target, or if our target is the terminal
@@ -654,8 +654,8 @@ const supplyDemand = {
                 //Are we on a dropoff task? If so, go to target and transfer
                 if(task.type == 'dropoff'){
                     //Make sure we didn't dump all our inventory. If so, pickup
-                    if(creep.store.getUsedCapacity() == 0){
-                        task.unassign(creep);
+                    if(creep.store.getUsedCapacity() == 0 && (!global.heap.relays || !global.heap.relays.includes(creep.id))){
+                        task.unassign(creep,"Used capacity is zero");
                         return;
                     }
                     let dropTarget = Game.getObjectById(task.targetID);
@@ -905,9 +905,10 @@ Task.prototype.remove = function(fiefName) {
     delete global.heap.shipping[fiefName].requests[this.taskID];
 };
 
-Task.prototype.unassign = function(hauler) {
+Task.prototype.unassign = function(hauler,reason) {
+    if(!reason) reason = 'No reason.'
     //Remove hauler from task
-    console.log("Unassigning task",JSON.stringify(this),"from hauler",hauler.name)
+    console.log("Unassigning task",reason,JSON.stringify(this),"from hauler",hauler.name)
     if(this.assignedHaulers[hauler.id]) delete this.assignedHaulers[hauler.id];
     //Delete hauler task
     delete hauler.memory.task

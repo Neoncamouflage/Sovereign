@@ -1001,9 +1001,9 @@ const fiefPlanner = {
             return [-1,-1,-1]
         }
 
-        //Memory.testBasePlanCM = basePlanCM.serialize();
+        //Memory.testCM1 = basePlanCM.serialize();
         
-
+        basePlan.rampGroups = rampGroups.length
         basePlan.ramparts = trimmedRamps
         Memory.minCutResult = trimmedRamps;
         //[Memory.testScore,Memory.testScoreTracker] = this.scoreFiefPlan(basePlan,basePlanCM);

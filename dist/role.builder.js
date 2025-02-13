@@ -99,7 +99,9 @@ const roleBuilder = {
             
         }
         creep.memory.status = 'building'
-        if(creep.pos.getRangeTo(target) > 3){
+        creep.memory.stay = false;
+        let rangeToTarget = creep.pos.getRangeTo(target);
+        if(rangeToTarget > 3){
             creep.travelTo(target);
         }
         else{
@@ -108,7 +110,7 @@ const roleBuilder = {
 
         //Submit order if not close to storage
         if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
-            if(!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5){
+            if((!creep.room.storage || creep.pos.getRangeTo(creep.room.storage) >=5) && rangeToTarget<=5){
                 let orderDetails = {
                     targetID:creep.id,
                     amount:creep.store.getCapacity(),
@@ -131,7 +133,7 @@ const roleBuilder = {
                         creep.travelTo(creep.room.storage)
                     }
                 }
-                else{
+                else if(rangeToTarget<=5){
                     let orderDetails = {
                         targetID:creep.id,
                         amount:creep.store.getCapacity(),

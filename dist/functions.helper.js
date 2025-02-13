@@ -117,7 +117,7 @@ const helper = {
         ]
         let far = [
             "This frontier bears the mark of the Crown's silent watch.",
-            "Even at the edge of the world, the Throne's will is manifest.",
+            "Even in foreign lands, the Throne's will is manifest.",
             "The Crown's eye misses nothing, no matter how remote.",
             "The Throne's authority is felt in every corner, no matter how far.",
             "No land is too remote to escape the weight of the Crown.",
@@ -127,7 +127,7 @@ const helper = {
             "Beware, for the Sovereign's scouts mark your every move.",
             "The Crown's power reaches out, grasping even the most remote lands.",
             "The royal will extends even here. None are beyond reach.",
-            "The edge of the world knows the weight of the Throne's will.",
+            "Those dwelling here still yet know the weight of the Throne's will.",
             "Distant though it may be, this land is witness to the Sovereign's command.",
             "These distant shores are touched by whispers of the Throne's might.",
             "In these outer realms, the Sovereign's presence is still felt.",
@@ -276,11 +276,43 @@ const helper = {
             }
           });
         }
+    },
+    //Generates a tower damage map for the room
+    getTowerMap: function(room){
+        if(!(room instanceof Room)){
+            console.log("Room object must be provided for tower data");
+            return;
+        }
+        let tCM = new BigCostMatrix();
+        let towers = room.find(FIND_STRUCTURES).filter(str=> str.structureType == STRUCTURE_TOWER);
+        console.log("TOWERS",towers)
+        let terrain = Game.map.getRoomTerrain(room.name);
+        for(let x=0;x<50;x++){
+            for(let y=0;y<50;y++){
+                if(terrain.get(x,y) == TERRAIN_MASK_WALL) continue;
+                let totalDmg = 0;
+                for(let each of towers){
+                    let range = Math.max(Math.abs(each.pos.x - x), Math.abs(each.pos.y - y));
+                    if(range == 0) continue;
+                    let dmg = TOWER_POWER_ATTACK - (TOWER_POWER_ATTACK * (TOWER_FALLOFF * (range - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE)));
+                    totalDmg+=dmg;
+                }
+                
+                tCM.set(x,y,totalDmg);
+            }
+        }
+        let cmp = tCM.serialize();
+        console.log("Serialized length:",cmp.length)
+
+
+
+
     }
 }
 
 module.exports = helper;    
 
+global.testTowerMap = helper.getTowerMap;
 global.getRemoteRoad = helper.routeRemoteRoad;
 profiler.registerObject(helper, 'functions.helper');
 

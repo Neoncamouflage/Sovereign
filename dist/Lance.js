@@ -84,6 +84,8 @@ Lance.prototype.populate = function(fief,kingdomCreeps,options={}){
         'halberdier':33
     }
     let rolePick = options.role || this.details.role || roleRef[this.lanceType] || 'generic'
+    //Generic roles are handled in the Troupe logic
+    if(rolePick == 'generic') return;
     let sev = sevRef[rolePick] || 40;
     let reserve = kingdomCreeps.reserve;
     let foundReserve = false;

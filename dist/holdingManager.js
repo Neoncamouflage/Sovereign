@@ -28,15 +28,22 @@ var holdingManager = {
         //Second array of only active holdings
         let activeHoldings = []
         for(let key of holdings){
+            //console.log("CHECKING",key,"STANDBY: ",Memory.kingdom.holdings[key].standby)
             if(Memory.kingdom.holdings[key].standby){
+                //First we check to see if we should consider this a real standby addition. If not, we continue so the loop keeps going
+
+                //If overridden, continue
+                if(Memory.kingdom.holdings[key].override) continue;
+                //If it's a fief, skip it
+                let data = getScoutData(key);
+                if(data.roomType == 'fief') continue;
+                //If the room is at or over 90% spawn use then just ignore this one
+                if(Memory.kingdom.fiefs[Memory.kingdom.holdings[key].homeFief].combinedSpawnUse >= 90) continue;
+
                 //If we have the spare CPU, activate it - only check this every so often, less often for higher GCL
                 if(avCPU < CPU_ADD_LIMIT && Game.time % (ADD_REMOVE_INTERVAL*Game.rooms[Memory.kingdom.holdings[key].homeFief].controller.level) == 0){
-                    //If the room is at or over 90% spawn use then just ignore this one
-                    if(Memory.kingdom.fiefs[Memory.kingdom.holdings[key].homeFief].combinedSpawnUse >= 90) continue;
-                    //If it's a fief, skip it
-                    let data = getScoutData(key);
-                    if(data.roomType == 'fief') continue;
                     Memory.kingdom.holdings[key].standby = false;
+                    //If we add it to actives, break so we stop considering them.
                     activeHoldings.push(key);
                     break;
                 }
@@ -46,10 +53,11 @@ var holdingManager = {
                 }
             }
             else{
+                //console.log("Adding to active holdings")
                 activeHoldings.push(key)
             }
         }
-        
+        //console.log("Active holdings!",activeHoldings)
         //If we're above the cpu limit, pop a remote off the end
         if(avCPU > CPU_REMOVE_LIMIT && Game.time % (ADD_REMOVE_INTERVAL*5) == 0){
             let remove = activeHoldings.pop()
@@ -66,9 +74,16 @@ var holdingManager = {
         //Now we run operations for each active holding
         //Map of all home fiefs so we prioritize their spawns
         let fiefMap = {}
+
+        //Update kingdomStatus with holdings
+        heap.kingdomStatus.holdings = [...activeHoldings]
+
         for(const each of activeHoldings){
             //If we're about to hit CPU limit, just abandon
-            if(Game.cpu.getUsed() > Game.cpu.limit*0.95) break;
+            if(Game.cpu.getUsed() > Game.cpu.limit*0.95){
+                //console.log("Abandoning holdings due to CPU",Game.cpu.getUsed())
+                break;
+            }
             //Fief spawn utilization check in here somewhere
             let holding = Memory.kingdom.holdings[each]
             //Increment our home fief's spawning impact
@@ -361,7 +376,7 @@ var holdingManager = {
         let enemyReserve = remote && remote.controller.reservation && !isMe(remote.controller.reservation.username) || false;
         //If owned by an enemy, no actions until we're strong enough to claim
         if(data.ownerType && data.ownerType == 'enemy' && Game.rooms[fief].energyCapacityAvailable < 650){
-            console.log(holdingName,'ENEMY OWNER');
+            //console.log(holdingName,'ENEMY OWNER');
             return;
         }
         //console.log("MAINHOLD",holdingName)
@@ -528,7 +543,7 @@ var holdingManager = {
 
         //With Vision
         if(remote){
-            if(Game.time % 45 == 0 && Game.rooms[fief].storage && Game.rooms[fief].storage.my && Object.keys(Game.constructionSites).length < 80){
+            if(Game.time % 45 == 0 && Game.rooms[fief].storage && Game.rooms[fief].storage.my && Object.keys(Game.constructionSites).length < 40){
                 console.log("Construction check in ",holdingName)
                 //Set remote build based on whether we have active sites
                 if(spawnPad == 1){
