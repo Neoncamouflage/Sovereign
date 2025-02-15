@@ -25,14 +25,19 @@ BlinkyLance.prototype.runCreeps = function(myCreeps){
         let target = Game.getObjectById(this.target[creepID]);
         console.log(creep.name,"has target",target,"and pos",JSON.stringify(targetPos))
         let remoteHealing = false;
-        if(creep.hits == creep.hitsMax){
+        if(injured.length){
+            console.log("INJ",injured)
             let closest = creep.pos.findClosestByRange(injured);
-            if(creep.pos.getRangeTo(closest) <= 3){
+            if(!closest){
+                creep.heal(creep)
+            }
+            else if(creep.pos.getRangeTo(closest)<=1){
                 creep.heal(closest)
                 remoteHealing = true;
             }   
-        }else{
-            creep.heal(creep)
+            else if(closest.hits < closest.hitsMax){
+                creep.rangedHeal(closest)
+            }
         }
         //If no target or position, do nothing
         if(!target && !targetPos) return;

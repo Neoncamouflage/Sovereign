@@ -405,22 +405,14 @@ BigCostMatrix.deserialize = function(serializedStr) {
 };
 
 global.bigTest = function(){
-    let targets = Game.rooms.W7N7.find(FIND_MY_STRUCTURES)
-    let wallsOnly = _.filter(targets, {structureType: STRUCTURE_RAMPART});
-    let wallsToRepair = [];
-    let i = 0;
-    for (var wall in wallsOnly)
-    {
-       if (wallsOnly[wall].hits < wallsOnly[wall].hitsMax)
-       {
-           console.log("BADWALL",wall,i)
-           wallsToRepair[i] = wallsOnly[wall];
-           console.log(wallsToRepair)
-           i++
-       }
-    }
-    console.log(wallsOnly[0]);
-    console.log(wallsToRepair[0]);
+    let cp1 = Game.cpu.getUsed();
+    let g = helper.getTowerMap(Game.rooms.E6S1);
+    let cp2 = Game.cpu.getUsed();
+    let l = g.serialize();
+    g = BigCostMatrix.deserialize(l);
+    let cp3 = Game.cpu.getUsed();
+    console.log("TEST RESULTS!")
+    console.log("Tower map CPU:",cp2-cp1,"Serialize/Deserialize CPU:",cp3-cp2)
 }
 
 global.getDistance = function(pos1,pos2){

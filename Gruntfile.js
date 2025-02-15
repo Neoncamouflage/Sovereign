@@ -33,7 +33,7 @@ module.exports = function(grunt) {
             server: 'season'
         },
         panda:{
-            email: config.localEmail,
+            email: config.pandaEmail,
             password: config.password,
             branch: 'default',
             server: {host: 'server.pandascreeps.com',

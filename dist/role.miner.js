@@ -52,6 +52,13 @@ var roleMiner = {
                     if(badRoad && badRoad.hits < (badRoad.hitsMax*0.9)){
                         creep.repair(badRoad);
                     }
+                    else{
+                        let cRoads = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+                        if(cRoads.length){
+                                let cTarget = creep.pos.findClosestByRange(cRoads)
+                                if(creep.pos.getRangeTo(cTarget) <= 3) creep.repair(cTarget);
+                        }
+                    }
                 }
 
             }

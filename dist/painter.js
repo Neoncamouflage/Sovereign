@@ -16,7 +16,7 @@ const painter = {
         }
         if(visuals.drawLoot) this.drawLoot();
         if(visuals.drawMilitary) this.drawMilitary(kingdomCreeps);
-        if(visuals.drawIntel) this.drawIntel();
+        if(visuals.drawIntel) this.drawIntel(kingdomCreeps);
         if(visuals.drawTest) this.drawTest();
         if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan)
         
@@ -111,7 +111,7 @@ const painter = {
         }
         return;
     },
-    drawIntel(){
+    drawIntel(kingdomCreeps){
         let scoutData = global.heap.scoutData;
         if(!scoutData) return;
         Object.entries(scoutData).forEach(([roomName,data])=>{
@@ -139,6 +139,20 @@ const painter = {
                 }
             }
         }
+        //Draw military/scout creeps and missions
+        let scouts = kingdomCreeps.scouts || [];
+        let missions = Object.keys(heap.missions) || [];
+        if(scouts.length){
+            for(let scout of scouts){
+                Game.map.visual.text("🕵️‍♂️", scout.pos, {color: '#FFFFF', fontSize: 6});
+            }
+        }
+        if(missions.length){
+            for(let missionID of missions){
+                let mission = heap.missions[missionID];
+                Game.map.visual.text(`⚠ ${mission.type}`, new RoomPosition(25,25,mission.room), {color: '#edbe2f', fontSize: 6});
+            }
+        }
     },
     drawLoot(){
         for(let room of Object.values(Game.rooms)){
@@ -161,37 +175,14 @@ const painter = {
         }
     },
     drawTest(){
-        // -- REMOTE ROAD TEST --
-        /*for(let holding of Object.values(Memory.kingdom.holdings)){
-            if(!holding.remoteRoute) continue;
-            Game.map.visual.poly(holding.remoteRoute)
-        }
-        if(Memory.remoteRoadTest){
-            let names = Object.keys(Memory.remoteRoadTest);
-            let tickPick = Game.time % names.length;
-            let route = Memory.remoteRoadTest[names[tickPick]];
-            let holding = route[route.length-1].roomName
-            let roomVis = new RoomVisual(holding)
-            for(let spot of route){
-                if(spot.roomName == holding) roomVis.structure(spot.x,spot.y,STRUCTURE_ROAD)
-            }
-            roomVis.connectRoads()
-            new RoomVisual(holding).text(names[tickPick].toLowerCase(),25,25,{color:'#ffa500',font:'1 Bridgnorth'})
-            
-        }*/
-
-
-        // -- TEST CM - USE THIS FOR ANY CM DRAWING --
-        let testCM = PathFinder.CostMatrix.deserialize(Memory.testCM1);
-        for (let x = 0; x <= 49; x += 1) {
-            for (let y = 0; y <= 49; y += 1) {
-                let weight = testCM.get(x,y);
-                if(weight == 0) continue;
-                new RoomVisual().text(weight,x,y+0.25,{font:0.25});
-                new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                    fill: `hsl(${360*(weight/255)}, 100%, 60%)`,
-                    opacity: 0.4,
-                })
+        if(Memory.test.testCM){
+            let testCM = PathFinder.CostMatrix.deserialize(Memory.test.testCM)
+            for (let x = 0; x <= 49; x += 1) {
+                for (let y = 0; y <= 49; y += 1) {
+                    let weight = testCM.get(x,y);
+                    if(weight == 0) continue;
+                    new RoomVisual().text(weight,x,y+0.25);
+                }
             }
         }
     },

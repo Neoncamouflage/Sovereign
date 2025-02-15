@@ -1,10 +1,13 @@
 const profiler = require('screeps-profiler');
+LOG_ERR  = {};
+LOG_WARN = {};
+LOG_INFO = {};
 const chronicle = {
     //Updates the log with a message and the source
-    updateLog: function(error,source){
+    log: function(error,source){
     },
     //Writes the log to a segment
-    writeLog: function(){
+    write: function(){
 
     },
 }

@@ -220,6 +220,7 @@ const roleBuilder = {
             //If not, get one
             else if(ramps.length){
                 target = creep.pos.findClosestByRange(ramps);
+                if(!target)return           /////////CAUSED AN ERROR WHEN TARGET WAS NULL, FIND OUT WHY
                 creep.memory.targetID = target.id;
                 if(creep.pos.getRangeTo(target) > 3){
                     creep.travelTo(target);

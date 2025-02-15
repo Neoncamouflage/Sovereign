@@ -278,7 +278,7 @@ const helper = {
         }
     },
     //Generates a tower damage map for the room
-    getTowerMap: function(room){
+    getTowerMap: function(room,serialized=false){
         if(!(room instanceof Room)){
             console.log("Room object must be provided for tower data");
             return;
@@ -301,12 +301,8 @@ const helper = {
                 tCM.set(x,y,totalDmg);
             }
         }
-        let cmp = tCM.serialize();
-        console.log("Serialized length:",cmp.length)
-
-
-
-
+        if(serialized) return tCM.serialize();
+        return tCM;
     }
 }
 
@@ -315,13 +311,3 @@ module.exports = helper;
 global.testTowerMap = helper.getTowerMap;
 global.getRemoteRoad = helper.routeRemoteRoad;
 profiler.registerObject(helper, 'functions.helper');
-
-function randomElements(array, numElements) {
-    const indexes = new Set();
-    while (indexes.size < numElements) {
-        const randomIndex = Math.floor(Math.random() * array.length);
-        indexes.add(randomIndex);
-    }
-
-    return Array.from(indexes).map(index => array[index]);
-}

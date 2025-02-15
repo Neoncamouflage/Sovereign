@@ -386,7 +386,7 @@ function getPikeman(room,plan){
     return [newBody,totalCost];
 }
 function getSkirmisher(room,plan){
-    let parts = [MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,HEAL]
+    let parts = room.controller.level >=4 ?[MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,HEAL] : [MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,HEAL]
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let energyAvailable = room.energyCapacityAvailable
     //Max size is the set body size or energy cap, whichever is less

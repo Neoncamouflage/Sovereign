@@ -23,6 +23,8 @@ var holdingManager = {
         let holdings = Object.keys(Memory.kingdom.holdings).sort((a, b) => 
             Memory.kingdom.holdings[a].distance - Memory.kingdom.holdings[b].distance
         );
+        //No remote stuff for rooms under attack
+        if(heap.wardens && Object.keys(heap.wardens).length) holdings = holdings.filter(rm => !Object.keys(heap.wardens).includes(rm))
         //console.log("All",holdings)
         //Second array of only active holdings
         let activeHoldings = []
@@ -379,8 +381,8 @@ var holdingManager = {
         let data = getScoutData(holdingName)
         global.heap.fiefs[fief] = global.heap.fiefs[fief] || {};
         let fiefHeap = global.heap.fiefs[fief];
-        let isReserved = remote && remote.controller.reservation && isMe(remote.controller.reservation.username) || false;
-        let enemyReserve = remote && remote.controller.reservation && !isMe(remote.controller.reservation.username) || false;
+        let isReserved = remote && remote.controller && remote.controller.reservation && isMe(remote.controller.reservation.username) || false;
+        let enemyReserve = remote && remote.controller && remote.controller.reservation && !isMe(remote.controller.reservation.username) || false;
         //If owned by an enemy, no actions until we're strong enough to claim
         if(data.ownerType && data.ownerType == 'enemy' && Game.rooms[fief].energyCapacityAvailable < 650){
             //console.log(holdingName,'ENEMY OWNER');
@@ -472,7 +474,7 @@ var holdingManager = {
                     }
                 }
                 //Get controller spots if we don't
-                if(!holding.controllerSpots) holding.controllerSpots = helper.getOpenSpots(remote.controller.pos).length
+                if(remote.controller && !holding.controllerSpots) holding.controllerSpots = helper.getOpenSpots(remote.controller.pos).length
 
                 let reserverPower = 0;
                 let claimers = 0;
@@ -486,7 +488,7 @@ var holdingManager = {
                     }
                 }
                 
-                if(reserverPower < 2 && Game.rooms[fief].energyCapacityAvailable >= 650){
+                if(remote.controller && reserverPower < 2 && Game.rooms[fief].energyCapacityAvailable >= 650){
                     //let spots = helper.getOpenSpots(remote.controller.pos,true);
                     //See if we have a mission already
                    // console.log("Reserver checks")
@@ -544,8 +546,8 @@ var holdingManager = {
 
         //With Vision
         if(remote){
-            if(Game.time % 45 == 0 && Game.rooms[fief].storage && Game.rooms[fief].storage.my && Object.keys(Game.constructionSites).length < 40){
-                console.log("Construction check in ",holdingName)
+            if(Game.time % 125 == 0 && Game.rooms[fief].storage && Game.rooms[fief].storage.my && Game.rooms[fief].storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000 && Object.keys(Game.constructionSites).length < 40){
+                //console.log("Construction check in ",holdingName)
                 //Set remote build based on whether we have active sites
                 if(spawnPad == 1){
                     if(remote.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType == STRUCTURE_ROAD).length){
@@ -555,7 +557,7 @@ var holdingManager = {
                         Memory.kingdom.fiefs[fief].remoteBuild = false;
                     }
                 }
-                console.log("REMOTEBUILD",Memory.kingdom.fiefs[fief].remoteBuild)
+                //console.log("REMOTEBUILD",Memory.kingdom.fiefs[fief].remoteBuild)
                 //If no active sites, check if any are needed and build if so
                 if(!Memory.kingdom.fiefs[fief].remoteBuild || (Memory.kingdom.fiefs[fief].remoteBuild == holdingName && remote.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType == STRUCTURE_ROAD).length < 20)){
                     let buildCount = 0;

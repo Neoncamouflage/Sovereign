@@ -3,10 +3,11 @@ const constants = {
     //Memory Segment Assignment
     SEGMENT_SCOUT_DATA:0,       //All compressed scout data - Likely needs to be multiple segments
     SEGMENT_ROOM_PLANS:1,       //All finished room plans
+    SEGMENT_ROOM_DEFENSE:2,     //Tower maps and similar defensive CM data
     SEGMENT_PLAN_GENERATIONS:5, //New room planner generation history
     SEGMENT_LOGGING_ERR:7,      //Error results from functions and modules - Logs that indicate a critical/fatal error
     SEGMENT_LOGGING_WARN:8,     //Warning results from functions and modules - Logs that indicate unwanted or unexpected results
-    SEGMENT_LOGGING_OTHER:9,    //Miscellaneous logging results
+    SEGMENT_LOGGING_INFO:9,     //Miscellaneous logging results
 
     //Room Definitions
     ROOM_STANDARD :      'room',

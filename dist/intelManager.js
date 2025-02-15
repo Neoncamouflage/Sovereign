@@ -171,6 +171,8 @@ const intelManager = {
             let exits = Game.map.describeExits(creep.room.name);
             //console.log("Viable exits:",JSON.stringify(exits))
             let exitRooms = Object.values(exits).filter(roomName => {
+                //If another scout is already doing it, deny
+                if(scouts.filter(sct => sct.memory.exitTarget && sct.memory.exitTarget.target == roomName).length) return false;
                 //If it's on the no scout list, deny
                 if(Memory.noScout && Memory.noScout.includes(roomName)) return false;
                 let roomData = getScoutData(roomName);

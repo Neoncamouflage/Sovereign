@@ -7,6 +7,7 @@ const supplyDemand = require('supplyDemand');
 const granary = require('granary');
 const registry = require('registry');
 const buildRole = require('role.builder');
+const Warden = require('Warden')
 const fiefManager = {
     run:function(room,fiefCreeps){
         heap.fiefs[room.name].buildQueue = heap.fiefs[room.name].buildQueue || {}
@@ -59,7 +60,7 @@ const fiefManager = {
 
         if(!fief.roomPlan || fief.roomPlan == 'null'){
             //restartFlag = true;
-            let roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS]);
+            let roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS] ? RawMemory.segments[SEGMENT_ROOM_PLANS] : ''); //Fix this at some point to make sure it exists on tick 1
             if(roomPlans[room.name]){
                 [fief.roomPlan, fief.rampartPlan] = roomPlans[room.name]
             }
@@ -263,7 +264,8 @@ const fiefManager = {
         }
 
         //Every 100 ticks, check to see if we need to fill the build queue
-        if(Game.time % 100 == 0 && fief.roomPlan && !Object.keys(buildQueue).length){
+        if(Game.time % 100 == 0 && fief.roomPlan){
+            buildQueue = {}
             //console.log("Checking for new constructions.")
             let cCount = 0;
             let plan = fief.roomPlan
@@ -319,7 +321,7 @@ const fiefManager = {
                     }
                 }
             }
-
+            heap.fiefs[room.name].buildQueue = buildQueue;
         }
         
         //Create room plan, spawns, and spawn queue if none exists, then return
@@ -433,17 +435,47 @@ const fiefManager = {
         //Add any scouted domain rooms to holdings, longer standing fiefs have a longer wait
         if(Game.time % (150*room.controller.level) == 0){
             //Get scouted domain rooms, exclude SK for now
-            let domainRooms = getDomainRooms(room.name).filter(dRoom => !Memory.kingdom.holdings[dRoom] && dRoom.type != ROOM_SOURCE_KEEPER);
-            for(let dRoom of domainRooms){
+
+            let domainRooms = getDomainRooms(room.name)
+            let fDomain = domainRooms.filter(dRoom => !Memory.kingdom.holdings[dRoom] && dRoom.type != ROOM_SOURCE_KEEPER);
+            console.log("D",domainRooms)
+            console.log("F",fDomain)
+            for(let dRoom of fDomain){
+                
                 let dData = getScoutData(dRoom.roomName);
                 if(!dData) continue;
                 //If scouted, add to holdings and mark scouted in the domain
                 dRoom.scouted = true;
-                if(!Memory.kingdom.holdings[dRoom.roomName] && !dData.roomType == 'fief') Memory.kingdom.holdings[dRoom.roomName] = {standby:true,homeFief:room.name};
+                if(!Memory.kingdom.holdings[dRoom.roomName] && dData.roomType != 'fief'){
+                    Memory.kingdom.holdings[dRoom.roomName] = {standby:true,homeFief:room.name};
+                }
             }
         }
 
-
+        //Check for hostiles to activate warden, only once we're RCL4
+        if(room.controller.level >= 4){
+            //console.log("WARDEN CHECK",room.name,heap.wardens ? Object.keys(heap.wardens) : [])
+            let hostiles = room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp) && !helper.isScout(crp));
+            let warden = heap.wardens && heap.wardens[room.name];
+            if(hostiles.length){
+                //console.log("Hostiles")
+                //Run our warden if it already exists, else create one
+                if(warden){
+                    warden.run(hostiles);
+                }
+                else{
+                    warden = new Warden(room);
+                    if(!heap.wardens) heap.wardens = {};
+                    heap.wardens[room.name] = warden;
+                    warden.run(hostiles);
+                }
+            }
+            else if(warden){
+                //console.log("Ending warden!")
+                delete heap.wardens[room.name]
+            }
+        }
+        
         
         //Check if we have enough harvesters by gathering total harvest strength from live creeps
         //let harvStrength = fiefCreeps['harvester'] && fiefCreeps['harvester'].reduce((sum,item) => sum+((item.body.getActiveBodyparts(WORK) * HARVEST_POWER)));
@@ -1353,7 +1385,7 @@ const fiefManager = {
             storageLevel: storageLevel,
             energyUse: Math.round(averageNet),
             shippingOrders: heap.shipping[room.name].requests && Object.keys(heap.shipping[room.name].requests).length || 0,
-            shippingUse:    heap.shipping[room.name].utilization ? Math.round(((heap.shipping[room.name].utilization.reduce((acc, num) => acc + num, 0)/heap.shipping[room.name].utilization.length)*100)) : 0
+            shippingUse:    heap.shipping[room.name].utilization ? 100-(Math.round(((heap.shipping[room.name].utilization.reduce((acc, num) => acc + num, 0)/heap.shipping[room.name].utilization.length)*100))) : 0
         };
         
 
@@ -1477,7 +1509,10 @@ function manageResourceCollection(room) {
 }
 
 function getDomainRooms(fief) {
-    if(Memory.kingdom.fiefs[fief].domain) return Memory.kingdom.fiefs[fief].domain;
+    if(Memory.kingdom.fiefs[fief].domain){
+        console.log("DOMAIN ALREADY HERE");
+        return Memory.kingdom.fiefs[fief].domain;
+    }
     //BFS for rooms in range
     const MAX_RANGE = 3;
     let queue = [{roomName: fief, depth: 0}];

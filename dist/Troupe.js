@@ -105,14 +105,16 @@ Troupe.prototype.run = function(kingdomCreeps) {
                 this.createLance('blinky',{unitsNeeded: 1});
                 break;
             case 'destroyCore':
-                let core = this.mission.targets && this.mission.targets.length ? this.mission.targets[0] : false;
+                let core = this.mission.targets && this.mission.targets.length ? Game.getObjectById() : false;
                 let remote = Game.rooms[this.mission.room];
                 let roomEnergy = Game.rooms[this.baseFief].energyCapacityAvailable
-                let isRes = remote && remote.controller && remote.controller.reservation && isMe(remote.controller.reservation)
+                let isRes = remote && remote.controller && remote.controller.reservation && isMe(remote.controller.reservation.username)
                 let reserveTime = isRes ? remote.controller.reservation.ticksToEnd : false;
                 let bodySize = 0;
-                if(core && reserveTime){
-                    let dist = getDistance(Game.getObjectById(Memory.kingdom.fiefs[this.baseFief].spawns[0]).pos,core.pos);
+                let spawn = Game.getObjectById(Memory.kingdom.fiefs[this.baseFief].spawns[0]);
+                if(core && spawn && reserveTime){
+                    console.log("SPAWN",spawn,"CORE",core)
+                    let dist = getDistance(spawn.pos,core.pos);
                     bodySize = Math.ceil(100000/Math.round(reserveTime-dist/2));
                     //80 Energy per Attack and 50 per Move needed
                     bodyCap = Math.floor(roomEnergy/130);
@@ -128,6 +130,7 @@ Troupe.prototype.run = function(kingdomCreeps) {
                     
                 }
                 else{
+                    console.log("CORE:",JSON.stringify(core),"SPAWN",JSON.stringify(spawn),"RESERVE",reserveTime)
                     this.createLance('melee');
                 }
                 
@@ -509,7 +512,7 @@ function defendLogic(troupe){
             }
         }
         lance.runCreeps(kingdomCreeps[lance.name])
-        if(size > ourSize){
+        if(size >= ourSize){
             lance.unitsNeeded++;
         }
     }
@@ -554,6 +557,7 @@ function settleLogic(troupe){
     }
 
     let claimer = troupe.claimer && Game.getObjectById(troupe.claimer);
+    console.log("SETTLE CLAIM CHECK",claimer)
     if(room){
         //If we've claimed the room and the fief is in Memory, mark our support room and end the mission.
         if(room.controller.my && Memory.kingdom.fiefs[room.name]){
@@ -572,11 +576,15 @@ function settleLogic(troupe){
 
 
     if(!claimer){
+        
         let checkCreeps = Object.values(Game.creeps).filter(crp => crp.memory.fief == troupe.baseFief && crp.memory.job == 'claimer' && crp.memory.targetRoom == roomName && (!troupe.claimer || troupe.claimer != crp.id));
+        console.log("NO CLAIMER, CHECK CREEPS:",checkCreeps)
         if(checkCreeps.length){
+            console.log("FOUND")
             troupe.claimer = checkCreeps[0].id
         }
         else{
+            console.log("NO CHECK FOUND, REQUESTING")
             registry.requestCreep({sev:34,body:[MOVE,CLAIM],memory:{role:'claimer',job:'claimer',targetRoom:roomName,troupe:troupe.name,fief:troupe.baseFief,status:'spawning',preflight:false}})
         }
         

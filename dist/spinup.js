@@ -10,6 +10,7 @@ const spinup = {
         Memory.kingdom.fiefs = {};
         Memory.kingdom;
         Memory.hardSpawns;
+        Memory.test = {};
         Memory.kingdom.army = {troupes:[],missions:{},reserve:[]};
         for(const room in Game.rooms){
             let myRoom = Game.rooms[room];

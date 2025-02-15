@@ -61,7 +61,8 @@ module.exports.loop = function () {
             }, 0);
             global.cpuAverage = Math.round(cpuUte/Memory.trailingCPU.length)
         }
-        
+        let defenseData = RawMemory.segments[SEGMENT_ROOM_DEFENSE]
+        if(defenseData == "")  RawMemory.segments[SEGMENT_ROOM_DEFENSE] = "{}"
         let roomData = RawMemory.segments[SEGMENT_ROOM_PLANS]
         if(roomData == "")  RawMemory.segments[SEGMENT_ROOM_PLANS] = "{}"
         if(!global.heap.scoutData){

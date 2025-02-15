@@ -9,8 +9,9 @@ const profiler = require('screeps-profiler');
  */
 
 /*
+This module requires the RoomVisuals
 By default this module references an object stored in global that is updated by the rest of the bot.
-The object must conform to the format shown in this example. Optional keys are marked as such and may be excluded without issue.
+The object must conform to the format shown in this example. Optional keys are stated as such and may be excluded without issue.
 Adding information or removing any non-optional information will require an adjustment to the visuals themselves.
 
 kingdomStatus: {
@@ -45,7 +46,7 @@ const SCROLL_WIDTH = 7.25;
 const SCROLL_LENGTH = 0.75;
 const SCROLL_FILL_COLOR = '#c99157';
 const SCROLL_END_COLOR = '#ffdd8a';
-const BANNER_WIDTH = 17;
+const BANNER_WIDTH = 20;
 const BANNER_LENGTH = 1;
 //Max fiefs to display before it has to cycle
 //Lower this to take up less space, increasing past 7 causes it to extend past the bottom of the room
@@ -534,7 +535,7 @@ const statusManager = {
                 //Push first line
                 fiefText.push(fiefStatus)
                 
-                fiefStatus =  `📈${fief.energyUse}📝${fief.shippingOrders}🚚${fief.shippingUse}%`
+                fiefStatus =  `📈${fief ? fief.energyUse : 0}📝${fief ? fief.shippingOrders : 0}🚚${fief ? fief.shippingUse : 0}%`
                 fiefText.push(fiefStatus)
 
             }
@@ -589,14 +590,14 @@ const statusManager = {
         function drawBanners(){
             //Add length to banner as lastReset time increases, since this is highly variable
             let kingdomTime = Game.time- kingdomStatus.lastReset;
-            let totalBannerWidth = BANNER_WIDTH + Math.floor(kingdomTime.toString().length/2);
+            let totalBannerWidth = BANNER_WIDTH + Math.floor(kingdomTime.toString().length);
             rVis.poly([[49.5,-0.5],[49.5 - totalBannerWidth - 1,-0.5],[49.5- totalBannerWidth,BANNER_LENGTH/2 - 0.5],[49.5 - totalBannerWidth - 1,BANNER_LENGTH-0.5],[49.5,BANNER_LENGTH-0.5]], {
                 fill: '#FFBA4B',
                 opacity:0.6,
                 stroke:'black'
             }); 
-
-            rVis.text(`CPU:${(kingdomStatus.cpuAverage || 0)}/${Game.cpu.limit}  |  Pop:${Object.values(Game.creeps).length}  |  🌾 ${kingdomStatus.activeHoldings.length||'-'}/${kingdomStatus.totalHoldings||'-'}  |  ⏱ ${kingdomTime}`, 50 - totalBannerWidth, 0.25, {color: 'black', align:'left', font: 'bold 0.75 Bridgnorth'});
+            let heap = Game.cpu.getHeapStatistics();
+            rVis.text(`CPU:${(kingdomStatus.cpuAverage || 0)}/${Game.cpu.limit}  |  Pop:${Object.values(Game.creeps).length}  |  🌾 ${kingdomStatus.activeHoldings.length||'-'}/${kingdomStatus.totalHoldings||'-'}  |  ⏱ ${kingdomTime}  |  💾${((heap.used_heap_size/heap.heap_size_limit)*100).toFixed(2)}%`, 50 - totalBannerWidth, 0.25, {color: 'black', align:'left', font: 'bold 0.75 Bridgnorth'});
         }
 
         function drawScrolls(wareLength){
