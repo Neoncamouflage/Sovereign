@@ -234,8 +234,8 @@ const supplyDemand = {
                 }
             }
         }
-
-        let unassignedTasks = Object.values(shippingTasks).filter(task => task.unassignedAmount() > 0 && Game.getObjectById(task.targetID) && !global.heap.alarms[Game.getObjectById(task.targetID).room.name]);
+        
+        let unassignedTasks = Object.values(shippingTasks).filter(task => task.unassignedAmount() > 0);
         
 
 
@@ -283,11 +283,13 @@ const supplyDemand = {
         for (let task of unassignedTasks) {
             let taskTarget = Game.getObjectById(task.targetID);
             if (!taskTarget || !task.amount) {
-
                 task.remove(room.name);
                 continue;
             }
-    
+            else if(global.heap.alarms[Game.getObjectById(task.targetID).room.name]){
+                continue;
+            }
+
             let assigned = false;
             let assignedHauler = {};
             // Handle dropoff tasks
