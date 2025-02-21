@@ -74,13 +74,13 @@ const roleClaimer = {
 
             }
         }
-        else if(creep.memory.job == 'attacker'){
+        else if(creep.memory.job == 'declaimer'){
             if(!creep.memory.preflight){
                 Memory.flag1 = Game.time;
                 creep.memory.preflight = true;
             }
             targetRoom = creep.memory.targetRoom
-            if(true){
+            if(targetRoom){
                 if(creep.room.name != targetRoom){
                     creep.travelTo(new RoomPosition(16,30,targetRoom));
                 }

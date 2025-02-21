@@ -21,7 +21,7 @@ MeleeLance.prototype.runCreeps = function(myCreeps){
         let creepID = creep.id;
         let targetPos = this.targetPos[creepID];
         let target = Game.getObjectById(this.target[creepID]);
-        console.log(creep.name,"has target",target,"and pos",JSON.stringify(targetPos))
+        //console.log(creep.name,"has target",target,"and pos",JSON.stringify(targetPos))
         //If no target or position, do nothing
         if(!target && !targetPos) return;
         if(target){
@@ -37,9 +37,9 @@ MeleeLance.prototype.runCreeps = function(myCreeps){
             }
         }
         else if(targetPos){
-            console.log(creep,"travelling")
+            //console.log(creep,"travelling")
             let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{range:targetPos.range,military:true});
-            console.log(JSON.stringify(x))
+            //console.log(JSON.stringify(x))
         }
         if(creep.getActiveBodyparts(HEAL) > 0 && (!target || creep.pos.getRangeTo(target) > 1)){
             if(creep.hits < creep.hitsMax ){

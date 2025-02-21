@@ -1,5 +1,28 @@
 
 const constants = {
+    //General heap
+    heap:{
+        fiefs:{},
+        alarms:{},
+        stock:{},
+        kingdomStatus:{
+            fiefs:{},
+            activeHoldings:[],
+            totalHoldings:0,
+            lastReset:Game.time,
+            wares:{}
+        },
+        granary:{},
+        registry:{},
+        missions:{},
+        army:{
+            troupes:[],
+            lances:{},
+            reserve:[]
+        },
+        funnelTarget:null
+    },
+        
     //Memory Segment Assignment
     SEGMENT_SCOUT_DATA:0,       //All compressed scout data - Likely needs to be multiple segments
     SEGMENT_ROOM_PLANS:1,       //All finished room plans

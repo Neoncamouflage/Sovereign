@@ -32,7 +32,8 @@ var roleSettler = {
                 creep.travelTo(new RoomPosition(25, 25, creep.memory.targetRoom));
                 return;
             }
-            if(Game.rooms[creep.memory.targetRoom].controller.ticksToDowngrade < 3000){
+            //Upgrade first if we're getting close to downgrade or if we haven't ticked up to 2 for a safemode
+            if(Game.rooms[creep.memory.targetRoom].controller.ticksToDowngrade < 3000 || Game.rooms[creep.memory.targetRoom].controller.level <2){
                 creep.upgradeController(Game.rooms[creep.memory.targetRoom].controller);
                 creep.travelTo(Game.rooms[creep.memory.targetRoom].controller);
             }

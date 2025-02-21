@@ -390,7 +390,7 @@ const architect = {
     data: {},
 
     //Called to start a new plan process
-    startPlan: function(roomName,{totalPop=25, maxIterations=10,mutationRate=0.01}={}){
+    startPlan: function(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01}={}){
         let roomData = getScoutData(roomName)
         if(!roomData){
             console.log("No room data for the room planner");

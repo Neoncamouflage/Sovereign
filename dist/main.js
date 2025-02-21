@@ -1,7 +1,8 @@
 //Imports
-const helper = require('functions.helper'); //Helper functions
 require('constants')
+const helper = require('functions.helper'); //Helper functions
 require('packrat')
+const chronicle = require('chronicle');
 require('prototypes.room');
 require('prototypes.creep');
 require('prototypes.spawn');
@@ -19,8 +20,7 @@ const fiefPlanner = require('fiefPlanner')
 profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 
-//Set scoring weights for room planning
-Memory.lastReset = 0 || Memory.globalReset;
+Memory.lastReset = 0
 Memory.globalReset = Game.time;
 module.exports.loop = function () {
     //RawMemory._parsed = {};
@@ -33,28 +33,7 @@ module.exports.loop = function () {
     //Reset movement
     Traveler.resetMovementIntents();
     //Check for global reset and action accordingly
-    if(Game.time == Memory.globalReset){
-        console.log("Global reset!")
-        global.reset = true;
-        //Segment 0 is for scout data
-        //Segment 1 is for room plans
-        //Segment 2 is for cached paths
-        //Segment 8 is for standardized logging
-        //Segment 9 is for ad-hoc logging
-        RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
-        //Global heap
-        global.heap = {fiefs:{},alarms:{},stock:{},kingdomStatus:{fiefs:{},activeHoldings:[],totalHoldings:0,lastReset:Game.time,wares:{}},granary:{},registry:{},missions:{},army:{troupes:[],lances:{},reserve:[]},funnelTarget:null};
-        global.heap.closedRooms = new Set();
-        /*for(let fief in Memory.kingdom.fiefs){
-            global.heap.fiefs[fief] = {};
-        }
-        for(let holding in Memory.kingdom.holdings){
-            global.heap.holdings[holding] = {}
-        }*/
-    }
-    //If no reset, do stuff with segments
-    else{
-        global.reset = false;
+    if(Game.time != Memory.globalReset){
         if(Memory.trailingCPU){
             let cpuUte = Memory.trailingCPU.reduce((total, perTick) => {
                 return total + perTick.cpu;
@@ -383,6 +362,7 @@ module.exports.loop = function () {
             console.log("<font color='green'>", Game.shard.name, "generated pixel.</font>")
         }
     });
+    chronicle.run();
 }
 
 //Respawn checker by @SemperRabbit

@@ -597,7 +597,8 @@ class Traveler {
             let targetCreep = Game.getObjectById(emptyPos[nextKey]);
             if(targetCreep.store.getFreeCapacity() != selfStore) continue;
             if(global.heap.relays.includes(targetCreep.id)) continue;
-            let fullMission = global.heap.shipping[each.memory.fief].requests[each.memory.task];
+            let fullMission = heap.shipping[each.memory.fief].requests[each.memory.task];
+            if(!fullMission) continue
             let target = Game.getObjectById(fullMission.targetID);
             if(!target) continue;
             if(getTileDistance(each.pos,target.pos) <= 3) continue;

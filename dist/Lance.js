@@ -15,7 +15,7 @@ function Lance(name,details){
 //Sets a target for the creep.
 Lance.prototype.setTarget = function(creep,target) {
     if(!target || !target.id){
-        console.log("Cannot set target for creep",creep.name,", target is invalid or has no ID");
+        //console.log("Cannot set target for creep",creep.name,", target is invalid or has no ID");
         return;
     }
     this.target[creep.id] = target.id;
@@ -26,7 +26,7 @@ Lance.prototype.setTargetPos = function(creep,targetPos) {
     if(!targetPos instanceof RoomPosition){
         //If no x and y, return
         if(!targetPos.x || !targetPos.y){
-            console.log("Cannot set target position for",creep.name,", target position is not a RoomPosition and has no x/y");
+            //console.log("Cannot set target position for",creep.name,", target position is not a RoomPosition and has no x/y");
             return false;
         }
         this.targetPos[creep.id] = {x:targetPos.x,y:targetPos.y,roomName:targetPos.roomName || creep.room.name};
@@ -74,8 +74,8 @@ Lance.prototype.populate = function(fief,kingdomCreeps,options={}){
     }
     //How far away a creep can be and be allowed to join as a reserve
     let distanceRef = {
-        'pikeman':4,
-        'skirmisher':3,
+        'pikeman':6,
+        'skirmisher':5,
         'halberdier':4
     }
     let sevRef = {
@@ -92,10 +92,10 @@ Lance.prototype.populate = function(fief,kingdomCreeps,options={}){
     let takeaway = [];
     kingdomCreeps[this.name] = kingdomCreeps[this.name] || [];
     //First check to see if there are any reserves
-    console.log(kingdomCreeps[this.name])
+    //console.log(kingdomCreeps[this.name])
     if(reserve.length){
         //Convert to creeps and sort by linear distance
-        reserve = reserve.map(crpID => Game.getObjectById(crpID)).filter(crp => crp.memory.role == rolePick && (crp.ticksToLive > Game.map.getRoomLinearDistance(crp.room.name, this.targetRoom)*100 || crp.spawning) && Game.map.getRoomLinearDistance(crp.room.name, this.targetRoom) <= distanceRef[rolePick]).sort((a, b) => {
+        reserve = reserve.map(crpID => Game.getObjectById(crpID)).filter(crp => crp.memory.role == rolePick && (crp.ticksToLive > Game.map.getRoomLinearDistance(crp.room.name, this.targetRoom)*75 || crp.spawning) && Game.map.getRoomLinearDistance(crp.room.name, this.targetRoom) <= distanceRef[rolePick]).sort((a, b) => {
             let distanceA = Game.map.getRoomLinearDistance(a.room.name, this.targetRoom);
             let distanceB = Game.map.getRoomLinearDistance(b.room.name, this.targetRoom);
             return distanceA - distanceB;

@@ -9,15 +9,71 @@ function Warden(room) {
     this.defenseMap = getDefenseMap(room,Memory.kingdom.fiefs[room.name].rampartPlan);
 };
 
-Warden.prototype.run = function(hostiles) {
+Warden.prototype.run = function(hostiles,fiefCreeps) {
     let room = Game.rooms[this.roomName];
-    let ramps = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_RAMPART);
-    
+    let ramps = []
+    let towers = []
+    let damagedKeyStructs = false;
+    let [hostileDamage, hostileHeal,friendlyDamage,friendlyHeal] = [new BigCostMatrix(),new BigCostMatrix(),new BigCostMatrix(),new BigCostMatrix()]
+    //Gather all needed structures, check for damage on key structures
+    for(let each of room.find(FIND_MY_STRUCTURES)){
+        let type = each.structureType;
+        if(type == STRUCTURE_RAMPART){
+            ramps.push(each);
+            continue;
+        }
+        if(type == STRUCTURE_TOWER){
+            towers.push(each);
+            if(each.hits < each.hitsMax)damagedKeyStructs = true;
+            continue;
+        }
+        if([STRUCTURE_SPAWN,STRUCTURE_STORAGE,STRUCTURE_EXTENSION,STRUCTURE_LAB,STRUCTURE_TERMINAL].includes(type) && each.hits < each.hitsMax){
+            damagedKeyStructs = true;
+        }
+    }
+
     //Check if we need to fire safemode due to rampart break or structure damage.
-    if(this.rampSafe && ramps.length != this.rampartPlan.length) console.log("FIRING SAFE MODE - Missing Rampart",this.roomName)//room.controller.activateSafeMode();
-    let keyStructs = room.find(FIND_MY_STRUCTURES).filter(str => [STRUCTURE_SPAWN,STRUCTURE_STORAGE,STRUCTURE_EXTENSION,STRUCTURE_TOWER,STRUCTURE_LAB,STRUCTURE_TERMINAL].includes(str.structureType) && str.hits < str.hitsMax);
-    if(keyStructs.length) console.log("FIRING SAFE MODE - Damaged Key Structure",this.roomName)//room.controller.activateSafeMode();
-    console.log("WARDEN ACTIVE")
+    if(this.rampSafe && ramps.length != this.rampartPlan.length) room.controller.activateSafeMode();
+    if(damagedKeyStructs) room.controller.activateSafeMode();
+
+    //Gather all defensive creeps
+    let guards = [
+        ...(fiefCreeps['man-at-arms'] || []),
+        ...(fiefCreeps.guardsman || [])
+      ];
+
+    //Get current hostile damage/heal maps and total demo power
+    //For move/tough, can add those to the hostile creep object. creep.moveScore and creep.toughScore
+    for(let creep of hostiles){
+        let scores = {attack:0,rangedAttack:0,rangedMassAttack:0,heal:0,rangedHeal:0,dismantle:0,fatigue:0}
+        for(let part of creep.body){
+            if(!part.hits) continue;
+            let type = part.type;
+            let boosts = part.boost ? BOOSTS[type][part.boost] : {};
+            if(type == HEAL){
+                scores.heal += HEAL_POWER*(boosts.heal || 1);
+                scores.rangedHeal += RANGED_HEAL_POWER*(boosts.rangedHeal || 1)
+            }
+            else if(type == RANGED_ATTACK){
+                scores.rangedAttack += RANGED_ATTACK_POWER*(boosts.rangedAttack || 1);
+                scores.rangedMassAttack += RANGED_ATTACK_POWER*(boosts.rangedMassAttack || 1);
+            }
+            else if(type == WORK){
+                scores.dismantle += DISMANTLE_POWER*(boosts.dismantle || 1);
+            }
+            else if(type == ATTACK){
+                scores.attack += ATTACK_POWER*(boosts.attack || 1);
+            }
+            else if(type == MOVE){
+                scores.fatigue += 2*(boosts.fatigue || 1);
+            }
+            else if(type == TOUGH){
+                //Find a way to track
+            }
+        }
+    }
+    //Get current friendly damage/heal maps
+    console.log("WARDEN ACTIVE");
 };
 
 //Generates a map indicating walkable areas, ramparts, and danger zones
@@ -53,6 +109,7 @@ function getDefenseMap(room,rampSpots){
         }
     }
     //Spots 
+    if(!Memory.test) Memory.test = {}
     Memory.test.testCM = walkCM.serialize();
     return walkCM;
 }

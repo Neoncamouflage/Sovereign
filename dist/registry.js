@@ -22,7 +22,12 @@ const registry = {
         'mineralHarvester': 'Gemcutter',
         'remoteHarvest' : 'Delver',
         'halberdier' : 'Halberdier',
-        'crasher'    : 'Undertaker'
+        'crasher'    : 'Undertaker',
+        'attacker'      : 'Knight',
+        'healer'     : 'Squire',
+        'guardsman' : 'Guardsman',
+        'man-at-arms': 'Man-at-Arms',
+        'declaimer'  : 'Duke'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){

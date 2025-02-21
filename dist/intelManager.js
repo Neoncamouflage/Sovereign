@@ -1,6 +1,7 @@
 const registry = require('registry');
 const helper = require('functions.helper');
 const profiler = require('screeps-profiler');
+const closedRooms = new Set();
 const intelManager = {
     toScout:[],
     run: function(scouts,fiefs){
@@ -144,7 +145,7 @@ const intelManager = {
                     if(creep.memory.stuckCheck){
                         let roomStatus = Game.map.getRoomStatus(mem.target).status;
                         if(roomStatus == 'closed'){
-                            global.heap.closedRooms.add(mem.target);
+                            closedRooms.add(mem.target);
                             delete creep.memory.stuckCheck;
                             getExit(creep);
                             
@@ -181,7 +182,7 @@ const intelManager = {
                 //If we're just crossing into another one of our fiefs, deny
                 if(Memory.kingdom.fiefs[roomName]) return false;
                 //If it's a dead room, deny
-                if(global.heap.closedRooms.has(roomName)) return false;
+                if(closedRooms.has(roomName)) return false;
                 //If no data, it's good to scout
                 if(!roomData) return true;
                 //Only consider the room good if it isn't a fief belonging to an enemy, or if it is, if it's been longer than 20k ticks since we looked in on it
@@ -232,7 +233,7 @@ const intelManager = {
                 if(unscouted.length) roomPick = unscouted[Math.floor(Math.random() * unscouted.length)];
                 //If we found one already, use that, otherwise continue
                 if(!roomPick){
-                    console.log("No roompick, finding oldest of",JSON.stringify(roomOpts))
+                    //console.log("No roompick, finding oldest of",JSON.stringify(roomOpts))
                     let highest = 0;
                     for(let scoutRoom of roomOpts){
                         //console.log(JSON.stringify(scoutRoom))

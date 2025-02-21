@@ -225,7 +225,7 @@ function sortCreeps(){
         'archer',
         'pikeman',
         'skirmisher',
-        'halberdier'
+        'halberdier',
     ]
     for(let creepName in Game.creeps){
         let creep = Game.creeps[creepName];

@@ -143,7 +143,7 @@ const supplyDemand = {
             if(MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5){
                 registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : room.storage && room.storage.store[RESOURCE_ENERGY] > 100 ? 100 :  fiefCreeps.length > 2 ? 50 : 60,memory:{role:'hauler',fief:roomName,preflight:false,state:'idle'}})
             }
-            console.log(`${roomName} hauler utilization: ${utilization}`)
+            //console.log(`${roomName} hauler utilization: ${utilization}`)
         }
         
         //console.log(global.heap.shipping[roomName].utilization)
@@ -910,7 +910,7 @@ Task.prototype.remove = function(fiefName) {
 Task.prototype.unassign = function(hauler,reason) {
     if(!reason) reason = 'No reason.'
     //Remove hauler from task
-    console.log("Unassigning task",reason,JSON.stringify(this),"from hauler",hauler.name)
+    //console.log("Unassigning task",reason,JSON.stringify(this),"from hauler",hauler.name)
     if(this.assignedHaulers[hauler.id]) delete this.assignedHaulers[hauler.id];
     //Delete hauler task
     delete hauler.memory.task

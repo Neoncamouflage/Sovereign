@@ -431,7 +431,7 @@ var holdingManager = {
 
                 let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => (helper.isSoldier(crp) || crp.getActiveBodyparts(CLAIM) > 0) && !isFriend(crp))
                 if(hostiles.length && !global.heap.alarms[holdingName]){
-                    global.heap.alarms[holdingName] = {tick:Game.time,creeps:true,expiry:Game.time + Math.max(...hostiles.map(creep => creep.ticksToLive))}
+                    global.heap.alarms[holdingName] = {tick:Game.time,creeps:hostiles.map(creep => creep.id),expiry:Game.time + Math.max(...hostiles.map(creep => creep.ticksToLive))}
                     let hasMission = false;
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                         for(let mission of global.heap.missionMap[holdingName]){

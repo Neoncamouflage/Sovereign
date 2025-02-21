@@ -68,7 +68,7 @@ const fiefPlanner = {
     //Runs scoring on all plans
     //Returns CM and object for best plan
     //Stores rejected plans in heap
-    getFiefPlan: function(roomName,totalPop = 25, maxIterations=10,mutationRate=0.01){
+    getFiefPlan: function(roomName,totalPop = 50, maxIterations=10,mutationRate=0.03){
         // 2.3,0.69,2.28,1.91,2.74,0.44,2.5,2.84,0.46,0.37,1.88,2.45
         //Set up weight minimums and maximums for the genetic algorithm
         let geneLimits = [
@@ -175,21 +175,14 @@ const fiefPlanner = {
             }
             //If the stage is over, move on
             else{
+                let rclPlan = this.getRCLPlan();
+                global.heap.roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS]);
+                global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlan.ramparts];
+                RawMemory.segments[SEGMENT_ROOM_PLANS] = JSON.stringify(global.heap.roomPlans)
                 //If we've completed all stages, set the stage to 0 as we're finished
                 if(fiefPlanner.stage >= fiefPlanner.iterations){
                     fiefPlanner.stage = 0;
                     console.log("Plan evolution complete. Generated",fiefPlanner.iterations*fiefPlanner.population.length,"plans over",fiefPlanner.iterations,"generations in",Game.time-fiefPlanner.startTick,"ticks\nTotalCPU:",fiefPlanner.totalCPU,"\nBest score:",fiefPlanner.bestScore,"\n2nd Place:",fiefPlanner.secondScore,"\n3rd Place:",fiefPlanner.thirdScore)
-                    //Set the best plan to memory
-                    let rclPlan = this.getRCLPlan();
-                    //Memory.testBasePlan = fiefPlanner.bestPlan;
-                    //Memory.testBasePlanCM = fiefPlanner.bestPlanCM;
-                    //Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
-                    //Save the plan in our segment and room
-                    global.heap.roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS]);
-                    global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlan.ramparts];
-                    RawMemory.segments[SEGMENT_ROOM_PLANS] = JSON.stringify(global.heap.roomPlans)
-                    //Save the RCL plan
-                    //Memory.testRCLPlan = rclPlan;
                 }
                 //Else we move to the next generation
                 else{
@@ -197,16 +190,6 @@ const fiefPlanner = {
                     if(fiefPlanner.bestScore - fiefPlanner.secondScore <= fiefPlanner.bestScore *0.01 && fiefPlanner.secondScore - fiefPlanner.thirdScore <= fiefPlanner.thirdScore * 0.01){
                         console.log("Plan evolution complete due to score convergence. Generated",fiefPlanner.iterations*fiefPlanner.population.length,"plans over",fiefPlanner.iterations,"generations in",Game.time-fiefPlanner.startTick,"ticks\nTotalCPU:",fiefPlanner.totalCPU,"\nBest score:",fiefPlanner.bestScore,"\n2nd Place:",fiefPlanner.secondScore,"\n3rd Place:",fiefPlanner.thirdScore)
                         fiefPlanner.stage = 0;
-                        let rclPlan = this.getRCLPlan();
-                        //Memory.testBasePlan = fiefPlanner.bestPlan;
-                        //Memory.testBasePlanCM = fiefPlanner.bestPlanCM;
-                        //Memory.testScoreTracker = fiefPlanner.bestScoreTracker;
-                        //Save the plan in our segment
-                        global.heap.roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS]);
-                        global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlan.ramparts];
-                        RawMemory.segments[SEGMENT_ROOM_PLANS] = JSON.stringify(global.heap.roomPlans)
-                        //Save the RCL plan
-                        //Memory.testRCLPlan = rclPlan;
                         return;
                     }
                     console.log("Generation",fiefPlanner.stage,"complete. Breeding population for generation",fiefPlanner.stage+1+".")

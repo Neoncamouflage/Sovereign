@@ -35,15 +35,19 @@ const painter = {
     },
     drawRoomPlan: function(roomName){
         let plans = JSON.parse(RawMemory.segments[1]);
+        let heapPlan = heap.roomPlans && heap.roomPlans[roomName]
         let plan
         let ramps
-        if(plans[roomName]){
-            [plan, ramps] = plans[roomName]
+        if(heapPlan){
+            [plan, ramps] = heapPlan;
         }
         //let ramps = Memory.kingdom.fiefs[roomName].rampartPlan;
-        if(!plan || !ramps){
+        if(!heapPlan && !plans[roomName]){
             new RoomVisual(roomName).text("NO FIEF PLAN",25,25, {color:'#ffa500',font:'3 Bridgnorth'});
             return;
+        }
+        else{
+            [plan,ramps] = plans[roomName];
         }
         let roomVis =  new RoomVisual(roomName);
         let holdingArray = []

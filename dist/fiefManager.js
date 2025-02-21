@@ -12,7 +12,7 @@ const fiefManager = {
     run:function(room,fiefCreeps){
         heap.fiefs[room.name].buildQueue = heap.fiefs[room.name].buildQueue || {}
         let buildQueue = heap.fiefs[room.name].buildQueue
-        //console.log("BUILDQUEUE",JSON.stringify(buildQueue))
+        //console.log("BUILDQUEUE",JSON.stringify(buildQueue).length,JSON.stringify(buildQueue))
         let cpuStart = Game.cpu.getUsed();
         //Set Reference
         let restartFlag = false;
@@ -162,7 +162,7 @@ const fiefManager = {
 
         }
         //If we have some controller progress for a buffer, check if we need to build the next site
-        if(room.controller.progress > 100 && Object.keys(buildQueue).length && !cSites.length){
+        if(Object.keys(buildQueue).length && !cSites.length){
             let toBuild;
             //Spawns > Storage > Towers > Extensions > Roads > Labs
             let structOrder = [STRUCTURE_SPAWN,STRUCTURE_STORAGE,STRUCTURE_TOWER,STRUCTURE_EXTENSION,STRUCTURE_ROAD,STRUCTURE_LAB,STRUCTURE_CONTAINER,STRUCTURE_LINK,STRUCTURE_EXTRACTOR,STRUCTURE_OBSERVER,STRUCTURE_TERMINAL,STRUCTURE_FACTORY,STRUCTURE_POWER_SPAWN,STRUCTURE_NUKER]
@@ -255,7 +255,6 @@ const fiefManager = {
                     }
 
                     let l = room.createConstructionSite(coordinate.x,coordinate.y,building,name)
-                    cCount++;
                     //console.log("SITE1")
                     Memory.spawnBuild = l
                 }
@@ -461,13 +460,13 @@ const fiefManager = {
                 //console.log("Hostiles")
                 //Run our warden if it already exists, else create one
                 if(warden){
-                    warden.run(hostiles);
+                    warden.run(hostiles,fiefCreeps);
                 }
                 else{
                     warden = new Warden(room);
                     if(!heap.wardens) heap.wardens = {};
                     heap.wardens[room.name] = warden;
-                    warden.run(hostiles);
+                    warden.run(hostiles,fiefCreeps);
                 }
             }
             else if(warden){
@@ -1281,7 +1280,7 @@ const fiefManager = {
         }
 
         //If we have storage levels and safemode is over or low, run through rampart check every so often
-        if(Game.time % 200 == 0 && room.storage && room.storage.store[RESOURCE_ENERGY] > 20000 && (!room.controller.safeMode || room.controller.safeMode < 3000)){
+        if(Game.time % 200 == 0 && room.storage && room.storage.store[RESOURCE_ENERGY] > 20000 && ((room.controller.level <=4 && !room.controller.safeMode) || room.controller.safeMode < 3000)){
             if(fief.rampartPlan){
                 //Count the current construction sites, no more than 10 for ramparts
                 let count = cSites.length;
@@ -1320,7 +1319,7 @@ const fiefManager = {
     let norepCans = Object.values(fief.sources).map(source => source.can)
     for(let tower of towers) {
         var damagedStructures = tower.room.find(FIND_STRUCTURES, {
-            filter: (structure) => (structure.hits < structure.hitsMax*0.8 && ![STRUCTURE_RAMPART,STRUCTURE_WALL].includes(structure.structureType) && !norepCans.includes(structure.id))
+            filter: (structure) => (((structure.hits < structure.hitsMax*0.8 || structure.hits < structure.hitsMax && structure.structureType != STRUCTURE_ROAD) && ![STRUCTURE_RAMPART,STRUCTURE_WALL].includes(structure.structureType)) && !norepCans.includes(structure.id))
         });
 
         var damagedCreeps = tower.room.find(FIND_MY_CREEPS, {

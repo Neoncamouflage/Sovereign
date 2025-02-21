@@ -282,6 +282,11 @@ global.spawnCreep = function(role,body,fief,sev=50,memory = {}){
     Memory.hardSpawns[fief].push(plan)
 }
 
+global.isExit = function(spot){
+    if(spot.x % 49 && spot.y % 49)return false;
+    return true;
+}
+
 global.parseBody = function(bodyString){
     // '2W2M' => WORK,WORK,MOVE,MOVE
     // '2WM'  => WORK,MOVE,WORK,MOVE

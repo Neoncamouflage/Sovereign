@@ -59,6 +59,8 @@ const marshal = {
         details.priority = options.priority || DEFAULT_MISSION_PRIORITY;
         if(options.type) details.type = options.type;
         if(options.targets) details.targets = options.targets || [];
+        if(options.baseFief) details.baseFief = options.baseFief;
+        if(options.unitsNeeded) details.unitsNeeded = options.unitsNeeded
         
 
         missionMap[details.roomName] = missionMap[details.roomName] || [];
@@ -104,6 +106,8 @@ function Mission(details) {
     this.tick = Game.time;
     this.targets = details.targets || [];
     this.done = false;
+    this.baseFief = details.baseFief || null;
+    this.unitPick = details.unitsNeeded;
     this.assigned = null;
 }
 
