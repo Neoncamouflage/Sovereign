@@ -323,7 +323,27 @@ function scorePlan(roomName,newPlanCM,newPlan){
     )
 
     //console.log("Scores",JSON.stringify(scores));
-
+/**
+ *         Memory.scoreWeights = {
+            rampTileWeight:2,
+            rampDistWeight:0.2,
+            controllerDistWeight:3,
+            sourceDistWeight:0.3,
+            extensionDistWeight:2,
+            extensionMaxWeight:1,
+            extensionMissingWeight:8,
+            controllerFoundWeight:100,
+            sourceFoundWeight:25,
+            structureFoundWeight:500
+        }
+ */
+    //Get total weighted score for overall fitness
+    //Just current total for now, will test to try different weights
+    let total = 0;
+    for(let num of Object.values(scores)){
+        total += num;
+    }
+    scores.total = total;
     return scores;
 
 }
@@ -381,11 +401,43 @@ function finalizePlan(config){
 }
 
 function updateGeneration(config){
-    chronicle.log(`Generation complete. Breeding new population.`,'architect',4)
+    chronicle.log(`Generation ${config.stage} complete. Breeding new population.`,'architect',3)
     let history = JSON.parse(RawMemory.segments[SEGMENT_PLAN_GENERATIONS]);
-    //let [key,]
-    
-    
+    let plans = config.currentPlans.map(plan => {
+        return {scores:plan[2],genes:plan[1]}
+    })
+    //Update stage and reset subject
+    config.stage++;
+    config.subject = 0;
+    //This function utilizes manually niched breeding into each category
+
+
+
+
+    function breedMNiche(){
+            //Sort plans by their scores
+        //Objects to hold our niches. The top scoring of each will be niched together
+        let towers = {}
+        let ramparts = {}
+        let extensions = {}
+        let storage = {}
+        let misc = {}
+        let allScores = {...config.elite}
+
+        for(let plan of plans){
+            
+        }
+
+        //Sort into niches based on top score (10% of total pop allowed per niche)
+        //Top 20% of current generation+global elite make up the new global elite pool
+        //Iterate over pairings until we fill the needed population
+        //Pairings: 2 random within niche, 2 random across niches, 1 random niche and a global elite, 2 random global elites
+        //Last two only happen every other iteration to encourage niche breeding
+
+    }
+
+
+
 }
 
 
@@ -398,7 +450,7 @@ const architect = {
     data: {},
 
     //Called to start a new plan process
-    startPlan: function(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01,maxMutationMagnitude=0.5}={}){
+    startPlan: function(roomName,{totalPop, maxIterations,mutationRate,maxMutationMagnitude}={}){
         chronicle.log(`Generating room plan data/config - ${roomName}.`,'architect',4)
         let roomData = getScoutData(roomName)
         if(!roomData){
@@ -411,7 +463,8 @@ const architect = {
             stage:1,
             subject:0,
             totalCPU:0,
-            step:0,
+            niches:{},
+            elite:{},
             bestScore:Infinity,
             secondScore:Infinity,
             thirdScore:Infinity,
@@ -437,7 +490,7 @@ const architect = {
     },
 
     //Continues the current room plan process
-    run: function(roomName){
+    run: function(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01,maxMutationMagnitude=0.5}={}){
         chronicle.log(`Run start...\nConfig:${JSON.stringify(this.config)}\nData:${JSON.stringify(this.data)}`,'architect',4)
         //If no plan config
         if(!this.config){
@@ -445,7 +498,7 @@ const architect = {
                 chronicle.log(`No room name provided for run function aand no existing plan to continue.`,'architect',1)
                 return;
             }
-            let start = this.startPlan(roomName);
+            let start = this.startPlan(roomName,{totalPop:totalPop,maxIterations:maxIterations,mutationRate:mutationRate,maxMutationMagnitude:maxMutationMagnitude});
             if(!start) return;
         }
         if(!roomName) roomName = this.data.roomName
@@ -488,8 +541,8 @@ const architect = {
 
 module.exports = architect;
 //profiler.registerObject(architect, 'architect');
-global.testFiefPlan = function testFiefPlan(roomName){
-    architect.run(roomName);
+global.testFiefPlan = function testFiefPlan(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01,maxMutationMagnitude=0.5}={}){
+    architect.run(roomName,{totalPop:totalPop,maxIterations:maxIterations,mutationRate:mutationRate,maxMutationMagnitude:maxMutationMagnitude});
 }
 
 /**

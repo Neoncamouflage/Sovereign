@@ -9,7 +9,7 @@ const marshal = {
         for(let [room,alarm] of Object.entries(global.heap.alarms)){
             if(Game.time - alarm.tick > 1500 || (alarm.expiry && Game.time > alarm.expiry)) delete global.heap.alarms[room]
         }
-        for(let mission of Object.values(global.heap.missions)){
+        for(let mission of Object.values(heap.missions)){
             if(!mission.assigned){
                 let troupe = new Troupe(mission);
                 mission.assigned = troupe.name;
@@ -71,7 +71,7 @@ const marshal = {
     //Adds a mission, requirements depend on mission type
     //Preferable attributes are roomName, priority, type, targets, scop
     addMission: function(options){
-        let missionMap = global.heap.missionMap || setupMissionMap();
+        let missionMap = heap.missionMap || setupMissionMap();
         let details = {};
         
         details.roomName = options.roomName || options.targetRoom; //Room is the target or requester room, depending on mission
@@ -85,7 +85,15 @@ const marshal = {
         missionMap[details.roomName] = missionMap[details.roomName] || [];
         let newMission = new Mission(details);
         missionMap[details.roomName].push(newMission);
-        global.heap.missions[newMission.missionID] = newMission
+        heap.missions[newMission.missionID] = newMission
+
+
+        if(!newMission.assigned){
+            let troupe = new Troupe(newMission);
+            newMission.assigned = troupe.name;
+        }
+
+        chronicle.log(`Troupe ${newMission.assigned} assigned ${options.type} mission for ${options.roomName}.`,'marshal',3);
 
     },
     //Quick, premade missions to call

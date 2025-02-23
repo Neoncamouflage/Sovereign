@@ -437,8 +437,8 @@ const fiefManager = {
 
             let domainRooms = getDomainRooms(room.name)
             let fDomain = domainRooms.filter(dRoom => !Memory.kingdom.holdings[dRoom] && dRoom.type != ROOM_SOURCE_KEEPER);
-            console.log("D",domainRooms)
-            console.log("F",fDomain)
+            //console.log("D",domainRooms)
+            //console.log("F",fDomain)
             for(let dRoom of fDomain){
                 
                 let dData = getScoutData(dRoom.roomName);
@@ -472,7 +472,7 @@ const fiefManager = {
             }
             else if(warden && warden.lastActive){
                 if(Game.time-warden.lastActive > 10){
-                    chronicle.log(`10 ticks since last hostile spotted in room ${room.name}. Returning room control and resolving room Warden.`,'fiefManager',3);
+                    chronicle.log(`${room.name} - Warden watch period expired. Room control returned.`,'fiefManager',3);
                     delete heap.wardens[room.name]
                 }
                 
@@ -1550,7 +1550,7 @@ function getDomainRooms(fief) {
         validRooms.push({roomName:thisRoom.roomName,depth:thisRoom.depth,scouted:false,type:type})
     }
     Memory.kingdom.fiefs[fief].domain = validRooms;
-    chronicle.log(`${room.name} domain mapped. ${validRooms.length} domain rooms located.`,'fiefManager',3);
+    chronicle.log(`${room.name} -  Domain mapped. ${validRooms.length} rooms located.`,'fiefManager',3);
     return validRooms;
 }
 

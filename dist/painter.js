@@ -106,12 +106,57 @@ const painter = {
     },
     drawScores: function(config){
         if(!config){
-            chronicle.log(`No config available in the architect.`,'painter',4)
+            //chronicle.log(`No config available in the architect.`,'painter',4)
             return;
         }
+        let roomVis = new RoomVisual(config.roomName);
+        
         let planData = config.currentPlans[config.currentPlans.length-1];
         let [stageSubject,genes,scores,plan] = planData;
-        chronicle.log(`Plan data: ${JSON.stringify(plan)}`,'painter',4)
+        //chronicle.log(`Plan found. ${Object.keys(plan)}.`,'painter',4)
+        for(let key of Object.keys(plan.roads)){
+            let rds = plan.roads[key];
+            if(key=='sources'){
+                for(let source of plan.roads[key]){
+                    for(let spot of source){
+                        roomVis.structure(spot.x,spot.y,STRUCTURE_ROAD);
+                    }
+                }
+            }
+            else{
+                for(let spot of rds){
+                    roomVis.structure(spot.x,spot.y,STRUCTURE_ROAD);
+                }
+            }
+        }
+        roomVis.connectRoads()
+        for(let key of Object.keys(plan)){
+            if(Object.keys(CONTROLLER_STRUCTURES).includes(key)){
+                if(key == STRUCTURE_STORAGE) roomVis.structure(plan[key].x,plan[key].y,key);
+                else{
+                    for(let spot of plan[key]){
+                        roomVis.structure(spot.x,spot.y,key);
+                    }
+                }
+
+            }
+        }
+        for(let ramp of plan.ramparts){
+            roomVis.circle(ramp.x,ramp.y,{fill:'green',radius:0.5});
+        }
+        //chronicle.log(`Plan data: ${JSON.stringify(plan)}`,'painter',4)
+        let scoreText = ['Plan Scores:'];
+        for(let type of Object.keys(scores)){
+            let score = scores[type];
+            scoreText.push(`${type}: ${score}`);
+        }
+        let count = 0;
+        for(let line of scoreText){
+            roomVis.text(line,48,13+count,{color: 'white', fontSize: 10,align:count = 0 ? 'center' : 'right'});
+            count++
+        }
+        
+
     },
     drawFiefCM: function(fief){
         let matrix = Memory.kingdom.fiefs.costMatrix

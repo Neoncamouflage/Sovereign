@@ -279,12 +279,12 @@ const helper = {
     //Generates a tower damage map for the room
     getTowerMap: function(room,serialized=false){
         if(!(room instanceof Room)){
-            console.log("Room object must be provided for tower data");
+            chronicle.log(`Room object must be provided to generate a tower map.`,'helper.getTowerMap',1)
             return;
         }
         let tCM = new BigCostMatrix();
         let towers = room.find(FIND_STRUCTURES).filter(str=> str.structureType == STRUCTURE_TOWER);
-        console.log("TOWERS",towers)
+        //console.log("TOWERS",towers)
         let terrain = Game.map.getRoomTerrain(room.name);
         for(let x=0;x<50;x++){
             for(let y=0;y<50;y++){

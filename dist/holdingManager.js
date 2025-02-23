@@ -233,66 +233,65 @@ var holdingManager = {
             let otherRoom;
             let otherRoomType;
             let fiefPlan;
-            if(!remoteRoute) console.log("BAD ROUTE FOR",holdingName)
-                else{
+        if(remoteRoute){
 
-                    //holding.remoteRoute = remoteRoute;
-                    totalRoute.forEach(spot =>{
-                        if(spot.roomName == holdingName){
-                            thisCM.set(spot.x,spot.y,1)
-                        }
-                        //If it isn't this holding, see if we can update another room's CM
-                        //See if we've already got it
-                        else if(otherRoom && otherCM && spot.roomName == otherRoom){
-                            //Update the existing other room's CM if not already set
-                            if(otherCM.get(spot.x,spot.y) == 0){
-                                otherCM.set(spot.x,spot.y,1)
-                                //Update fief room plan if needed
-                                if(otherRoomType == 'fiefs'){
-                                    //fiefPlan.push({x:spot.x,y:spot.y})
-                                }
-                            }
-                        }
-                        //If we don't already have it, or it's a different room, get it
-                        //Check holdings
-                        else if(Memory.kingdom.holdings[spot.roomName]){
-                            //First, submit the other room's CM if need be
-                            if(otherRoom){
-                                Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
-                            }
-                            //Set our tracking for the other room
-                            otherRoom = spot.roomName
-                            otherRoomType = 'holdings'
-                            //Get the other CM
-                            otherCM = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[spot.roomName].costMatrix);
-                            //Set the cost we found
-                            if(otherCM.get(spot.x,spot.y) == 0){
-                                otherCM.set(spot.x,spot.y,1)
-                            }
-        
-                        }
-                        //Same for fiefs
-                        else if(Memory.kingdom.fiefs[spot.roomName]){
-                            if(otherRoom){
-                                Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
-                            }
-                            otherRoom = spot.roomName
-                            otherRoomType = 'fiefs'
-                            fiefPlan = Memory.kingdom[otherRoomType][otherRoom].roomPlan[Game.rooms[otherRoom].controller.level][STRUCTURE_ROAD]
-                            otherCM = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[spot.roomName].costMatrix);
-                            if(otherCM.get(spot.x,spot.y) == 0){
-                                otherCM.set(spot.x,spot.y,1)
-                                //Add the road to their room plan for the current level
+                //holding.remoteRoute = remoteRoute;
+                totalRoute.forEach(spot =>{
+                    if(spot.roomName == holdingName){
+                        thisCM.set(spot.x,spot.y,1)
+                    }
+                    //If it isn't this holding, see if we can update another room's CM
+                    //See if we've already got it
+                    else if(otherRoom && otherCM && spot.roomName == otherRoom){
+                        //Update the existing other room's CM if not already set
+                        if(otherCM.get(spot.x,spot.y) == 0){
+                            otherCM.set(spot.x,spot.y,1)
+                            //Update fief room plan if needed
+                            if(otherRoomType == 'fiefs'){
                                 //fiefPlan.push({x:spot.x,y:spot.y})
                             }
                         }
-                        
-                    })
-                    //Submit CM for our holding and for the other room if we have one
-                    holding.costMatrix = thisCM.serialize();
-                    if(otherCM){
-                        Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
                     }
+                    //If we don't already have it, or it's a different room, get it
+                    //Check holdings
+                    else if(Memory.kingdom.holdings[spot.roomName]){
+                        //First, submit the other room's CM if need be
+                        if(otherRoom){
+                            Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
+                        }
+                        //Set our tracking for the other room
+                        otherRoom = spot.roomName
+                        otherRoomType = 'holdings'
+                        //Get the other CM
+                        otherCM = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[spot.roomName].costMatrix);
+                        //Set the cost we found
+                        if(otherCM.get(spot.x,spot.y) == 0){
+                            otherCM.set(spot.x,spot.y,1)
+                        }
+    
+                    }
+                    //Same for fiefs
+                    else if(Memory.kingdom.fiefs[spot.roomName]){
+                        if(otherRoom){
+                            Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
+                        }
+                        otherRoom = spot.roomName
+                        otherRoomType = 'fiefs'
+                        fiefPlan = Memory.kingdom[otherRoomType][otherRoom].roomPlan[Game.rooms[otherRoom].controller.level][STRUCTURE_ROAD]
+                        otherCM = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[spot.roomName].costMatrix);
+                        if(otherCM.get(spot.x,spot.y) == 0){
+                            otherCM.set(spot.x,spot.y,1)
+                            //Add the road to their room plan for the current level
+                            //fiefPlan.push({x:spot.x,y:spot.y})
+                        }
+                    }
+                    
+                })
+                //Submit CM for our holding and for the other room if we have one
+                holding.costMatrix = thisCM.serialize();
+                if(otherCM){
+                    Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
+                }
             }
 
         }
@@ -311,7 +310,6 @@ var holdingManager = {
                     }
                 }
                 if(!hasMission){
-                    console.log("Requesting core mission",holdingName)
                     marshal.destroyCore(holdingName,hostiles[0].id,resTime);
                 }
             }
@@ -440,7 +438,6 @@ var holdingManager = {
                         }
                     }
                     if(!hasMission && Game.rooms[holding.homeFief].controller.level > 2){
-                        console.log("Requesting defend mission",holdingName)
                         marshal.defend(holdingName);
                     }
                 }else{
@@ -623,7 +620,7 @@ var holdingManager = {
 
 
 
-        console.log("Orbit key sites:\n",JSON.stringify(keySites))
+        //console.log("Orbit key sites:\n",JSON.stringify(keySites))
         //Get initial paths between all key sites and store them in the newOrbit array
         for(let i = 0; i < keySites.length ; i++){
             if(i+1 == keySites.length){
@@ -680,10 +677,10 @@ var holdingManager = {
                         //console.log(spot1,spot2)
                     }
                     catch(e){
-                        console.log('Error',e)
-                        console.log(midPoints)
-                        console.log(spot1)
-                        console.log(spot2)
+                        //console.log('Error',e)
+                        //console.log(midPoints)
+                        //console.log(spot1)
+                        //console.log(spot2)
                         targetFlag = true
                     }
                 })
@@ -913,8 +910,8 @@ var holdingManager = {
                 shortestRoute = route;
             }
         }*/
-       console.log("PATHS")
-       console.log(JSON.stringify(paths))
+       //console.log("PATHS")
+       //console.log(JSON.stringify(paths))
        for(let each of paths){
             let total = 0;
             for(let [id,path] of Object.entries(each)){
@@ -926,10 +923,10 @@ var holdingManager = {
             }
        }
         //Memory.remoteRoadTest = totalRoutes;
-        console.log("SHRT ROUTE")
-        console.log(JSON.stringify(shortestRoute))
+        //console.log("SHRT ROUTE")
+        //console.log(JSON.stringify(shortestRoute))
+        chronicle.log(`Remote road route calculated for ${roomName}. Length: ${shortestLen}.`,'holdingManager',3)
         return shortestRoute;
-        //Why
 
     }
 };
