@@ -1,6 +1,7 @@
 const Troupe = require('Troupe');
 const DEFAULT_MISSION_PRIORITY = 5;
 const profiler = require('screeps-profiler');
+const helper = require('functions.helper')
 const marshal = {
     //Assign missions to troupes and run them
     run: function(kingdomCreeps){
@@ -21,24 +22,42 @@ const marshal = {
         for(let crp of global.heap.army.reserve){
             let creep = Game.getObjectById(crp)
             let injured = creep.room.find(FIND_MY_CREEPS).filter(crp => crp.hits < crp.hitsMax)
-            let hostiles = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp.owner.username))
+            let hostiles = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp.owner.username) && !helper.isScout(crp))
             let attk = creep.getActiveBodyparts(ATTACK);
             let rng = creep.getActiveBodyparts(RANGED_ATTACK);
+            let closeRange = false;
             if(hostiles.length && (attk>1 || rng>1)){
                 let target = creep.pos.findClosestByRange(hostiles);
                 creep.travelTo(target,{range:rng > 1 ? 3 : 1});
                 creep.attack(target);
-                creep.rangedAttack(target);
+                if(creep.pos.getRangeTo(target) <=1){
+                    creep.rangedMassAttack()
+                    closeRange = true;
+                }
+                else if(helper.isSoldier(target) && creep.pos.getRangeTo(target) <= 2){
+                    let res = PathFinder.search(creep.pos, {pos:target.pos,range:4}, {flee:true})
+                    let resPath = res.path;
+                    let next = creep.pos.getDirectionTo(resPath[0])
+                    let x = creep.move(next)
+                    //let oppositeDirection = creep.pos.getDirectionTo(target);
+                    //let moveDirection = (oppositeDirection + 3) % 8 + 1;
+                    //creep.move(moveDirection);
+                }
+                else{
+                    creep.rangedAttack(target);
+                }
+
+                
             }
-            else if(injured.length && creep.getActiveBodyparts(HEAL) > 1){
-                creep.travelTo(injured[0])
+            if(injured.length && creep.getActiveBodyparts(HEAL) > 1){
+                if(!hostiles.length || closeRange)creep.travelTo(injured[0])
                 if(creep.pos.getRangeTo(injured[0]) > 1){
                     creep.rangedHeal(injured[0])
                 }else{
                     creep.heal(injured[0])
                 }
             }
-            else{
+            else if(!hostiles.length){
                 if(creep.room.name != creep.memory.fief){
                     creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
                 }

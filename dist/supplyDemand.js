@@ -565,7 +565,7 @@ const supplyDemand = {
                 if(task.type == 'pickup'){
                     let pickTarget = Game.getObjectById(task.targetID);
                     if(!pickTarget || pickTarget == null){
-                        console.log("Bad pickuptarget",task.targetID)
+                        //console.log("Bad pickuptarget",task.targetID)
                         task.remove(creep.memory.fief)
                         creep.memory.state = IDLE;
                     }

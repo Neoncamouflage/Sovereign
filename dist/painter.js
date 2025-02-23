@@ -1,5 +1,6 @@
 if(!Memory.visuals) Memory.visuals = {};
 const profiler = require('screeps-profiler');
+const architect = require('architect')
 const painter = {
     //Paints visuals based on flags set in memory
     run: function(kingdomCreeps){
@@ -19,6 +20,7 @@ const painter = {
         if(visuals.drawIntel) this.drawIntel(kingdomCreeps);
         if(visuals.drawTest) this.drawTest();
         if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan)
+        if(visuals.drawScores) this.drawScores(architect.config)
         
     },
     setVisual: function(vis,setting='default'){
@@ -101,6 +103,15 @@ const painter = {
         for(let ramp of Memory.kingdom.fiefs[fief].rampartPlan){
             roomVis.circle(ramp.x,ramp.y,{fill:'green',radius:0.5});
         }
+    },
+    drawScores: function(config){
+        if(!config){
+            chronicle.log(`No config available in the architect.`,'painter',4)
+            return;
+        }
+        let planData = config.currentPlans[config.currentPlans.length-1];
+        let [stageSubject,genes,scores,plan] = planData;
+        chronicle.log(`Plan data: ${JSON.stringify(plan)}`,'painter',4)
     },
     drawFiefCM: function(fief){
         let matrix = Memory.kingdom.fiefs.costMatrix

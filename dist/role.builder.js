@@ -119,7 +119,7 @@ const roleBuilder = {
                 if(creep.memory.job == 'remoteBuilder'){
                     orderDetails.international = true;
                     orderDetails.priority = 6
-                    orderDetails.amount *= 2;
+                    orderDetails.amount *= 3;
                 }
                 if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2 || creep.memory.job == 'remoteBuilder') supplyDemand.addRequest(creep.room,orderDetails)
             }
@@ -142,6 +142,7 @@ const roleBuilder = {
                     if(creep.memory.job == 'remoteBuilder'){
                         orderDetails.international = true;
                         orderDetails.priority = 6
+                        orderDetails.amount *= 3;
                     }
                     if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2 || creep.memory.job == 'remoteBuilder') supplyDemand.addRequest(creep.room,orderDetails)
                 }
@@ -246,7 +247,7 @@ const roleBuilder = {
             //If we have a target and need energy, request
             if(!target || creep.pos.getRangeTo(target) > 6) continue;
             if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
-                supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity()*3,resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
         }
 

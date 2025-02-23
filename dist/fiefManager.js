@@ -60,7 +60,7 @@ const fiefManager = {
 
         if(!fief.roomPlan || fief.roomPlan == 'null'){
             //restartFlag = true;
-            let roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS] ? RawMemory.segments[SEGMENT_ROOM_PLANS] : ''); //Fix this at some point to make sure it exists on tick 1
+            let roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS] ? RawMemory.segments[SEGMENT_ROOM_PLANS] : '{}'); //Fix this at some point to make sure it exists on tick 1
             if(roomPlans[room.name]){
                 [fief.roomPlan, fief.rampartPlan] = roomPlans[room.name]
             }
@@ -457,6 +457,7 @@ const fiefManager = {
             let hostiles = room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp) && !helper.isScout(crp));
             let warden = heap.wardens && heap.wardens[room.name];
             if(hostiles.length){
+                
                 //console.log("Hostiles")
                 //Run our warden if it already exists, else create one
                 if(warden){
@@ -469,9 +470,12 @@ const fiefManager = {
                     warden.run(hostiles,fiefCreeps);
                 }
             }
-            else if(warden){
-                //console.log("Ending warden!")
-                delete heap.wardens[room.name]
+            else if(warden && warden.lastActive){
+                if(Game.time-warden.lastActive > 10){
+                    chronicle.log(`10 ticks since last hostile spotted in room ${room.name}. Returning room control and resolving room Warden.`,'fiefManager',3);
+                    delete heap.wardens[room.name]
+                }
+                
             }
         }
         
@@ -1509,7 +1513,7 @@ function manageResourceCollection(room) {
 
 function getDomainRooms(fief) {
     if(Memory.kingdom.fiefs[fief].domain){
-        console.log("DOMAIN ALREADY HERE");
+        //console.log("DOMAIN ALREADY HERE");
         return Memory.kingdom.fiefs[fief].domain;
     }
     //BFS for rooms in range
@@ -1546,6 +1550,7 @@ function getDomainRooms(fief) {
         validRooms.push({roomName:thisRoom.roomName,depth:thisRoom.depth,scouted:false,type:type})
     }
     Memory.kingdom.fiefs[fief].domain = validRooms;
+    chronicle.log(`${room.name} domain mapped. ${validRooms.length} domain rooms located.`,'fiefManager',3);
     return validRooms;
 }
 

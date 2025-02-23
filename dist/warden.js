@@ -7,9 +7,13 @@ function Warden(room) {
     this.rampartPlan = Memory.kingdom.fiefs[room.name].rampartPlan;
     this.rampSafe = checkRamps(room,Memory.kingdom.fiefs[room.name].rampartPlan);
     this.defenseMap = getDefenseMap(room,Memory.kingdom.fiefs[room.name].rampartPlan);
+    this.lastActive = Game.time;
+    this.firstActive = Game.time;
+    chronicle.log(`Warden activated in ${room.name}.`,'Warden',3);
 };
 
 Warden.prototype.run = function(hostiles,fiefCreeps) {
+    this.lastActive = Game.time;
     let room = Game.rooms[this.roomName];
     let ramps = []
     let towers = []
@@ -73,7 +77,7 @@ Warden.prototype.run = function(hostiles,fiefCreeps) {
         }
     }
     //Get current friendly damage/heal maps
-    console.log("WARDEN ACTIVE");
+
 };
 
 //Generates a map indicating walkable areas, ramparts, and danger zones

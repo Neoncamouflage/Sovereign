@@ -50,7 +50,7 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
         //If no target or position, defend self and heal
         if(!target && !targetPos){
             let structTargets = creep.room.find(FIND_STRUCTURES, {
-                filter: (structure) => structure.structureType != STRUCTURE_CONTROLLER && structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_WALL
+                filter: (structure) => structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_CONTROLLER&& structure.structureType != STRUCTURE_WALL
             });
             if(structTargets.length){
                 let stTarget = creep.pos.findClosestByRange(structTargets);
@@ -74,7 +74,8 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
         if(target){
             //console.log("target found",target,creep.pos.getRangeTo(target))
             if(!remoteHealing) creep.heal(creep)
-            if(creep.pos.getRangeTo(target) <=3){
+            let targetRange = creep.pos.getRangeTo(target);
+            if(targetRange <=3){
                 //console.log("Range to creep <=3")
                 if(creep.pos.getRangeTo(target) <=1){
                     creep.rangedMassAttack();
@@ -83,12 +84,17 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
                     creep.rangedAttack(target);
                 }
                 if(injuredFar && closest){
-                    creep.moveTo(closest)
+                    creep.travelTo(closest)
                 }
-                else if(helper.isSoldier(target)){
-                    let oppositeDirection = creep.pos.getDirectionTo(target);
-                    let moveDirection = (oppositeDirection + 3) % 8 + 1;
-                    creep.move(moveDirection);
+                else if(helper.isSoldier(target) && targetRange <= 2){
+                    let res = PathFinder.search(creep.pos, {pos:target.pos,range:4}, {flee:true})
+                    let resPath = res.path;
+                    let next = creep.pos.getDirectionTo(resPath[0])
+                    let x = creep.move(next)
+                    //chronicle.log(`Fleeing - ${target.pos} - ${JSON.stringify(res)}\n${creep.pos} - Range:${targetRange}\n${JSON.stringify(x)}`,'BlinkyLance',4,'travel,blinky')
+                    //let oppositeDirection = creep.pos.getDirectionTo(target);
+                    //let moveDirection = (oppositeDirection + 3) % 8 + 1;
+                    //creep.move(moveDirection);
                 }
 
             }
@@ -106,7 +112,7 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
             }
         }
         else if(targetPos){
-            console.log("TARGETPOS",JSON.stringify(targetPos))
+            //console.log("TARGETPOS",JSON.stringify(targetPos))
            // console.log(creep,"travelling")
             let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{range:targetPos.range || 1,military:true});
             //console.log(JSON.stringify(x))

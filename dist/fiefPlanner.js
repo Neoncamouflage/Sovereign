@@ -176,7 +176,7 @@ const fiefPlanner = {
             //If the stage is over, move on
             else{
                 let rclPlan = this.getRCLPlan();
-                global.heap.roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS]);
+                global.heap.roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS] || '{}');
                 global.heap.roomPlans[fiefPlanner.roomName] = [rclPlan,fiefPlanner.bestPlan.ramparts];
                 RawMemory.segments[SEGMENT_ROOM_PLANS] = JSON.stringify(global.heap.roomPlans)
                 //If we've completed all stages, set the stage to 0 as we're finished
@@ -392,6 +392,25 @@ const fiefPlanner = {
                 minCFWeight:1
             }
         }
+        else{
+            opts = {
+                eWeight:opts[0],
+                cWeight:opts[1],
+                sWeight:opts[2],
+                dWeight:opts[3],
+                blobTWeight:opts[4],
+                blobCWeight:opts[5],
+                blobEWeight:opts[6],
+                assnEWeight:opts[7],
+                assnCWeight:opts[8],
+                minCCWeight:opts[9],
+                minCEWeight:opts[10],
+                minCDWeight:opts[11],
+                minCIWeight:opts[12],
+                minCFWeight:opts[13]
+            }
+        }
+        chronicle.log(`Begin room planning. Genes: ${JSON.stringify(opts)}`,'fiefPlanner',4)
         //CONSTANTS
         const CORE_DISTANCE_TRANSFORM_MINIMUM = 2;
         const CORE_ZONE_RADIUS = 1;
@@ -405,8 +424,8 @@ const fiefPlanner = {
         let roomData = getScoutData(roomName)
         //If no room data, we're likely in spinup or no scout
         if(!roomData){
-            console.log("No room data for the room planner");
-                return [-1,-1,-1];
+            chronicle.log(`No room data for planner.`,'fiefPlanner',4)
+                return false;
         }
         let sources = roomData.sources;
         let mineral = roomData.mineral;
@@ -628,7 +647,10 @@ const fiefPlanner = {
 
 
 
-        if(!coreLocation) return [-1,-1,-1]
+        if(!coreLocation){
+            chronicle.log(`No core location available.`,'fiefPlanner',1)
+            return false;
+        }
 
 
         //Path roads
@@ -691,7 +713,8 @@ const fiefPlanner = {
                 //console.log("No last spot for source",source.x,source.y)
                 //console.log(sourcePath)
                 //Return negatives
-                return [-1,-1,-1]
+                chronicle.log(`No last spot for source. Source: ${JSON.stringify(source)}. Path: ${JSON.stringify(sourcePath)}`,'fiefPlanner',1)
+                return -1
             }
             sourcePath.forEach(spot=>{
                 if(basePlanCM.get(spot.x,spot.y) == 0){
@@ -981,7 +1004,8 @@ const fiefPlanner = {
         if(!basePlan.extension){
             Memory.brokenBasePlanCM = basePlanCM.serialize();
             Memory.brokenBasePlan = basePlan
-            return [-1,-1,-1]
+            chronicle.log(`No extensions in base plan`,'fiefPlanner',1)
+            return false
         }
 
         //Memory.testCM1 = basePlanCM.serialize();
@@ -990,6 +1014,7 @@ const fiefPlanner = {
         basePlan.ramparts = trimmedRamps
         Memory.minCutResult = trimmedRamps;
         //[Memory.testScore,Memory.testScoreTracker] = this.scoreFiefPlan(basePlan,basePlanCM);
+        chronicle.log(`Room plan generated! basePlan: ${JSON.stringify(basePlan)}`,'fiefPlanner',4)
         return [basePlanCM,basePlan,Game.cpu.getUsed()-startCPU+rampartCPU]
 
     },

@@ -84,7 +84,7 @@ var roleMiner = {
                     else{
                         for(let spot of holding.sources[targetID].openSpots){
                             let crps = creep.room.lookForAt(LOOK_CREEPS,spot.x,spot.y);
-                            console.log("CHECKING SPOT",JSON.stringify(spot),"CRPS",crps.length,JSON.stringify(crps))
+                            //console.log("CHECKING SPOT",JSON.stringify(spot),"CRPS",crps.length,JSON.stringify(crps))
                             if(!crps.length){
                                 if(creep.room.name == creep.memory.holding){
                                     creep.travelTo(new RoomPosition(spot.x,spot.y,spot.roomName),{maxRooms:1});

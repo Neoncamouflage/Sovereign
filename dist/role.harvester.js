@@ -115,7 +115,7 @@ var roleHarvester = {
 
                     let can = fief.mineral.can ? Game.getObjectById(fief.mineral.can) : false;
                 
-                    if(target.mineralAmount >0 && (!can || can.store.getFreeCapacity() > 0)){
+                    if(target.mineralAmount >0 && (!can || can.store.getFreeCapacity() > 0) && Game.time % 5 == 0){
                         //console.log("AYE")
                         let g =creep.harvest(target);
                         //console.log(g)

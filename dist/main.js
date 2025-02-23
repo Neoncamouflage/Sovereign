@@ -2,7 +2,7 @@
 require('constants')
 const helper = require('functions.helper'); //Helper functions
 require('packrat')
-const chronicle = require('chronicle');
+require('chronicle');
 require('prototypes.room');
 require('prototypes.creep');
 require('prototypes.spawn');
@@ -17,9 +17,10 @@ const kingdomManager = require('kingdomManager'); //Top level kingdom manager sy
 const Traveler = require('Traveler');
 const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner')
-profiler.enable();
+const architect = require('architect')
+//profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
-
+RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
 Memory.lastReset = 0
 Memory.globalReset = Game.time;
 module.exports.loop = function () {
@@ -44,27 +45,13 @@ module.exports.loop = function () {
         if(defenseData == "")  RawMemory.segments[SEGMENT_ROOM_DEFENSE] = "{}"
         let roomData = RawMemory.segments[SEGMENT_ROOM_PLANS]
         if(roomData == "")  RawMemory.segments[SEGMENT_ROOM_PLANS] = "{}"
-        if(!global.heap.scoutData){
+        if(!heap.scoutData){
             let scoutData = RawMemory.segments[SEGMENT_SCOUT_DATA];
-            if(scoutData == ""){
-                global.heap.scoutData = {}
+            if(scoutData == "" || !scoutData){
+                heap.scoutData = {}
             }
             else{
-                global.heap.scoutData = {} = JSON.parse(scoutData)
-            }
-        }
-        else{    
-            //If scout data changed,record it to the segment. Check every 100 ticks
-            if(Game.time % 100 == 0 && global.heap.newScoutData){
-                console.log("--!!!Updating scout data!!!--")
-                try{
-                    RawMemory.segments[SEGMENT_SCOUT_DATA] = JSON.stringify(global.heap.scoutData)
-                    global.heap.newScoutData = false;
-                }
-                catch(error){
-                    console.log("CAUGHT AND MOVING ON")
-                    console.log(error)
-                }
+                heap.scoutData = JSON.parse(scoutData)
             }
         }
     }
@@ -86,7 +73,7 @@ module.exports.loop = function () {
         //Record hostile actions
     }
 
-    //Garbage collection
+    //Garbage collection and routine tasks
     if(Game.time % 100 === 0){
         //Every 100 ticks clear creep memory
         for(var name in Memory.creeps) {
@@ -95,7 +82,19 @@ module.exports.loop = function () {
             }
         }
     }
-    if(Game.time % 1000 === 0){
+    if(Game.time % 1000 ===0){
+        if(heap.newScoutData){
+            try{
+                chronicle.log(`Updating scout data segment from heap. Scout segment size: ${RawMemory.segments[SEGMENT_SCOUT_DATA].length}. Scout heap size: ${JSON.stringify(heap.scoutData).length}`,'main',3)
+                RawMemory.segments[SEGMENT_SCOUT_DATA] = JSON.stringify(heap.scoutData)
+                heap.newScoutData = false;
+            }
+            catch(error){
+                chronicle.log(`Unable to update scout data: ${error}`,'main',1)
+            }
+        }
+    }
+    if(Game.time % 10000 === 0){
         purgeOldScoutData()
         //Every 1000 ticks clear room memory
         //Compile list of rooms to keep
@@ -111,6 +110,14 @@ module.exports.loop = function () {
             }
         }
         if(deadRooms.length > 0) console.log('Clearing unneeded room data:',deadRooms);
+    }
+    //Clear travel avoids every 50k ticks
+    if(Game.time % 50000 === 0){
+        let rooms = Object.keys(Memory.travelAvoid);
+        for(let roomName of rooms){
+            if(Memory.travelAvoid[roomName].expiry < Game.time) delete Memory.travelAvoid[roomName];
+        }
+        chronicle.log(`Travel avoidance garbage collection. Rooms removed: ${rooms.length-Object.keys(Memory.travelAvoid).length}`,'main',3);
     }
 
 
@@ -350,6 +357,11 @@ module.exports.loop = function () {
         //}
 
         //If we have a room planner object and we're not in 0 status, check bucket and run planner
+        if(architect.config && architect.config.running){
+            if(Game.cpu.bucket > 250){
+                architect.run();
+            }
+        }
         if(global.heap.fiefPlanner && global.heap.fiefPlanner.stage && global.heap.fiefPlanner.stage != 0){
             if(Game.cpu.bucket > 250){
                 fiefPlanner.continueFiefPlan();

@@ -45,7 +45,7 @@ var roleUpgrader = {
             creep.memory.stay = false;
         }
         //If we're not at range one, see if we can move closer
-        if(range != 1){ //&& (creep.status == 'travel' || Game.time % 10 == 0)
+        if(fief.controllerSpots && range != 1){ //&& (creep.status == 'travel' || Game.time % 10 == 0)
             rangeLoop:
             for(i=1;i<Math.min(4,range);i++){
                 for(let spot of fief.controllerSpots[i]){
@@ -60,7 +60,7 @@ var roleUpgrader = {
         if(creep.store.getUsedCapacity() < creep.store.getCapacity()*0.8){
             let gotTransfer = false;
             let isPacked = true;
-            if(range < 3){
+            if(fief.controllerSpots && range < 3){
                 transferLoop:
                 for(i=range+1;i<=3;i++){
                     if(gotTransfer)break;

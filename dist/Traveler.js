@@ -4,6 +4,7 @@
  */
 const profiler = require('screeps-profiler');
 const helper = require('functions.helper');
+if(!Memory.travelAvoid) Memory.travelAvoid = {};
 "use strict";
 //Object.defineProperty(exports, "__esModule", { value: true });
 class Traveler {
@@ -29,7 +30,7 @@ class Traveler {
         if(!('offroad' in options) && !('ignoreRoads' in options)){
             if(creep.memory.role == 'hauler' && creep.store.getUsedCapacity() == 0) options.offroad = true;
         }
-        if (options.range && rangeToDestination <= options.range) {
+        if (options.range && ((options.flee && rangeToDestination > options.range) || (!options.flee && rangeToDestination <= options.range))) {
             return OK;
         }
         else if (rangeToDestination <= 1) {
@@ -175,8 +176,16 @@ class Traveler {
      * @returns {RoomMemory|number}
      */
     static checkAvoid(roomName,military) {
+        //Avoidance set up for things like strongholds
+        if(Object.keys(Memory.travelAvoid).includes(roomName)){
+            if(Memory.travelAvoid[roomName].expiry && Memory.travelAvoid[roomName].expiry < Game.time){
+                chronicle.log(`Removing ${roomName} from avoidance list - Expiry time passed.`,'Traveler',3);
+                delete Memory.travelAvoid[roomName];
+                return false;
+            }
+            return true;
+        }
         let roomData = getScoutData(roomName)
-        if(Memory.manualAvoid && Memory.manualAvoid.includes(roomName)) return true;
         if(global.heap.alarms[roomName] && !military) return true;
         if(roomData.roomType == 'fief' && !isFriend(roomData.owner)) return true;
         else {return false}

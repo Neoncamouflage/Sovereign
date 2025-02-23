@@ -2,22 +2,29 @@ const profiler = require('screeps-profiler');
 LOGS = {
     1:{},
     2:{},
-    3:{}
+    3:{},
+    4:{}
 }
 LEVELS = {
     ERROR:1,
     WARN:2,
     INFO:3,
+    DEBUG:4
 }
 LEVEL_STRINGS = {
     1:"ERROR",
     2:"WARN",
-    3:"INFO"
+    3:"INFO",
+    4:"DEBUG"
 }
 STREAMING = [];
 TICKLOGS = [];
 CACHE_PERIOD = 200;
 const chronicle = {
+    showDebug:true,
+    showInfo:true,
+    showWarning:true,
+    showError:true,
     //Main operation command for each tick
     run(){
         if(Game.time % CACHE_PERIOD == 0){
@@ -49,6 +56,7 @@ const chronicle = {
     //Adds a source to the streaming array, outputting live to the console
     streamLogs(source){
         STREAMING.push(source)
+        return `${source} added to streaming logs. Currently streaming: ${STREAMING.join(', ')}`
     },
     //Removes a source from the streaming array
     stopLogs(source){
@@ -67,10 +75,15 @@ const chronicle = {
     },
     //Displays logs in the console
     display(){
+        let displayLevels = [];
+        if(this.showDebug) displayLevels.push(4)
+        if(this.showError) displayLevels.push(1)
+        if(this.showWarning) displayLevels.push(2)
+        if(this.showInfo) displayLevels.push(3)
         let report = [];
         for(let log of TICKLOGS){
-            //Stream all errors and lower levels for anything requested
-            if(log.l == 1 || STREAMING.includes(log.s)){
+            //Stream all errors, debugs, and lower levels for anything requested
+            if(displayLevels.includes(log.l) || STREAMING.includes(log.s)){
                 report.push(`[${LEVEL_STRINGS[log.l]}] (${log.s}) - ${log.m}`)
             }
         }
@@ -80,6 +93,5 @@ const chronicle = {
 }
 
 module.exports = chronicle;
-global.streamLogs = chronicle.streamLogs;
-global.stopLogs = chronicle.stopLogs;
+global.chronicle = chronicle;
 profiler.registerObject(chronicle, 'chronicle');

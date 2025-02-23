@@ -185,7 +185,20 @@ global.setScoutData = function(room,data={},force=false){
         console.log("Room name or object must be provided for scout data");
         return;
     }
-
+    //Get type of room to see if it's SK. If so, check for strongholds and add to the avoid list if needed.
+    let parsedType = describeRoom(room.name);
+    if(parsedType == ROOM_SOURCE_KEEPER && !Memory.travelAvoid[room.name]){
+        let structs = room.find(FIND_HOSTILE_STRUCTURES).filter(str => str.structureType == STRUCTURE_INVADER_CORE);
+        if(structs.length){
+            let core = structs[0];
+            let total = core.ticksToDeploy || 0;
+            if(core.effects.length){
+                let coll = core.effects.filter(eff => eff.effect == EFFECT_COLLAPSE_TIMER);
+                if(coll.length) total += coll[0].ticksRemaining;
+                Memory.travelAvoid[room.name] = {expiry:Game.time+total,type:'stronghold'}
+            }
+        }
+    }
     let [roomType,ownerType,owner] = helper.getRoomType(room);
     let sources = room.find(FIND_SOURCES).map(src => {return {x:src.pos.x,y:src.pos.y,id:src.id}})
     let mineral = room.find(FIND_MINERALS)[0];
@@ -451,7 +464,11 @@ global.purgeOldScoutData = function(amt = 20000){
     let data = global.heap && global.heap.scoutData;
     if(!data) return false;
     for(let [room,roomData] of Object.entries(getScoutData())){
-        if(Game.time - roomData.lastRecord > amt) removeScoutData(room)
+        
+        if((Game.time - roomData.lastRecord) > amt){
+            chronicle.log(`Removing scout data for ${room}. Last seen: ${(Game.time - roomData.lastRecord)} ticks ago, greater than amt:${amt}.`,'global.purgeOldScoutData',4)
+            removeScoutData(room);
+        }
     }
     RawMemory.segments[SEGMENT_SCOUT_DATA] = JSON.stringify(global.heap.scoutData)
     global.heap.newScoutData = false;
@@ -492,4 +509,9 @@ global.clearQueue = function(room='all'){
     }else{
         Memory.kingdom.fiefs[room].spawnQueue = {};
     }
+}
+global.setAlarm = function({roomName,alarmType='general',hostiles=[],manualExpiry=false} = {}){
+    let expiration = manualExpiry || Game.time + Math.max(...hostiles.map(creep => creep.ticksToLive))
+    heap.alarms[roomName] = {tick:Game.time,type:alarmType,creeps:hostiles.map(creep => creep.id),expiry:expiration}
+    chronicle.log(`Alarm raised in room ${roomName}. Type:${alarmType}. Hostile count:${hostiles.length}. Expiration:${expiration-Game.time} ticks.`,'global.setAlarm',3);
 }

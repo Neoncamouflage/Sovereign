@@ -29,61 +29,6 @@ const intelManager = {
     },
     runScouts: function(scouts){
         scouts.forEach(creep=>{
-            //Season stuff
-            if(Game.shard.name == 'shardSeason'){
-                let scoreCheck = creep.room.find(FIND_SCORE_COLLECTORS)
-                if(scoreCheck.length){
-                    if(!Memory.season) Memory.season = {}
-                    if(!Memory.season.scoreCollectors) Memory.season.scoreCollectors = {}
-                    if(!Memory.season.scoreCollectors[creep.room.name]){
-                        let walls  = creep.room.find(FIND_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_WALL)
-                        let collector = scoreCheck[0]
-                        let maxWallHits = 0;
-                        walls.forEach(w => {if(w.hits > maxWallHits)maxWallHits = w.hits});
-                        let costMatrix = new PathFinder.CostMatrix();
-                        console.log("WALLS",walls)
-                        for (let wall of walls) {
-                            let cost = mapWallHitsToCost(wall.hits,maxWallHits);
-                            costMatrix.set(wall.pos.x, wall.pos.y, cost);
-                        }
-                        
-                        let route = PathFinder.search(creep.pos, { pos: collector.pos, range: 1 }, {
-                            plainCost: 0,
-                            swampCost: 0,
-                            maxOps: 2000,
-                            maxRooms: 1,
-                            roomCallback: function(roomName){
-                                return costMatrix
-                            }
-                        }).path;
-                        console.log("PATH",route)
-    
-    
-    
-                        let targetWalls = []
-                        let totalHits = 0;
-                        for(let spot of route){
-                            let look = creep.room.lookForAt(LOOK_STRUCTURES,spot).filter(struct => struct.structureType == STRUCTURE_WALL);
-                            console.log("LOOK",look)
-                            if(look.length){
-                                targetWalls.push(spot);
-                                totalHits += look[0].hits
-                            }
-                        }
-    
-                        Memory.season.scoreCollectors[creep.room.name] = {
-                            costMatrix: costMatrix.serialize(),
-                            targetWalls: targetWalls,
-                            totalHits : totalHits
-                        }
-    
-                        function mapWallHitsToCost(wallHits,maxWallHits) {
-                            return Math.min(254, Math.floor((wallHits / maxWallHits) * 254));
-                        }
-                    }
-                }
-
-            }
             //If we're freshly spawned, get us an exit and set lastRoom
             if (!creep.memory.lastRoom || !creep.memory.exitTarget) {
                 creep.memory.lastRoom = creep.room.name;

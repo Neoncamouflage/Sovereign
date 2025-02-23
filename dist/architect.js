@@ -127,6 +127,10 @@ function scorePlan(roomName,newPlanCM,newPlan){
         towers:0,
         misc:0
     }
+    if(!newPlan.storage){
+        chronicle.log(`No storage location to score. Scoring plan data:${JSON.stringify(newPlan)}.`,'architect',1)
+        return false;
+    }
     let storePos = new RoomPosition(newPlan.storage.x,newPlan.storage.y,roomName);
     let walkCM = newPlanCM.clone();
     let terrain = Game.map.getRoomTerrain(roomName);
@@ -367,16 +371,20 @@ function generatePopulation(totalPop){
         }
         pop.push(chromosome);
     }
+    chronicle.log(`Chromosomes generated for population. ${pop}`,'architect',4)
     return pop;
 }
 
-function finalizePlan(){
+function finalizePlan(config){
+    config.running = false;
 
 }
 
 function updateGeneration(config){
-    let history = RawMemory.segments[SEGMENT_PLAN_GENERATIONS];
-    let done = false;
+    chronicle.log(`Generation complete. Breeding new population.`,'architect',4)
+    let history = JSON.parse(RawMemory.segments[SEGMENT_PLAN_GENERATIONS]);
+    //let [key,]
+    
     
 }
 
@@ -390,11 +398,12 @@ const architect = {
     data: {},
 
     //Called to start a new plan process
-    startPlan: function(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01}={}){
+    startPlan: function(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01,maxMutationMagnitude=0.5}={}){
+        chronicle.log(`Generating room plan data/config - ${roomName}.`,'architect',4)
         let roomData = getScoutData(roomName)
         if(!roomData){
-            console.log("No room data for the room planner");
-                return [-1,-1,-1];                                       // !! Make sure this returns a valid error code for the new function
+            chronicle.log(`No room data available for ${roomName}.`,'architect',4);
+            return false;
         }
         //Set a fresh planner object
         this.config = {
@@ -407,11 +416,11 @@ const architect = {
             secondScore:Infinity,
             thirdScore:Infinity,
             startTick:Game.time,
-            fronts:[],
-            currentPlans:[],
+            currentPlans:[], ////`Stage,Subject identifier`, subject genes, scores
             mutationRate:mutationRate,
             population:generatePopulation(totalPop),
             iterations:maxIterations,
+            running:true
 
         };
         //Set planner data for the room
@@ -424,18 +433,26 @@ const architect = {
         }
         //Clear the segment
         RawMemory.segments[SEGMENT_PLAN_GENERATIONS] = '{}'
+        return true;
     },
 
     //Continues the current room plan process
     run: function(roomName){
-        //If no plan
+        chronicle.log(`Run start...\nConfig:${JSON.stringify(this.config)}\nData:${JSON.stringify(this.data)}`,'architect',4)
+        //If no plan config
         if(!this.config){
-            this.startPlan(roomName);
+            if(!roomName){
+                chronicle.log(`No room name provided for run function aand no existing plan to continue.`,'architect',1)
+                return;
+            }
+            let start = this.startPlan(roomName);
+            if(!start) return;
         }
+        if(!roomName) roomName = this.data.roomName
         //If we're at the end of the generation
-        if(fiefPlanner.subject == fiefPlanner.population.length){
+        if(this.config.subject == this.config.population.length){
             //Generate a new one if needed, else finish
-            if(fiefPlanner.stage >= fiefPlanner.iterations){
+            if(this.config.stage >= this.config.iterations){
                 finalizePlan(this.config);
                 return;
             }
@@ -444,15 +461,27 @@ const architect = {
 
         //If not at the end of a generation, process a new plan
         else{
-            let [newPlanCM,newPlan,newPlanCPU] = fiefPlanner.generateRoomPlan(roomName,this.config.population[this.config.subject]);
+            chronicle.log(`Generating room plan - ${roomName}. Genes: ${JSON.stringify(this.config.population[this.config.subject])}`,'architect',4)
+            let results = fiefPlanner.generateRoomPlan(roomName,this.config.population[this.config.subject]);
+            if(!results){
+                chronicle.log(`Error generating room plan, no results.`,'architect',1)
+                return;
+            }
+            [newPlanCM,newPlan,newPlanCPU] = results;
+            chronicle.log(`Results received. Plan cost ${Math.round(newPlanCPU)} CPU.`,'architect',4)
             //Update CPU and increment the subject
             this.config.totalCPU += newPlanCPU;
             this.config.subject++;
             
             //Get the plan scores and add it and the genes to the current scores array
-            let newPlanScores = scorePlan(newPlanCM,newPlan);
-            //Stage-Subject identifier, subject genes, scores 
-            this.config.currentPlans.push([`${this.config.stage},${this.config.subject}`,this.config.subject,newPlanScores])
+            let newPlanScores = scorePlan(roomName,newPlanCM,newPlan);
+            if(!newPlanScores){
+                chronicle.log(`No scores available.`,'architect',4)
+                return;
+            }
+            chronicle.log(`Room plan scored - ${roomName}.\n${JSON.stringify(newPlanScores)}\nStage: ${this.config.stage}, Subject: ${this.config.subject}`,'architect',4)
+            //Stage,Subject identifier, subject genes, scores 
+            this.config.currentPlans.push([`${this.config.stage},${this.config.subject}`,this.config.subject,newPlanScores,newPlan])
         }
     }
 }
@@ -460,6 +489,11 @@ const architect = {
 module.exports = architect;
 //profiler.registerObject(architect, 'architect');
 global.testFiefPlan = function testFiefPlan(roomName){
+    architect.run(roomName);
+}
+
+/**
+ * global.testFiefPlan = function testFiefPlan(roomName){
     let chromosome = JSON.parse(JSON.stringify(DEFAULT_GENES))
     let j = 0;
     for(let key of Object.keys(chromosome)){
@@ -471,7 +505,7 @@ global.testFiefPlan = function testFiefPlan(roomName){
         chromosome[key] = gene;
         j++;
     }
-    console.log("Genes",chromosome)
+    console.log("Genes",JSON.stringify(chromosome))
     console.log("S1")
     let [newCM,newPlan,newCPU] = fiefPlanner.generateRoomPlan(roomName,chromosome);
     console.log("S2")
@@ -479,3 +513,4 @@ global.testFiefPlan = function testFiefPlan(roomName){
     console.log(JSON.stringify(scores))
     //Memory.testCM1 = newCM.serialize();
 }
+ */

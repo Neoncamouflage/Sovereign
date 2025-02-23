@@ -392,10 +392,15 @@ function defendLogic(troupe,readyFlag){
     else if(!targets.length && room){
         
         //If none, navigate to the room
-        if(!targetFind.length) status = 'convoy';
-        //Otherwise, assign them to the mission
-        troupe.mission.targets = targetFind.map(crp => crp.id);
-        status = 'attack';
+        if(!targetFind.length){
+            status = 'convoy';
+        }
+        else{
+            //Otherwise, assign them to the mission
+            troupe.mission.targets = targetFind.map(crp => crp.id);
+            status = 'attack';
+        }
+
     }
     //If we have targets and vision, remove any that are dead and keep attacking
     if(room && troupe.mission.targets.length){
@@ -408,7 +413,8 @@ function defendLogic(troupe,readyFlag){
                 continue;
             }
             liveCreeps.push(crpID);
-            size += creep.body.filter(part => [ATTACK,RANGED_ATTACK,HEAL].includes(part.type))
+            if(creep.body)size += creep.body.filter(part => [ATTACK,RANGED_ATTACK,HEAL].includes(part.type))
+            
         }
         if(flag) troupe.mission.targets = liveCreeps;
         status = 'attack';
