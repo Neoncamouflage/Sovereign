@@ -435,6 +435,7 @@ function defendLogic(troupe,readyFlag){
         if(status == 'convoy'){
             //Navigate to the controller if possible, else default 25,25
             for(let crp of kingdomCreeps[lance.name]){
+                if(crp.room.name == roomName) continue;
                 if(roomData.controller){
                     lance.targetPos[crp.id] = {x:roomData.controller.x,y:roomData.controller.y,roomName:roomName}
                 }

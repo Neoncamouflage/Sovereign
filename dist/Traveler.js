@@ -27,9 +27,10 @@ class Traveler {
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
         // -- If no offroad/ignore road value is set and the creep is a hauler, mark offroad if it's empty
-        if(!('offroad' in options) && !('ignoreRoads' in options)){
-            if(creep.memory.role == 'hauler' && creep.store.getUsedCapacity() == 0) options.offroad = true;
-        }
+        // -- Undoing this change because we have relaying now
+        //if(!('offroad' in options) && !('ignoreRoads' in options)){
+            //if(creep.memory.role == 'hauler' && creep.store.getUsedCapacity() == 0) options.offroad = true;
+        //}
         if (options.range && ((options.flee && rangeToDestination > options.range) || (!options.flee && rangeToDestination <= options.range))) {
             return OK;
         }

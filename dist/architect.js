@@ -32,9 +32,9 @@ const scoreWeights = {
     extensionMax:1,
     extensionMissing:8,
     extensionsInFF:1,
-    rampTiles:2,
+    rampTiles:1,
     rampGroups:1,
-    rampDist:0.2,
+    rampDist:0.7,
     storagePrimeRange:25,
     storageControllerDist:3,
     storageSourceDist:0.3,
@@ -85,6 +85,25 @@ function minMaxNormalize(value, max, min) {
         return 0; // Prevent division by zero
     }
     return (value - min) / (max - min);
+}
+
+function getRCLPlan(plan){
+    //{rcl:{building:[spot,spot,spot]}}
+    let roomDetails = {sourceLabs:[]};
+    let roomPlan = {
+        1:{},
+        2:{},
+        3:{},
+        4:{[convertStructure(STRUCTURE_STORAGE)]:[{x:basePlan.x,y:basePlan.y}]},
+        5:{},
+        6:{[convertStructure(STRUCTURE_EXTRACTOR)]:[{x:plan.extractor.x,y:plan.extractor.y}],[convertStructure(STRUCTURE_LAB)]:[]},
+        7:{},
+        8:{}
+    };
+    for(let each of Object.values(basePlan.sourceLabs)){
+        roomPlan[6][STRUCTURE_LAB].push(each);
+        roomDetails.sourceLabs.push(each)
+    }
 }
 
 function scorePlan(roomName,newPlanCM,newPlan){
@@ -192,8 +211,9 @@ function scorePlan(roomName,newPlanCM,newPlan){
     extAvg = totalDist/newPlan.extension.length
     //console.log("EXTENSIONS\nRemoteRoadAdjacent:",extAdjacent,"MaxDist:",extMax,"AvgDist:",extAvg,"FFs:",extFF);
     scores.extensions = Math.round(
-        (extAdjacent * scoreWeights.extensionsOnRoad) +
-        (extAvg * scoreWeights.extensionDist) +
+        500+
+        (extAdjacent * scoreWeights.extensionsOnRoad) -
+        (extAvg * scoreWeights.extensionDist) -
         (extMax * scoreWeights.extensionMax) +
         (extFF * scoreWeights.extensionsInFF)
     )
@@ -223,8 +243,9 @@ function scorePlan(roomName,newPlanCM,newPlan){
     rampAvg = totalDist/newPlan.ramparts.length
     //console.log("RAMPARTS\nAvg:",rampAvg,"Total:",rampTotal,"Groups:",rampGroups)
     scores.ramparts = Math.round(
-        (rampTotal * scoreWeights.rampTiles) +
-        (rampGroups * scoreWeights.rampGroups) +
+        1000 -
+        (rampTotal * scoreWeights.rampTiles) -
+        //(rampGroups * scoreWeights.rampGroups) -
         (rampAvg * scoreWeights.rampDist)
     )
 
@@ -240,8 +261,9 @@ function scorePlan(roomName,newPlanCM,newPlan){
     }
     //console.log("STORAGE\nController:",storageControllerDist,"In4:",storageIn4,"Sources:",storageSourceDist)
     scores.storage = Math.round(
+        1000 -
         (storageControllerDist * scoreWeights.storageControllerDist) +
-        (storageIn4 * scoreWeights.storagePrimeRange) +
+        (storageIn4 * scoreWeights.storagePrimeRange) -
         (storageSourceDist * scoreWeights.storageSourceDist)
     )
 
@@ -391,12 +413,21 @@ function generatePopulation(totalPop){
         }
         pop.push(chromosome);
     }
-    chronicle.log(`Chromosomes generated for population. ${pop}`,'architect',4)
+    //chronicle.log(`Chromosomes generated for population. ${pop}`,'architect',4)
     return pop;
 }
 
 function finalizePlan(config){
     config.running = false;
+    if(!config.elite){
+        let plans = config.currentPlans.map(plan => {
+            return {scores:plan[2],genes:plan[1],roomPlan:plan[3]}
+        })
+        config.elite = plans.slice().sort((a,b) => b.scores['total'] - a.scores['total'])
+    } 
+    config.bestPlan = config.elite[0].roomPlan
+    config.bestScores = config.elite[0].scores
+    getRCLPlan(bestPlan)
 
 }
 
@@ -404,39 +435,136 @@ function updateGeneration(config){
     chronicle.log(`Generation ${config.stage} complete. Breeding new population.`,'architect',3)
     let history = JSON.parse(RawMemory.segments[SEGMENT_PLAN_GENERATIONS]);
     let plans = config.currentPlans.map(plan => {
-        return {scores:plan[2],genes:plan[1]}
+        return {scores:plan[2],genes:plan[1],roomPlan:plan[3]}
     })
     //Update stage and reset subject
     config.stage++;
     config.subject = 0;
     //This function utilizes manually niched breeding into each category
+    breedMNiche(plans)
+
+    //Reset our current plans to empty
+    config.currentPlans = [];
 
 
+    //--- Functions for breeding ---//
 
-
-    function breedMNiche(){
-            //Sort plans by their scores
+    function breedMNiche(plans){
+        const NICHE_CAP_PERCENT = 15;
+        const ELITE_CAP_PERCENT = 20;
+        //Sort plans by their scores
         //Objects to hold our niches. The top scoring of each will be niched together
-        let towers = {}
-        let ramparts = {}
-        let extensions = {}
-        let storage = {}
-        let misc = {}
-        let allScores = {...config.elite}
-
-        for(let plan of plans){
-            
+        let scoreTypes = ['extensions', 'ramparts', 'storage', 'towers', 'misc']
+        let topScores = {};
+        let newPop = [];
+        let newElite = plans.slice().sort((a,b) => b.scores['total'] - a.scores['total']).slice(0,Math.max(2,Math.floor(plans.length/ELITE_CAP_PERCENT)))
+        scoreTypes.forEach(type => {
+            topScores[type] = plans
+              .slice() // Create a shallow copy so the original array isn't modified
+              .sort((a, b) => b.scores[type] - a.scores[type]) // Sort descending
+              .slice(0, Math.max(2,Math.floor(plans.length/NICHE_CAP_PERCENT))); // Keep only the top 10
+          });
+        if(config.elite){
+            let combinedElite = config.elite.concat(newElite);
+            combinedElite.sort((a, b) => b.scores.total - a.scores.total);
+            config.elite = combinedElite.slice(0, Math.max(2,Math.floor(plans.length/ELITE_CAP_PERCENT)));
         }
+        else{
+            config.elite = newElite;
+        }
+        //console.log("SCORES")
+        //console.log(JSON.stringify(topScores))
+        let popStep = 0;
+        //let cycleAlt = false;
+        let p1;
+        let p2;
+        let o1;
+        //console.log("PLAN GENES:")
+        for(let o of plans) console.log(JSON.stringify(o.genes))
+        //console.log("ELITE GENES")
+        for(let o of config.elite) console.log(JSON.stringify(o.genes))
+        //Breed new pairs until we have as many as the old population.
+        while(newPop.length < config.totalPop){
+            //One each for score types
+            if(popStep < scoreTypes.length){
+                //console.log("popStep",popStep,"scoreTypes",JSON.stringify(scoreTypes),'topScores keys',Object.keys(topScores))
+                let pick = scoreTypes[popStep];
+                let niche = topScores[pick];
+                p1 = randomChoice(niche);
+                p2 = randomChoice(niche);
+                o1 = blockCross(p1,p2)
+                //console.log("Breeding from niche",pick)
+                popStep++;
+            }
+            //Again for random pairings across niches
+            else if(popStep < scoreTypes.length*2){
+                let niches = Object.keys(topScores);
+                let niche1 = randomChoice(niches)
+                let niche2 = randomChoice(niches)
+                p1 = randomChoice(topScores[niche1]);
+                p2 = randomChoice(topScores[niche2]);
+                //console.log("Breeding from niches",niche1, niche2)
+                o1 = blockCross(p1,p2)
+                popStep++;
+            }
+            //Elite breeding
+            else if(popStep <= (scoreTypes.length*2)+1){
+                if(popStep == scoreTypes.length*2){
+                    let pick = randomChoice(scoreTypes)
+                    let niche = topScores[pick];
+                    p1 = randomChoice(niche);
+                    p2 = randomChoice(config.elite);
+                    o1 = blockCross(p1,p2)
+                }
+                else{
+                    p1 = randomChoice(config.elite);
+                    p2 = randomChoice(config.elite);
+                    o1 = blockCross(p1,p2)
+                }
+                popStep++;
+            }
+            else{
+                //Reset the counter and flip the cycle flag
+                popStep = 0;
+                //cycleAlt = !cycleAlt;
+            }
+            if(o1) newPop.push(o1)
+        }
+        //chronicle.log(`Breeding round:\nParent 1: ${JSON.stringify(p1)}\nParent2: ${JSON.stringify(p2)}\nOffspring: ${JSON.stringify(o1)}`,'architect',4)
 
         //Sort into niches based on top score (10% of total pop allowed per niche)
         //Top 20% of current generation+global elite make up the new global elite pool
         //Iterate over pairings until we fill the needed population
         //Pairings: 2 random within niche, 2 random across niches, 1 random niche and a global elite, 2 random global elites
         //Last two only happen every other iteration to encourage niche breeding
-
+        
     }
 
+    //This breeding functioon preserves gene blocks
+    function blockCross(p1,p2){
+        //console.log("Breeding:\n",JSON.stringify(p1),'\n',JSON.stringify(p2))
+        let blockLimits = [3,6,8,13];
+        let genes = p1.genes;
+        let offspring = [];
+        let currentBlock = 0;
+        let currentParent = randomInt(1);
+        for (let i = 0; i < genes.length; i++) {
+            //If we've passed the boundary for the current block, move to the next block.
+            if (currentBlock < blockLimits.length && i > blockLimits[currentBlock]) {
+              currentBlock++;
+              currentParent = randomInt(1);
+            }
+            
+            const gene = genes[i];
+            //console.log("Taking", gene, "from parent", currentParent+1);
+            offspring[gene] = (currentParent === 0) ? p1.genes[gene] : p2.genes[gene];
+          }
+          return offspring;
+    }
 
+    function mutate(){
+
+    }
 
 }
 
@@ -444,8 +572,6 @@ function updateGeneration(config){
 
 //Main Planner Object
 const architect = {
-    //Flag to indicate if the planner is currently running
-    running: false,
     //Data for the room being planned
     data: {},
 
@@ -460,22 +586,29 @@ const architect = {
         //Set a fresh planner object
         this.config = {
             roomName:roomName,
+            highs:{},
+            lows:{},
             stage:1,
             subject:0,
             totalCPU:0,
             niches:{},
-            elite:{},
+            elite:[],
             bestScore:Infinity,
             secondScore:Infinity,
             thirdScore:Infinity,
             startTick:Game.time,
             currentPlans:[], ////`Stage,Subject identifier`, subject genes, scores
             mutationRate:mutationRate,
+            totalPop:totalPop,
             population:generatePopulation(totalPop),
             iterations:maxIterations,
             running:true
 
         };
+        for(let score of ['extensions', 'ramparts', 'storage', 'towers', 'misc','total']){
+            this.config.highs[score] = 0;
+            this.config.lows[score] = Infinity;
+        }
         //Set planner data for the room
         const {sources,mineral,controller} = roomData;
         this.data = {
@@ -491,11 +624,13 @@ const architect = {
 
     //Continues the current room plan process
     run: function(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01,maxMutationMagnitude=0.5}={}){
-        chronicle.log(`Run start...\nConfig:${JSON.stringify(this.config)}\nData:${JSON.stringify(this.data)}`,'architect',4)
         //If no plan config
-        if(!this.config){
+        if(this.config && this.config.running && roomName && roomName != this.config.roomName){
+            chronicle.log(`Room plan request for ${roomName} rejected. Already generating a plan for ${this.config.running}.`,'architect',1)
+        }
+        if(!this.config || !this.config.running){
             if(!roomName){
-                chronicle.log(`No room name provided for run function aand no existing plan to continue.`,'architect',1)
+                chronicle.log(`No room name provided for run function and no existing plan to continue.`,'architect',1)
                 return;
             }
             let start = this.startPlan(roomName,{totalPop:totalPop,maxIterations:maxIterations,mutationRate:mutationRate,maxMutationMagnitude:maxMutationMagnitude});
@@ -514,27 +649,35 @@ const architect = {
 
         //If not at the end of a generation, process a new plan
         else{
-            chronicle.log(`Generating room plan - ${roomName}. Genes: ${JSON.stringify(this.config.population[this.config.subject])}`,'architect',4)
+            //chronicle.log(`Generating room plan - ${roomName}. Genes: ${JSON.stringify(this.config.population[this.config.subject])}`,'architect',4)
             let results = fiefPlanner.generateRoomPlan(roomName,this.config.population[this.config.subject]);
             if(!results){
-                chronicle.log(`Error generating room plan, no results.`,'architect',1)
+                chronicle.log(`Error generating room plan, no results. Skipping.`,'architect',1)
+                this.config.totalCPU += newPlanCPU;
+                this.config.subject++;
                 return;
             }
             [newPlanCM,newPlan,newPlanCPU] = results;
-            chronicle.log(`Results received. Plan cost ${Math.round(newPlanCPU)} CPU.`,'architect',4)
-            //Update CPU and increment the subject
-            this.config.totalCPU += newPlanCPU;
-            this.config.subject++;
+            //chronicle.log(`Results received. Plan cost ${Math.round(newPlanCPU)} CPU.`,'architect',4)
             
             //Get the plan scores and add it and the genes to the current scores array
-            let newPlanScores = scorePlan(roomName,newPlanCM,newPlan);
+            let newPlanScores = scorePlan(roomName,newPlanCM,newPlan,config);
             if(!newPlanScores){
                 chronicle.log(`No scores available.`,'architect',4)
                 return;
             }
-            chronicle.log(`Room plan scored - ${roomName}.\n${JSON.stringify(newPlanScores)}\nStage: ${this.config.stage}, Subject: ${this.config.subject}`,'architect',4)
+            //Update highs/lows if new ones are found
+            for(let niche of Object.keys(newPlanScores)){
+                let score = newPlanScores[niche];
+                if(score > config.highs[niche]) config.highs[niche] = score;
+                if(score < config.lows[niche]) config.lows[niche] = score;
+            }
+            //chronicle.log(`Room plan scored - ${roomName}.\n${JSON.stringify(newPlanScores)}\nStage: ${this.config.stage}, Subject: ${this.config.subject}`,'architect',4)
             //Stage,Subject identifier, subject genes, scores 
-            this.config.currentPlans.push([`${this.config.stage},${this.config.subject}`,this.config.subject,newPlanScores,newPlan])
+            this.config.currentPlans.push([`${this.config.stage},${this.config.subject}`,this.config.population[this.config.subject],newPlanScores,newPlan])
+            //Update CPU and increment the subject
+            this.config.totalCPU += newPlanCPU;
+            this.config.subject++;
         }
     }
 }

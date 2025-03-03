@@ -9,7 +9,7 @@ var roleHarvester = {
             const homeRoom = creep.memory.fief
             const fief = Memory.kingdom.fiefs[homeRoom]
             
-            const link = null;
+            const link = fief.sources[targetID] && fief.sources[targetID].link;
             if(!creep.memory.preflight){
                 if(creep.memory.job == 'remoteHarvest'){
                     //If we're a remote builder, our preflight is setting our id to our troupe.
@@ -126,7 +126,7 @@ var roleHarvester = {
 
             //Else, regular harvesting stuff
             //If not in spot, go there
-            else if(!(creep.memory.status == 'harvest')){
+            else if(creep.memory.status != 'harvest'){
                     if(creep.getActiveBodyparts(WORK) >=5){
                         if(creep.pos.x == fief.sources[creep.memory.target].spotx && creep.pos.y == fief.sources[creep.memory.target].spoty && creep.room.name == homeRoom){
                             creep.memory.stay = true;
@@ -160,16 +160,14 @@ var roleHarvester = {
                     creep.withdraw(can,RESOURCE_ENERGY);
                 }
             }
-
             //Old link code, likely just remove
             if(link){
                 //console.log("HERE")
                 //Stop flag in case link is full
-                let stopFlag = false;
                 //If we're at the point of using carry creeps
                 if(creep.store && creep.store.getCapacity() > 0){
                     //Check for a can to repair
-                    let harvLink = Game.getObjectById(Memory.kingdom.fiefs[creep.room.name].sources[creep.memory.target].link);
+                    let harvLink = Game.getObjectById(link);
                     //If link is live
                     if(harvLink && harvLink.store[RESOURCE_ENERGY] != 800){
                         creep.transfer(harvLink,RESOURCE_ENERGY);

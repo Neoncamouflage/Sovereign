@@ -172,6 +172,7 @@ const supplyDemand = {
                 let pickNum = Infinity;
                 Object.keys(Memory.kingdom.fiefs).forEach(fief => {
                     let dist = Game.map.getRoomLinearDistance(room.name, fief);
+                    if(dist > 8) return;
                     if(dist < pickNum){
                         pick = fief;
                         pickNum = dist;
@@ -345,6 +346,7 @@ const supplyDemand = {
         function assignPickup (task, taskTarget, emptyHaulers) {
             if(!emptyHaulers.length) return [false,null];
             let nearestHauler = taskTarget.pos.getClosestByTileDistance(emptyHaulers);
+            
             if (nearestHauler.ticksToLive < (getTileDistance(nearestHauler.pos,taskTarget.pos)*2)*1.3) return [false,null]
             if (task.resourceType === RESOURCE_ENERGY && (!taskTarget.store || (taskTarget.structureType && taskTarget.structureType == STRUCTURE_CONTAINER))) {
                 let decayCalcAmount = 9 //Default 5x harv, losing 1 per tick for 9 total
@@ -400,12 +402,17 @@ const supplyDemand = {
         //Also get upgraders and builders
 
         let fills = [];
-        
+        let coreLink = Memory.kingdom.fiefs[room.name].links && Memory.kingdom.fiefs[room.name].links.coreLink
+        let link = Game.getObjectById(coreLink)
         //Only need to do fills if there's missing energy
         if(room.energyAvailable < room.energyCapacityAvailable) fills = room.find(FIND_MY_STRUCTURES).filter(struct => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(struct.structureType) && struct.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
         //Track IDs of fills so we can clear their tasks
         let fillTransfers = []
         for(let haul of energyHauls){
+            //if(link && haul.store.getFreeCapacity()>0){
+                //haul.withdraw(link,RESOURCE_ENERGY)
+            //}
+
             let tFlag = false;
             for(let fill of fills){
                 if(haul.pos.isNearTo(fill)){

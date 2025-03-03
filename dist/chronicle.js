@@ -19,7 +19,7 @@ LEVEL_STRINGS = {
 }
 STREAMING = [];
 TICKLOGS = [];
-CACHE_PERIOD = 200;
+CACHE_PERIOD = 1700;
 const chronicle = {
     showDebug:true,
     showInfo:true,
@@ -32,7 +32,22 @@ const chronicle = {
             let warnCache = JSON.parse(RawMemory.segments[SEGMENT_LOGGING_WARN] || '{}');
             let infoCache = JSON.parse(RawMemory.segments[SEGMENT_LOGGING_INFO] || '{}');
 
-            errorCache = {...errorCache,...LOGS[1]}
+            errorCache = {...errorCache,...LOGS[1]};
+            warnCache = {...warnCache,...LOGS[2]};
+            infoCache = {...infoCache,...LOGS[3]};
+            while(JSON.stringify(errorCache).length > 80000){
+                delete errorCache[Object.keys(errorCache)[0]]
+            }
+                
+            while(JSON.stringify(warnCache).length > 80000){
+                delete warnCache[Object.keys(warnCache)[0]]
+            }
+            while(JSON.stringify(infoCache).length > 80000){
+                delete infoCache[Object.keys(infoCache)[0]]
+            }
+            RawMemory.segments[SEGMENT_LOGGING_ERR] = JSON.stringify(errorCache);
+            RawMemory.segments[SEGMENT_LOGGING_WARN] = JSON.stringify(warnCache);
+            RawMemory.segments[SEGMENT_LOGGING_INFO] = JSON.stringify(infoCache);
         }
 
         chronicle.display();
@@ -70,7 +85,12 @@ const chronicle = {
 
     },
     //Gets logs by tick, source, or level
-    get(){
+    //{level:'info'}        Will limit log retrieval to a specific level
+    //{source:'marshal'}    Will limit log retrieval to a specific source
+    //{tick:32599}          Specifies the tick to retrieve logs from
+    //{all:true}            If given with tick parameter, pulls all logs after and including that tick
+    getLogs({level=false,source=false,tick=false,single=false}={}){
+        if(level) level = [level]
 
     },
     //Displays logs in the console

@@ -49,11 +49,169 @@ var roleDuo = {
                 creep.memory.healer = creep.id;
                 healer = Game.getObjectById(creep.memory.healer)
             }
-            if(creep.memory.type == 'melee'){
-                let targets = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => crp.body.length > 1 && !isFriend(crp))
+            if(creep)
+            if(creep.memory.type == 'portal'){
+                //console.log('T1',JSON.stringify(creep.memory))
+                if(creep.room.name != 'E0S0') creep.travelTo(new RoomPosition(44,44,'E30S10'));
+                else{
+                    let targetPos = new RoomPosition(5,5,'E0S0')
+                    //console.log('T2',targetPos)
+                    if(creep.pos.isEqualTo(targetPos)){
+
+                        creep.memory.type = creep.memory.changeType
+                    }
+                    else{
+                        creep.travelTo(targetPos)
+                    }
+                    
+                }
+            }
+            if(creep.memory.type == 'ranged'){
+                if(!creep.memory.targetRoom || (creep.memory.tickPick && creep.memory.tickPick < Game.time - 150)){
+                    creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1'])
+                    creep.memory.tickPick = Game.time
+                }
+                if(creep.pos.isEqualTo(new RoomPosition(5,5,'E0S0'))){
+                    creep.move(BOTTOM)
+                    return;
+                }
+                let targets = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp))
+                let priorityTargets = targets.filter(crp => helper.isSoldier(crp))
                 let roomTargets = targets.filter(crp => ![0,49].includes(crp.pos.x) && ![0,49].includes(crp.pos.y))
-                let target = roomTargets.length ? creep.pos.findClosestByRange(roomTargets) : creep.pos.findClosestByRange(targets)
+                let target;
+                let soldierFlag = false;
+                if(creep.room.controller && creep.room.controller.safeMode){
+                    targets = [];
+                    priorityTargets = [];
+                    roomTargets = []
+                }
+                if(priorityTargets.length){
+                    target = creep.pos.findClosestByRange(priorityTargets)
+                    soldierFlag = true;
+                }
+                else{
+                    target = roomTargets.length ? creep.pos.findClosestByRange(roomTargets) : creep.pos.findClosestByRange(targets)
+                }
                 if(target && (creep.room.name == targetRoom || creep.pos.getRangeTo(target) < 5)) {
+                    let targetRange = creep.pos.getRangeTo(target);
+                    if(((creep.pos.getRangeTo(healer) <= 1 || targetRange <=3) || [0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y)) && healer.fatigue == 0){
+                    if(targetRange <= 1){
+                        
+                        creep.rangedMassAttack();
+                        if(soldierFlag){
+                            if(creep.room.name == creep.memory.targetRoom){
+                                creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1']);
+                                creep.memory.tickPick = Game.time
+                            }
+                            let res = PathFinder.search(healer.pos, {pos:target.pos,range:5}, {flee:true})
+                            let resPath = res.path;
+                            creep.travelTo(healer)
+                            console.log("Fleeing!","Ranged",resPath[0],)
+                            if(creep.pos.getRangeTo(healer) == 1 && creep.fatigue == 0){
+                                healer.override = true;
+                                healer.travelTo(resPath[0])
+                                console.log("Fleeing!","Healer:",resPath[1])
+                            }
+                            return;
+                        }
+
+
+                    }
+                    else if(targetRange<=3){
+                        creep.rangedAttack(target)
+                        if(soldierFlag){
+                            if(creep.room.name == creep.memory.targetRoom){
+                                creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1']);
+                                creep.memory.tickPick = Game.time
+                            }
+                            let res = PathFinder.search(healer.pos, {pos:target.pos,range:5}, {flee:true})
+                            let resPath = res.path;
+                            creep.travelTo(healer)
+                            console.log("Fleeing!","Ranged",resPath[0],)
+                            if(creep.pos.getRangeTo(healer) == 1 && creep.fatigue == 0){
+                                healer.override = true;
+                                healer.travelTo(resPath[0])
+                                console.log("Fleeing!","Healer:",resPath[1])
+                            }
+                            return;
+                        }
+                    }
+                        //If the target is on the edge of the room, move using range 1
+                        if(![0,49].includes(target.pos.x) && ![0,49].includes(target.pos.y)){
+                            if(creep.memory.edgeFight){
+                                creep.memory.edgeFight = false;
+                                creep.travelTo(target,{ignoreRoads:true});
+                            }
+                            else{
+                                creep.travelTo(target,{ignoreRoads:true});
+                            }
+                            
+                        }
+                        else{
+                            creep.travelTo(target,{ignoreRoads:true,range:1});
+                            creep.memory.edgeFight = true;
+                        }
+                    }
+                }
+                else if(targetRoom && creep.room.name != targetRoom){
+                    if((creep.pos.getRangeTo(healer) <= 1 || [0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y))&& healer.fatigue == 0){
+                        creep.travelTo(new RoomPosition(25, 25, targetRoom),{ignoreRoads:true});
+                    }
+                }
+                else if(targetRoom && creep.room.name == targetRoom && (([0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y)) || ([0,49].includes(healer.pos.x) || [0,49].includes(healer.pos.y)))&& healer.fatigue == 0){
+                    creep.travelTo(new RoomPosition(25,25,creep.room.name),{ignoreRoads:true})
+                }
+                else{
+                    creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1'])
+                    creep.memory.tickPick = Game.time;
+                }
+                let structTargets = creep.room.find(FIND_STRUCTURES, {
+                    filter: (structure) => structure.structureType != STRUCTURE_CONTROLLER && structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_WALL&& structure.structureType != STRUCTURE_CONTAINER
+                });
+                let myRoom = Object.keys(Memory.kingdom.holdings).includes(creep.room.name) || Object.keys(Memory.kingdom.fiefs).includes(creep.room.name);
+                let targetStruct = creep.pos.findClosestByRange(structTargets);
+                if(!target && creep.room.name == targetRoom && !myRoom){
+                    
+                    if(targetStruct && creep.pos.getRangeTo(targetStruct) > 3 && creep.pos.getRangeTo(healer) <= 1){
+                        let y = creep.travelTo(targetStruct,{ignoreRoads:true});
+                    }
+                    else if(targetStruct){
+                        creep.rangedAttack(targetStruct);
+                    }
+                    else{
+                        let cSites = creep.room.find(FIND_CONSTRUCTION_SITES);
+                        if(cSites.length){
+                            let cTarget = creep.pos.findClosestByRange(cSites);
+                            creep.travelTo(cTarget)
+                        }
+
+                    }
+                }
+                else if(!myRoom && creep.pos.getRangeTo(target) > 3){
+                    if(creep.pos.getRangeTo(targetStruct) <= 3)creep.rangedAttack(targetStruct);
+                }
+            }
+            if(creep.memory.type == 'melee'){
+                if(creep.pos.isEqualTo(new RoomPosition(5,5,'E0S0'))){
+                    creep.move(BOTTOM)
+                    return;
+                }
+                let targets = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp))
+                let priorityTargets = targets.filter(crp => helper.isSoldier(crp))
+                let roomTargets = targets.filter(crp => ![0,49].includes(crp.pos.x) && ![0,49].includes(crp.pos.y))
+                let target;
+                if(creep.room.controller && creep.room.controller.safeMode){
+                    targets = [];
+                    priorityTargets = [];
+                    roomTargets = []
+                }
+                if(priorityTargets.length){
+                    target = creep.pos.findClosestByRange(priorityTargets)
+                }
+                else{
+                    target = roomTargets.length ? creep.pos.findClosestByRange(roomTargets) : creep.pos.findClosestByRange(targets)
+                }
+                if(target && (creep.room.name == targetRoom || creep.pos.getRangeTo(target) < 3)) {
                     let targetRange = creep.pos.getRangeTo(target);
                     if(((creep.pos.getRangeTo(healer) <= 1 || targetRange == 1) || [0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y)) && healer.fatigue == 0){
                         if(targetRange <= 1){
@@ -61,10 +219,18 @@ var roleDuo = {
                         }
                         //If the target is on the edge of the room, move using range 1
                         if(![0,49].includes(target.pos.x) && ![0,49].includes(target.pos.y)){
-                            creep.travelTo(target,{ignoreRoads:true});
+                            if(creep.memory.edgeFight){
+                                creep.memory.edgeFight = false;
+                                creep.travelTo(target,{ignoreRoads:true});
+                            }
+                            else{
+                                creep.travelTo(target,{ignoreRoads:true});
+                            }
+                            
                         }
                         else{
-                            //creep.travelTo(target,{ignoreRoads:true,allowHostile:false,range:1});
+                            creep.travelTo(target,{ignoreRoads:true,range:1});
+                            creep.memory.edgeFight = true;
                         }
                     }
                 }
@@ -77,19 +243,28 @@ var roleDuo = {
                     creep.travelTo(new RoomPosition(25,25,creep.room.name),{ignoreRoads:true})
                 }
                 let structTargets = creep.room.find(FIND_STRUCTURES, {
-                    filter: (structure) => structure.structureType != STRUCTURE_CONTROLLER && structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_WALL
+                    filter: (structure) => structure.structureType != STRUCTURE_CONTROLLER && structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_WALL&& structure.structureType != STRUCTURE_CONTAINER
                 });
+                let myRoom = Object.keys(Memory.kingdom.holdings).includes(creep.room.name) || Object.keys(Memory.kingdom.fiefs).includes(creep.room.name);
                 let targetStruct = creep.pos.findClosestByRange(structTargets);
-                if(!target && creep.room.name == targetRoom && !Object.keys(Memory.kingdom.holdings).includes(creep.room.name) && !Object.keys(Memory.kingdom.fiefs).includes(creep.room.name)){
+                if(!target && creep.room.name == targetRoom && !myRoom){
                     
-                    if(creep.pos.getRangeTo(targetStruct) > 1 && creep.pos.getRangeTo(healer) <= 1){
+                    if(targetStruct && creep.pos.getRangeTo(targetStruct) > 1 && creep.pos.getRangeTo(healer) <= 1){
                         let y = creep.travelTo(targetStruct,{ignoreRoads:true});
                     }
-                    else{
+                    else if(targetStruct){
                         creep.attack(targetStruct);
                     }
+                    else{
+                        let cSites = creep.room.find(FIND_CONSTRUCTION_SITES);
+                        if(cSites.length){
+                            let cTarget = creep.pos.findClosestByRange(cSites);
+                            creep.travelTo(cTarget)
+                        }
+
+                    }
                 }
-                else if(creep.pos.getRangeTo(target) > 1){
+                else if(!myRoom && creep.pos.getRangeTo(target) > 1){
                     if(creep.pos.getRangeTo(targetStruct) <= 1)creep.attack(targetStruct);
                 }
             }
@@ -147,7 +322,21 @@ var roleDuo = {
                     return;
                 }
             }
-            creep.travelTo(attacker)
+            let portalling = false;
+            if(attacker.room.name != creep.room.name){
+                if(Game.map.getRoomLinearDistance(creep.room.name,attacker.room.name) >5){
+                    
+                    let portals = creep.room.find(FIND_STRUCTURES).filter(str=>str.structureType == STRUCTURE_PORTAL);
+                    for(let each of portals){
+                        if(each.destination.roomName == attacker.room.name){
+                            portalling = true;
+                            if(!creep.override)creep.travelTo(each);
+                            break;
+                        }
+                    }
+                }
+            }
+            if(!portalling && !creep.override)creep.travelTo(attacker)
             if(creep.hits == creep.hitsMax && attacker.hits == attacker.hitsMax){
                 creep.heal(attacker);
             }

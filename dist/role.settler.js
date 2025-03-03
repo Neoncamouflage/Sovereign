@@ -3,7 +3,6 @@ var roleSettler = {
     /** @param {Creep} creep **/
     run: function(creep) {
         let settlement = Memory.kingdom.fiefs[creep.memory.targetRoom]
-        if(!creep.memory.fief) creep.memory.fief = creep.memory.fief;
         if(!creep.memory.flag){
             creep.memory.flag = 'harvesting';
         }
@@ -32,6 +31,16 @@ var roleSettler = {
                 creep.travelTo(new RoomPosition(25, 25, creep.memory.targetRoom));
                 return;
             }
+            let towers = creep.room.find(FIND_MY_STRUCTURES, {
+                filter: { structureType: STRUCTURE_TOWER}
+            });
+            let tow = creep.pos.findClosestByPath(towers);
+            if(tow && tow.store[RESOURCE_ENERGY] < 700){
+                if(creep.transfer(tow,RESOURCE_ENERGY)== ERR_NOT_IN_RANGE){
+                    creep.travelTo(tow)
+                }
+                return;
+            }
             //Upgrade first if we're getting close to downgrade or if we haven't ticked up to 2 for a safemode
             if(Game.rooms[creep.memory.targetRoom].controller.ticksToDowngrade < 3000 || Game.rooms[creep.memory.targetRoom].controller.level <2){
                 creep.upgradeController(Game.rooms[creep.memory.targetRoom].controller);
@@ -41,30 +50,24 @@ var roleSettler = {
                 const structuresToRepair = creep.room.find(FIND_STRUCTURES, {
                     filter: (structure) => (structure.hits < structure.hitsMax*0.8) && structure.structureType != STRUCTURE_WALL && structure.structureType != STRUCTURE_RAMPART
                 });
-                let towers = creep.room.find(FIND_MY_STRUCTURES, {
-                    filter: { structureType: STRUCTURE_TOWER}
-                });
-                let tow = creep.pos.findClosestByPath(towers);
-                var target = creep.room.find(FIND_MY_CONSTRUCTION_SITES, {
-                    filter: (site) => site.structureType === STRUCTURE_STORAGE
-                })[0]; // Take the first storage construction site if there are any
-                
+
+                var target = creep.room.find(FIND_CONSTRUCTION_SITES, {
+                    filter: (site) => site.structureType === STRUCTURE_TOWER
+                })[0];
+                if(!target){
+                    var target = creep.room.find(FIND_CONSTRUCTION_SITES, {
+                        filter: (site) => site.structureType === STRUCTURE_SPAWN
+                    })[0];
+                }
                 // If there is no storage construction site, then find the closest construction site of any type
                 if (!target) {
-                    target = creep.pos.findClosestByPath(FIND_MY_CONSTRUCTION_SITES);
+                    target = creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES);
                 }
                 if (structuresToRepair.length > 0) {
                     const target = creep.pos.findClosestByPath(structuresToRepair);
                 
                     if (creep.repair(target) === ERR_NOT_IN_RANGE) {
                         creep.travelTo(target);
-                    }
-                }
-                
-                //Code to check for tower storage
-                else if(tow && tow.store[RESOURCE_ENERGY] < 700){
-                    if(creep.transfer(tow,RESOURCE_ENERGY)== ERR_NOT_IN_RANGE){
-                        creep.travelTo(tow)
                     }
                 }
                 
@@ -99,7 +102,7 @@ var roleSettler = {
                 });
                 //console.log(targets)
                 if(target && creep.transfer(target,RESOURCE_ENERGY)== ERR_NOT_IN_RANGE){
-                    creep.travelTo(target)
+                    creep.travelTo(target,{range:1})
                 }
                 else{
                     creep.upgradeController(Game.rooms[creep.memory.targetRoom].controller);
@@ -109,11 +112,47 @@ var roleSettler = {
         }
         else if(creep.memory.flag == 'harvesting'){
             let things = creep.room.find(FIND_DROPPED_RESOURCES)
-            let targetRoom = creep.memory.targetRoom;
+            let targetRoom = creep.memory.assist ? creep.memory.assistRoom : creep.memory.targetRoom;
             let stuff = creep.room.find(FIND_TOMBSTONES)
             let altFlag = false
+            if(things.length){
+                let closestThing = creep.pos.findClosestByRange(things);
+                let biggestThing;
+                things.forEach(eng => {
+                    if(!biggestThing || (biggestThing && biggestThing['energy'] < eng['energy'])){
+                        biggestThing = eng;
+                    }
+                })
+                //If closest energy is pretty close and over 50
+                if(closestThing['energy'] > 50 && creep.pos.getRangeTo(closestThing) <= 6){
+                    altFlag = true;
+                    if(creep.pickup(closestThing) == ERR_NOT_IN_RANGE){
+                        creep.travelTo(closestThing,{range:1})
+                        return;
+                    }
+                }
+                //If not, look for biggets energy. If that's reasonable, get it
+                else if(biggestThing && biggestThing['energy'] > 100){
+                    altFlag = true;
+                    if(creep.pickup(biggestThing) == ERR_NOT_IN_RANGE){
+                        creep.travelTo(biggestThing,{range:1})
+                        return;
+                    }
+                }
+            }
+            else if(stuff.length){
+                let closestThing = creep.pos.findClosestByRange(stuff);
+                if(closestThing.store['energy'] > 50 && creep.pos.getRangeTo(closestThing) <= 6){
+                    altFlag = true;
+                    if(creep.withdraw(closestThing,'energy') == ERR_NOT_IN_RANGE){
+                        creep.travelTo(closestThing,{range:1})
+                        return;
+                    }
+                }
+                
+            }
             if(creep.room.name != targetRoom){
-                creep.travelTo(new RoomPosition(25, 25, creep.memory.targetRoom));
+                creep.travelTo(new RoomPosition(25, 25, targetRoom));
                 return;
             }
             else if(creep.room.name == targetRoom){
@@ -135,7 +174,7 @@ var roleSettler = {
                     });
                     if(can){
                         if(creep.withdraw(can,'energy') == ERR_NOT_IN_RANGE){
-                            creep.travelTo(can)
+                            creep.travelTo(can,{range:1})
                         }
                     }
                 }
@@ -143,39 +182,7 @@ var roleSettler = {
 
             //console.log("THIS")
             //console.log(stuff.length)
-            if(things.length){
-                let closestThing = creep.pos.findClosestByRange(things);
-                let biggestThing;
-                things.forEach(eng => {
-                    if(!biggestThing || (biggestThing && biggestThing['energy'] < eng['energy'])){
-                        biggestThing = eng;
-                    }
-                })
-                //If closest energy is pretty close and over 50
-                if(closestThing['energy'] > 50 && creep.pos.getRangeTo(closestThing) <= 6){
-                    altFlag = true;
-                    if(creep.pickup(closestThing) == ERR_NOT_IN_RANGE){
-                        creep.travelTo(closestThing)
-                    }
-                }
-                //If not, look for biggets energy. If that's reasonable, get it
-                else if(biggestThing && biggestThing['energy'] > 100){
-                    altFlag = true;
-                    if(creep.pickup(biggestThing) == ERR_NOT_IN_RANGE){
-                        creep.travelTo(biggestThing)
-                    }
-                }
-            }
-            else if(stuff.length){
-                let closestThing = creep.pos.findClosestByRange(stuff);
-                if(closestThing.store['energy'] > 50 && creep.pos.getRangeTo(closestThing) <= 6){
-                    altFlag = true;
-                    if(creep.withdraw(closestThing,'energy') == ERR_NOT_IN_RANGE){
-                        creep.travelTo(closestThing)
-                    }
-                }
-                
-            }
+
         }
     }
 };

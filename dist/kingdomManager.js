@@ -11,7 +11,8 @@ const roleGuard = require('role.guard');
 const roleDiver = require('role.diver');
 const roleRaider =  require('role.raider')
 const roleBait = require('role.bait');
-const roleDuo = require('role.duo')
+const roleDuo = require('role.duo');
+const roleRepair = require('role.repair');
 const roleSettler = require('role.settler')
 const statusManager = require('statusManager');
 const helper = require('functions.helper');
@@ -59,6 +60,12 @@ const kingdomManager = {
                 return (maxRoom === null || room.controller.progress > maxRoom.controller.progress) ? room : maxRoom;
             }, null);
             global.heap.funnelTarget = fRoom == null ? null : fRoom.name;
+        }
+        //---- SWC HARASSER CHECK ----
+        if(Game.time % 250 == 0){
+            if(!kingdomCreeps['E28S8'].diver || kingdomCreeps['E28S8'].diver.length < 2){
+                //spawnCreep('diver','6m4r1a1h','E28S8',60,{job:'harass',fief:'E28S8'})
+            }
         }
         for(const fief in Memory.kingdom.fiefs){
             supplyDemand.prepShipping(fief);
@@ -212,6 +219,9 @@ function runRoles(kingdomCreeps){
                 break;
             case 'raider':
                 roleRaider.run(myCreep);
+                break;
+            case 'repair':
+                roleRepair.run(myCreep);
                 break;
         }
         cRoles[Game.creeps[creep].memory.role] = creepRole

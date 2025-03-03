@@ -1,7 +1,6 @@
 //Imports
 require('constants')
 const helper = require('functions.helper'); //Helper functions
-require('packrat')
 require('chronicle');
 require('prototypes.room');
 require('prototypes.creep');
@@ -18,14 +17,34 @@ const Traveler = require('Traveler');
 const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner')
 const architect = require('architect')
+let lastMemory;
 //profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
 Memory.lastReset = 0
 Memory.globalReset = Game.time;
+global.heap = {
+    fiefs:{},
+    alarms:{},
+    stock:{},
+    kingdomStatus:{
+        fiefs:{},
+        activeHoldings:[],
+        totalHoldings:0,
+        lastReset:Game.time,
+        wares:{}
+    },
+    granary:{},
+    registry:{},
+    missions:{},
+    army:{
+        troupes:[],
+        lances:{},
+        reserve:[]
+    },
+    funnelTarget:null
+}
 module.exports.loop = function () {
-    //RawMemory._parsed = {};
-    //Memory = {};
     //return;
     profiler.wrap(function() {
     if (hasRespawned() || !Memory.kingdom){
@@ -35,6 +54,9 @@ module.exports.loop = function () {
     Traveler.resetMovementIntents();
     //Check for global reset and action accordingly
     if(Game.time != Memory.globalReset){
+        delete global.Memory;
+        global.Memory = lastMemory;
+        RawMemory._parsed = lastMemory;
         if(Memory.trailingCPU){
             let cpuUte = Memory.trailingCPU.reduce((total, perTick) => {
                 return total + perTick.cpu;
@@ -54,6 +76,11 @@ module.exports.loop = function () {
                 heap.scoutData = JSON.parse(scoutData)
             }
         }
+    }
+    else{
+        //Force parsing for memhack
+        Memory.rooms;
+        lastMemory = RawMemory._parsed;
     }
 
     //Check fiefs 
@@ -95,7 +122,9 @@ module.exports.loop = function () {
         }
     }
     if(Game.time % 10000 === 0){
+        let l1 = Object.keys(heap.scoutData).length
         purgeOldScoutData()
+        chronicle.log(`Removing scout data for ${l1-Object.keys(heap.scoutData).length} rooms last seen more than 20k ticks ago.`,'main',3)
         //Every 1000 ticks clear room memory
         //Compile list of rooms to keep
         let keepRooms = [

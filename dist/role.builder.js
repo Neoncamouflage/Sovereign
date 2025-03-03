@@ -38,10 +38,10 @@ const roleBuilder = {
             return;
         }
 
-
         if(creep.memory.job == 'remoteBuilder' && creep.room.name != creep.memory.targetRoom){
             let tRoom = Game.rooms[creep.memory.targetRoom];
             //If we have vision in the room, go to a site
+            //console.log(creep.name,'t1')
             if(tRoom){
                 let target = tRoom.find(FIND_MY_CONSTRUCTION_SITES)[0];
                 if(target){
@@ -50,11 +50,33 @@ const roleBuilder = {
                 }
                 //If no target and we're not an army builder, see if we need a new target room
                 else if(!creep.memory.troupe){
-                    let fief = Memory.kingdom.fiefs[creep.memory.fief];
-                    if(fief.remoteBuild && fief.remoteBuild != creep.memory.targetRoom){
-                        creep.memory.targetRoom = fief.remoteBuild;
+                    //If not, find another site to help with
+                    let closestRange = Infinity;
+                    let closestTarget;
+                    for(let each of Object.values(Game.constructionSites)){
+                        let newRange = creep.pos.getRangeTo(each)
+                        if(newRange < closestRange){
+                            closestRange = newRange;
+                            closestTarget = each;
+                        }
                     }
-                    return;
+                    if(closestTarget){
+
+                        creep.travelTo(closestTarget)
+                        creep.memory.targetRoom = closestTarget.room.name;
+                    }
+                    else{
+                        //console.log(creep.name,'t4')
+                        let spawns = Memory.kingdom.fiefs[creep.memory.fief].spawns.map(spw => Game.getObjectById(spw))
+                        let tSpawn = creep.pos.findClosestByRange(spawns)
+                        if(creep.pos.getRangeTo(tSpawn) == 1){
+                            if(!tSpawn.spawning) tSpawn.recycleCreep(creep)
+                        }
+                        else{
+                            creep.travelTo(tSpawn)
+                        } 
+                        return;
+                    }
                 }
             }
             //Otherwise just go to 25,25
@@ -69,10 +91,11 @@ const roleBuilder = {
         let target;
         if(creep.memory.target) target = Game.getObjectById(creep.memory.target)
         if(!target){
+            //console.log(creep.name,'t2')
             let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
             target = creep.pos.findClosestByRange(targets)
             if(target){creep.memory.target = target.id}
-            else if(creep.room.storage && creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 50000){
+            else if(creep.memory.job != 'remoteBuilder' && creep.room.storage && creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 50000){
                 creep.memory.status = 'upgrading'
                 upgrader.run(creep);
                 return;
@@ -80,20 +103,36 @@ const roleBuilder = {
             else{
                 //If no target and we're a remote builder, keep checking to see if one is needed elsewhere
                 if(creep.memory.job == 'remoteBuilder'){
+                    //console.log(creep.name,'t3')
                     if(creep.memory.troupe) delete creep.memory.troupe
                     let fief = Memory.kingdom.fiefs[creep.memory.fief];
-                    if(fief.remoteBuild && fief.remoteBuild != creep.memory.targetRoom){
-                        creep.memory.targetRoom = fief.remoteBuild;
+                    //If not, find another site to help with
+                    let closestRange = Infinity;
+                    let closestTarget;
+                    for(let each of Object.values(Game.constructionSites)){
+                        let newRange = getTileDistance(creep.pos,each.pos)
+                        if(newRange < closestRange){
+                            closestRange = newRange;
+                            closestTarget = each;
+                        }
                     }
-                    return;
-                }
-                let spawns = Memory.kingdom.fiefs[creep.memory.fief].spawns.map(spw => Game.getObjectById(spw))
-                let tSpawn = creep.pos.findClosestByRange(spawns)
-                if(creep.pos.getRangeTo(tSpawn) == 1){
-                    if(!tSpawn.spawning) tSpawn.recycleCreep(creep)
-                }
-                else{
-                    creep.travelTo(tSpawn)
+                    console.log()
+                    if(closestTarget){
+
+                        creep.travelTo(closestTarget)
+                        if(closestTarget.room)creep.memory.targetRoom = closestTarget.room.name;
+                    }
+                    else{
+                        //console.log(creep.name,'t4')
+                        let spawns = Memory.kingdom.fiefs[creep.memory.fief].spawns.map(spw => Game.getObjectById(spw))
+                        let tSpawn = creep.pos.findClosestByRange(spawns)
+                        if(creep.pos.getRangeTo(tSpawn) == 1){
+                            if(!tSpawn.spawning) tSpawn.recycleCreep(creep)
+                        }
+                        else{
+                            creep.travelTo(tSpawn)
+                        } 
+                    }
                 }
             }
             

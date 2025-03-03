@@ -310,6 +310,7 @@ var holdingManager = {
                     }
                 }
                 if(!hasMission){
+                    chronicle.log(`Invader core detected in holding ${holdingName}.`,'holdingManager',3)
                     marshal.destroyCore(holdingName,hostiles[0].id,resTime);
                 }
             }
@@ -429,7 +430,7 @@ var holdingManager = {
 
                 let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => (helper.isSoldier(crp) || crp.getActiveBodyparts(CLAIM) > 0) && !isFriend(crp))
                 if(hostiles.length && !global.heap.alarms[holdingName]){
-                    setAlarm({roomName:holdingName,alarmType:'creep',hostiles:hostiles})
+                    setAlarm({roomName:holdingName,alarmType:hostiles[0].owner.username == 'Invader' ? 'invader' : 'creep',hostiles:hostiles,origin:'holdingManager'})
                     let hasMission = false;
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                         for(let mission of global.heap.missionMap[holdingName]){
@@ -537,6 +538,24 @@ var holdingManager = {
                     
 
                 }
+
+                //Every ~700 ticks check for roads that need repaired
+                if(Game.time % (700 + Object.keys(Memory.kingdom.holdings).indexOf(holdingName)) == 0){
+                    let roadRep = false;
+                    roadLoop:
+                    for(let source of Object.values(holding.sources)){
+                        for(let spot of source.path){
+                            let road = remote.lookForAt(LOOK_STRUCTURES,spot.x,spot.y).filter(str=>str.structureType == STRUCTURE_ROAD && str.hits < str.hitsMax * 0.7)[0]
+                            if(road){
+                                roadRep = true;
+                                break roadLoop;
+                            }
+                        }
+                    }
+                    Memory.kingdom.holdings[holdingName].roadRep = roadRep;
+                    Memory.kingdom.fiefs[holding.homeFief].repRequest = true;
+                }
+                
             }
             
         }

@@ -131,7 +131,7 @@ const intelManager = {
                 //If no data, it's good to scout
                 if(!roomData) return true;
                 //Only consider the room good if it isn't a fief belonging to an enemy, or if it is, if it's been longer than 20k ticks since we looked in on it
-                let good = (roomData.roomType != 'fief' || roomData.ownerType != 'enemy') || Game.time - roomData.lastRecord > 5000;
+                let good = (roomData.roomType != 'fief' || roomData.ownerType != 'enemy') || Game.time - roomData.lastRecord > 20000;
                 return good;
             });
             //console.log("Viable exits after trimming:",exitRooms)

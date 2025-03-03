@@ -27,7 +27,9 @@ const registry = {
         'healer'     : 'Squire',
         'guardsman' : 'Guardsman',
         'man-at-arms': 'Man-at-Arms',
-        'declaimer'  : 'Duke'
+        'declaimer'  : 'Duke',
+        'guard' : 'Guardsman',
+        'repair' : 'Paver'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -171,6 +173,8 @@ function getBody(role,room,job='default',fiefCreeps,plan){
     let mult;
     let newBod;
     switch(role){
+        case 'repair':
+            return getRepair(room)
         case 'scout':
             return getScout(room,fiefCreeps);
         case 'harvester':
@@ -226,6 +230,22 @@ function getBody(role,room,job='default',fiefCreeps,plan){
 //#endregion
 //#region Creep Body Functions
 
+function getRepair(room){
+    let parts = [MOVE,CARRY,WORK];
+    let partsCost = 0;
+    for(each of parts){
+        partsCost += BODYPART_COST[each];
+    }
+    let engAvail = room.energyCapacityAvailable;
+    let mult = Math.floor(engAvail/partsCost)
+    let arrCap = Math.floor(MAX_CREEP_SIZE/parts.length)
+    let newBod = [].concat(...Array(Math.min(mult,arrCap)).fill(parts));
+    let totalCost = 0;
+    newBod.forEach(b => {
+        totalCost += BODYPART_COST[b];
+    });
+    return [newBod,totalCost]
+}
 
 //Energy harvester - Serf
 function getEHarvester(room,fiefCreeps){
@@ -280,10 +300,6 @@ function getSettler(room) {
 //Miner - Yeoman
 function getMiner(plan){
     let holding = plan.memory.holding;
-    let distance = Memory.kingdom.holdings[holding].sources[plan.memory.target].path.length
-    let carrySize;
-    let workSize;
-    let moveSize;
     /*
     Distance Ref
     30:2,
@@ -292,31 +308,13 @@ function getMiner(plan){
     110:5,
     130:6
     */
-    if(distance >= 130) carrySize = 6
-    else if(distance >= 110) carrySize = 5
-    else if(distance >= 80) carrySize = 4
-    else if(distance >= 60) carrySize = 3
-    else if(distance >= 30) carrySize = 2
-    else{ carrySize = 2}
-    if(carrySize>4){
-        workSize = 10;
-        moveSize = Math.ceil((carrySize+workSize)/2);
-    }
-    else{
-        workSize = 6;
-        moveSize = 2;
-    }
     let partsCost = 0;
-    let optimalEnergy = (carrySize*50)+(workSize*100)+(moveSize*50)
+
     let homeFief = Game.rooms[Memory.kingdom.holdings[holding].homeFief];
     let energyAvailable = homeFief.energyCapacityAvailable;
     let newBody;
     //Body choice depends on capacity available
-    if(energyAvailable >= optimalEnergy){
-        newBody = [...Array(carrySize).fill(CARRY),...Array(moveSize).fill(MOVE),...Array(workSize).fill(WORK)];
-        plan.memory.doRepair = true;
-    }
-    else if(energyAvailable >= 800){
+    if(energyAvailable >= 800){
         newBody = [MOVE,MOVE,MOVE,WORK,WORK,WORK,WORK,WORK,WORK,CARRY];
     }
     else if(energyAvailable >= 500){

@@ -36,7 +36,7 @@ var roleMiner = {
 
         //Otherwise move to position
         if(creep.memory.status != 'harvesting'){
-            if(creep.memory.doRepair){
+            /*if(creep.memory.doRepair){
                 if(!creep.memory.filled && creep.room.name == creep.memory.fief && creep.store[RESOURCE_ENERGY] == 0){
                     if(creep.pos.getRangeTo(creep.room.storage) > 1){
                         creep.travelTo(creep.room.storage);
@@ -61,7 +61,7 @@ var roleMiner = {
                     }
                 }
 
-            }
+            }*/
             //Large creeps want their spot. Small creeps just go to the source.
             //Large creeps are immobile once placed, small are not
             if(creep.getActiveBodyparts(WORK) >=5){
@@ -112,6 +112,7 @@ var roleMiner = {
             else if(can){
                 if(can.hits < can.hitsMax * 0.9){
                     creep.repair(can);
+                    creep.repping = true;
                     let resSpot = creep.room.lookForAt(LOOK_RESOURCES,creep.pos).filter(res => res.resourceType == RESOURCE_ENERGY);
                     //Pickup loose energy if available, otherwise withdraw
                     if(resSpot.length) creep.pickup(resSpot[0])
@@ -119,6 +120,14 @@ var roleMiner = {
                         creep.withdraw(can,RESOURCE_ENERGY);
                     }
                     
+                }
+                else{
+                    let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+                    if(cSites.length){
+                        let targetSite = creep.pos.findClosestByRange(cSites);
+                        if(creep.pos.getRangeTo(targetSite) <=3) creep.build(targetSite);
+                        creep.repping = true;
+                    }
                 }
             }
             //If no can and home RCL is 4+ and we're a big creep, build one
@@ -136,10 +145,18 @@ var roleMiner = {
                     }
                     else{
                         creep.build(cSite[0])
-                        let resSpot = creep.room.lookForAt(LOOK_RESOURCES,creep.pos).filter(res => res.resourceType == RESOURCE_ENERGY);
-                        if(resSpot.length) creep.pickup(resSpot[0])
+                        creep.repping = true;
                     }
                 }
+            }
+        }
+        if(creep.repping){
+            if(can && can.store[RESOURCE_ENERGY] > 0){
+                creep.withdraw(can,RESOURCE_ENERGY)
+            }
+            else{
+                let resSpot = creep.room.lookForAt(LOOK_RESOURCES,creep.pos).filter(res => res.resourceType == RESOURCE_ENERGY);
+                if(resSpot.length) creep.pickup(resSpot[0])
             }
         }
     }

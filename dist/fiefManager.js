@@ -156,11 +156,17 @@ const fiefManager = {
 
         if(!fief.controllerSpots || (fief.controllerSpots && fief.controllerSpots.rcl < room.controller.level)){
             if(fief.roomPlan){
-                fief.controllerSpots = getControllerSpots(room,fief);
+                let results = getControllerSpots(room,fief);
+                fief.controllerSpots = results[0];
+                fief.chain = results[1];
                 fief.controllerSpots.rcl = room.controller.level
             }
 
         }
+
+        //if(!fief.chainSpots && room.storage && room.storage.pos.getRangeTo(room.controller) <4){
+            //fief.chainSpots = getChainSpots(room);
+        //}
         //If we have some controller progress for a buffer, check if we need to build the next site
         if(Object.keys(buildQueue).length && !cSites.length){
             let toBuild;
@@ -180,7 +186,7 @@ const fiefManager = {
                     if(each == STRUCTURE_SPAWN && firstSpawn.name == 'Origin Keep'){
                         //console.log("Origin spawn detected")
                         //If we're replacing the origin spawn but aren't ready with energy, skip it
-                        if(!room.storage || !room.storage.my || !room.storage.store[RESOURCE_ENERGY] > 30000){
+                        if(room.controller.level < 5 || !room.storage || !room.storage.my || !room.storage.store[RESOURCE_ENERGY] > 30000){
                             //console.log("Storage pass")
                             continue;
                         }
@@ -436,7 +442,8 @@ const fiefManager = {
             //Get scouted domain rooms, exclude SK for now
 
             let domainRooms = getDomainRooms(room.name)
-            let fDomain = domainRooms.filter(dRoom => !Memory.kingdom.holdings[dRoom] && dRoom.type != ROOM_SOURCE_KEEPER);
+            //No SK rooms for remotes. Only check unscouted rooms except for extremely periodic checks
+            let fDomain = domainRooms.filter(dRoom => !Memory.kingdom.holdings[dRoom] && dRoom.type != ROOM_SOURCE_KEEPER && (!dRoom.scouted || Game.time % (1000*Object.keys(Memory.kingdom.fiefs).length) == 0));
             //console.log("D",domainRooms)
             //console.log("F",fDomain)
             for(let dRoom of fDomain){
@@ -485,6 +492,14 @@ const fiefManager = {
 
         //Add requests for dropped resources
         manageResourceCollection(room)
+
+        //Set repair request if needed
+        let damagedStructures = room.find(FIND_STRUCTURES).filter(str=>(str.structureType == STRUCTURE_CONTAINER && str.hits < str.hitsMax * 0.7) || (str.structureType == STRUCTURE_ROAD && str.hits < str.hitsMax * 0.8) || (![STRUCTURE_CONTAINER,STRUCTURE_ROAD,STRUCTURE_WALL,STRUCTURE_RAMPART].includes(str.structureType) && str.hits < str.hitsMax));
+        if(damagedStructures.length && !fief.repRequest){
+            fief.repRequest = true;
+            //console.log(JSON.stringify(damagedStructures))
+            chronicle.log(`${room.name} -  Repair requested for ${damagedStructures.length} structures.`,'fiefManager',3);
+        }
 
         //Spawn queue check every 3 ticks
         if(Game.time % 3 == 0){
@@ -540,7 +555,17 @@ const fiefManager = {
             else{
                 upMax = 0;
             }
-            //Pre and post storage logic
+
+            //Remote reps
+            if(fief.repRequest){
+                if(!fiefCreeps.repair || !fiefCreeps.repair.length){
+                    registry.requestCreep({sev:37,memory:{role:'repair',fief:room.name,status:'spawning',preflight:false}})
+                }
+                //else if(fiefCreeps.repair.length == 1 && damagedStructures.length && damagedStructures.length > ){
+                    //registry.requestCreep({sev:20,memory:{role:'repair',fief:room.name,status:'spawning',preflight:false}})
+                //}
+            }
+
 
             //Spawn operations when storage is available
             if(room.storage && room.storage.my){
@@ -623,7 +648,7 @@ const fiefManager = {
                             //console.log("SETTLERS!",settlers,settlers.length)
                             //console.log("SETTLERS",settlers.length, "S1",Object.keys(Memory.kingdom.fiefs[fief.support].sources).length * 2,"S2",settlement.find(FIND_SOURCES).length * 2,"S3",settlers.length < (Memory.kingdom.fiefs[fief.support].sources ? Memory.kingdom.fiefs[fief.support].sources.length * 2 : settlement.find(FIND_SOURCES).length * 2))
                             if(settlers.length < (Memory.kingdom.fiefs[fief.support].sources ? Object.keys(Memory.kingdom.fiefs[fief.support].sources).length * 2 : settlement.find(FIND_SOURCES).length * 2)){
-                                let opts = {sev:28.5,memory:{role:'settler',fief:room.name,targetRoom:fief.support,preflight:false}}
+                                let opts = {sev:settlers.length < 1 ? 38 : 28.5,memory:{role:'settler',fief:room.name,targetRoom:fief.support,preflight:false}}
                                 registry.requestCreep(opts)
                             }
                         }
@@ -663,6 +688,7 @@ const fiefManager = {
                 }
             }
         }
+
 
         //Non-spawn room operations for after storage
         if(room.storage  && room.storage.my){
@@ -837,21 +863,28 @@ const fiefManager = {
 
         
         //RCL 5 checks - Link control
-        if(false && roomLevel >= 5){
+        if(roomLevel >= 5){
             //Get the links set up if they aren't
             
             //Links are set up manually for now. Write automated link placement later.
             //Link memory structure: fief.links = {coreLink:linkID,upLink:linkID,remoteLink:linkID}
             //Consider making remoteLink a list of remote links
 
+            //If the link arrays don't exist, create them
+            if(!fief.links.sourceLinks) fief.links.sourceLinks = [];
+            if(!fief.links.remoteLinks) fief.links.remoteLinks = [];
+
             //Detect links
-            if(!fief.links.coreLink){
-                let coreCheck = room.lookForAt(LOOK_STRUCTURES,room.storage.pos.x,room.storage.pos.y-1)[0]
-                if(coreCheck){
-                    fief.links.coreLink = coreCheck.id;
+            if(room.storage && !fief.links.coreLink){
+                let coreCheck = room.find(FIND_MY_STRUCTURES).filter(str=>str.structureType == STRUCTURE_LINK);
+                for(let core of coreCheck){
+                    if(core.pos.getRangeTo(room.storage) <= 2){
+                        fief.links.coreLink = core.id;
+                        break;
+                    }
                 }
             }
-            if(!fief.links.upLink){
+            if(false && !fief.links.upLink){
                 let upCheck = room.controller.pos.findInRange(FIND_MY_STRUCTURES,2, {
                     filter: { structureType: STRUCTURE_LINK }
                 })[0];
@@ -862,9 +895,7 @@ const fiefManager = {
 
             //Set up an array of sources test
             
-            //If the link arrays don't exist, create them
-            if(!fief.links.sourceLinks) fief.links.sourceLinks = [];
-            if(!fief.links.remoteLinks) fief.links.remoteLinks = [];
+
 
 
 
@@ -879,7 +910,7 @@ const fiefManager = {
                         })[0];
                         //If found, and not matching any other link, add to the source info and to the links array
                         //Automated placement may need to account for this
-                        if(sourceCheck && sourceCheck.id != fief.links.coreLink && sourceCheck.id != fief.links.upLink){
+                        if(sourceCheck && (!fief.links.coreLink || sourceCheck.id != fief.links.coreLink) && (!fief.links.upLink || sourceCheck.id != fief.links.upLink)){
                             fief.sources[source].link = sourceCheck.id;
                             //Only add if not already in the list, in case it's shared
                             if(!fief.links.sourceLinks.includes(sourceCheck.id)) fief.links.sourceLinks.push(sourceCheck.id);
@@ -893,260 +924,24 @@ const fiefManager = {
             let upLink = Game.getObjectById(fief.links.upLink);
             let coreLink = Game.getObjectById(fief.links.coreLink);
             let remoteLinks = fief.links.remoteLinks.map(id => Game.getObjectById(id));
-            let manager = Game.creeps[fief.manager]
-            let managerBusy = false;
-            let coreFlag = false;
-            
-            //Periodic check for remote links needed, not sure how best to do it
-            //Find links close to room edge
-            //[MOVE,CARRY,MOVE,CARRY,MOVE,CARRY,MOVE,CARRY]
-            //[MOVE,CARRY,CARRY,CARRY,MOVE,CARRY,CARRY,CARRY]
-            if(Game.time % 20 == 0){
-                let totalLinks = 0;
-                if(fief.links.coreLink) totalLinks++;
-                if(fief.links.upLink) totalLinks++;
-                totalLinks += fief.links.sourceLinks.length;
-                totalLinks += fief.links.remoteLinks.length;
-                //If total links are less than the room level allows, check for remotes
-                if(totalLinks < CONTROLLER_STRUCTURES[STRUCTURE_LINK][roomLevel]){
-                    //If it's within 3 spaces of a room edge, and isn't assigned to another slot, it's a remote link
-                    let roomLinks = room.find(FIND_MY_STRUCTURES, {
-                        filter: { structureType: STRUCTURE_LINK }
-                    });
-                    roomLinks.forEach(link =>{
-                        //If link is at the edge of the room
-                        if(link.pos.x <= 3 || link.pos.x >= 46 || link.pos.y <= 3 || link.pos.y >= 46){
-                            //If not matching any assigned link
-                            if(link.id != fief.links.coreLink && link.id != fief.links.upLink && !fief.links.sourceLinks.includes(link.id) && !fief.links.remoteLinks.includes(link.id)){
-                                //Add ID to links in memory
-                                fief.links.remoteLinks.push(link.id)
-                                //Add link to current remote links array
-                                roomLinks.push(link)
-                            }
-                        }
-                    })
-                };
-                //If we don't have a queue for all the remote links, create them
-                if(!heap.remoteQueues) heap.remoteQueues = {};
-                if(!heap.remoteQueues[room.name]) heap.remoteQueues[room.name] = {};
-                let queues = heap.remoteQueues[room.name];
-                if(fief.links.remoteLinks.length && Object.keys(queues).length != fief.links.remoteLinks.length){
-                    remoteLinks.forEach(link =>{
-                        //Create queue if missing
-                        if(!queues[link.id]){
-                            //Queues parent object holds the actual queue as well as the distance to core link to calculate cooldown
-                            //The actual queue object holds the name of the creep queued as the key and the total energy dropoff as the value 
-                            queues[link.id] = {queue:{},distance:link.pos.getRangeTo(Game.getObjectById(fief.links.coreLink))}
-                        }
-                    })
-                }
+            let sourceLinks = fief.links.sourceLinks.map(id => Game.getObjectById(id));
+            //if(room.name=='E19N11')console.log(managerBusy)
 
+            if(coreLink.store[RESOURCE_ENERGY]>0){
+                supplyDemand.addRequest(room,{resourceType:RESOURCE_ENERGY,amount:coreLink.store[RESOURCE_ENERGY],type:'pickup',targetID:fief.links.coreLink,priority:6});
             }
-            
-            
-            //Set up manager spot if we have established at least a core link
-            if(false && coreLink && !fief.managerSpot){
-                newPos = roomPlanner.getManagerPos(room);
-                fief.managerSpot = {x:newPos.x,y:newPos.y}
-            }
-
-           
-            //If uplink is ready to receive
-            if(false &&upLink && upLink.store[RESOURCE_ENERGY] == 0){
-                //Prioritize remote link
-                if(remoteLinks.length){
-                    for(link of remoteLinks){
-                        if(link && link.store[RESOURCE_ENERGY] > 0){
-                            link.transferEnergy(upLink);
-                            break;
-                        }
-                    }
-                    
-                    
-                }
-                    coreFlag = false;
-                    //If remote isn't good, check source links
-                    fief.links.sourceLinks.forEach(linkID =>{
-                        let link = Game.getObjectById(linkID);
-    
-                        //Check to see if we can transfer
-                        if(link.store[RESOURCE_ENERGY] == 800){
-                            link.transferEnergy(upLink);
-                            coreFlag = true;
-                        }
-                    });
-                    //Else if none, get core link to transfer via manager
-                    if(!coreFlag){
-                        if(coreLink.store[RESOURCE_ENERGY] == 800){
-                            coreLink.transferEnergy(upLink);
-                        }
-                        else if(manager){
-                            //if(room.name=='E19N11')console.log('Manager Coreflag')
-                            //If coreLink doesn't have the energy, have manager transfer it or pull if empty
-                            managerBusy = true;
-                            if(manager.store.getUsedCapacity() == 0){
-                                //if(room.name=='E19N11')console.log('Manager flag1')
-                                manager.withdraw(room.storage,RESOURCE_ENERGY);
-                            }
-                            else{
-                                if(manager.store[RESOURCE_ENERGY] == 0){
-                                    //if(room.name=='E19N11')console.log('Manager flag2')
-                                    //if(room.name=='E19N11')console.log(JSON.stringify(creep.store))
-                                    for(const resourceType in manager.store) {
-                                        //console.log(resourceType)
-                                        let x =manager.transfer(room.storage,resourceType);
-                                        //console.log(x)
-                                        break;
-                                    }
-                                }
-                                else{
-                                    //if(room.name=='E19N11')console.log('Manager flag3')
-                                    manager.transfer(coreLink,RESOURCE_ENERGY);
-                                }
-                                
-                            }
-                        }
-                    }
-                
-
-                
-                
-            }
-            //Else if uplink isn't ready
-            else if(false){
-                //Flag if we need to empty coreLink
-                fief.links.sourceLinks.forEach(linkID =>{
-                    let link = Game.getObjectById(linkID);
-
-                    //Check to see if we need to transfer
+            else{
+                for(let link of sourceLinks){
                     if(link.store[RESOURCE_ENERGY] == 800){
-                        coreFlag = true;
-                        if(coreLink.store[RESOURCE_ENERGY] == 0){
-                            link.transferEnergy(coreLink);
-                        }
-                        else if(manager){
-                            if(room.name=='E11N12')console.log('Manager EmptyCorelink')
-                            managerBusy = true;
-                            //Need to empty core link.
-                            if(manager.store.getUsedCapacity() == 0){
-                                manager.withdraw(coreLink,RESOURCE_ENERGY);
-                            }else if(room.storage.store.getFreeCapacity() != 0){
-                                for(const resourceType in manager.store) {
-                                    manager.transfer(room.storage,resourceType);
-                                    break;
-                                }
-                            }else{
-                                for(const resourceType in manager.store) {
-                                    manager.transfer(room.terminal,resourceType);
-                                    break;
-                                }
-                            }
-
-                        }
-                    }
-                });
-
-                //If still no core flag, check remotelink.
-                if(!coreFlag && remoteLinks.length){
-                    for(link of remoteLinks){
-                        if(link.store[RESOURCE_ENERGY] > 0){
-                            if(coreLink.store[RESOURCE_ENERGY] == 0){
-                                link.transferEnergy(coreLink);
-                                break;
-                            }
-                            else{
-                                if(manager){
-                                    managerBusy = true;
-                                    if(manager.store.getUsedCapacity() == 0){
-                                        manager.withdraw(coreLink,RESOURCE_ENERGY);
-                                        break;
-                                        
-                                    }
-                                    else{
-                                        for(const resourceType in manager.store) {
-                                            manager.transfer(room.storage,resourceType);
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-            }
-
-            //Transfer and logistics check
-            if(false && manager && !managerBusy){
-                //Primary amount in storage
-                let energyMinimum = 50000;
-                let energyTermMax = 200000;
-                if(room.storage && room.terminal){
-                    //If a growing room, raise the minimum
-                    if(roomLevel == 6){
-                        energyMinimum = 700000;
-                    }
-
-                    //If we have spare energy, dump to terminal
-                    if(room.storage.store[RESOURCE_ENERGY] > energyMinimum && room.terminal.store[RESOURCE_ENERGY] <= energyTermMax){
-                        managerBusy = true;
-                        if(room.name=='E11N12')console.log('Manager dump terminal')
-                        if(manager.store.getUsedCapacity() == 0){
-                            manager.withdraw(room.storage,RESOURCE_ENERGY);
-                        }else{
-                            for(const resourceType in manager.store) {
-                                manager.transfer(room.terminal,resourceType);
-                                break;
-                            }
-                        }
-                    }
-                    //If we have reserve energy in terminal and storage gets low, or terminal full, swap. Higher swap point for rooms needing support to grow to 7
-                    //1000 buffer on max to stop nonstop swaping back and forth
-                    else if(room.terminal.store[RESOURCE_ENERGY] > energyTermMax+1000 && room.storage.store.getFreeCapacity() > 0 ||(((room.storage.store[RESOURCE_ENERGY] < 400000 && roomLevel == 6) || room.storage.store[RESOURCE_ENERGY] < energyMinimum) && room.terminal.store[RESOURCE_ENERGY])){
-                        managerBusy = true;
-                        if(room.name=='E11N12')console.log('Manager Swap')
-                        if(manager.store.getUsedCapacity() == 0){
-                            manager.withdraw(room.terminal,RESOURCE_ENERGY);
-                        }else{
-                            for(const resourceType in manager.store) {
-                                manager.transfer(room.storage,resourceType);
-                                break;
-                            }
-                        }
-                    }
-                    //Else do mineral swap
-                    else{
-                        for(each of [RESOURCE_UTRIUM,RESOURCE_HYDROGEN,RESOURCE_OXYGEN]){
-                            if(room.storage.store[each] > 0){
-                                if(room.name=='E11N12')console.log('Manager Mineral')
-                                managerBusy = true;
-                                if(manager.store.getUsedCapacity() == 0){
-                                    manager.withdraw(room.storage,each);
-                                }else{
-                                    for(const resourceType in manager.store) {
-                                        if(room.name=='E11N12')console.log('Manager Mineral Transfer')
-                                        let x =manager.transfer(room.terminal,resourceType);
-                                        //if(room.name=='E19N11')console.log(x)
-                                        break;
-                                    }
-                                }
-                            }
-                        }
+                        link.transferEnergy(coreLink)
                     }
                 }
             }
 
-            //If manager is busy, he stays put
-            if(manager && !managerBusy){
-                manager.memory.stay = false;
-                for(const resourceType in manager.store) {
-                    manager.transfer(room.storage,resourceType);
-                    break;
-                }
-            }else if(manager){
-                manager.memory.stay = true;
-            }
 
+            
+            //Periodic RCL5+ Check
+            if(false && Game.time % 70 == 0){
             //Labs check -- SEASONAL, REMOVE AND REPLACE WITH REAL LOGIC
             let goLabs = false;
             if(fief.labTargets){
@@ -1181,17 +976,7 @@ const fiefManager = {
                 fief.labOutput = outLabs;
             }
 
-            
 
-            //if(room.name=='E19N11')console.log(managerBusy)
-
-
-
-
-
-            
-            //Periodic RCL5+ Check
-            if(false && Game.time % 70 == 0){
                 //Linked harvester spots should destroy their cans
                 fiefSources.forEach(source =>{
                     let thisSource = fief.sources[source]
@@ -1320,17 +1105,13 @@ const fiefManager = {
         towers = room.find(FIND_MY_STRUCTURES, {
             filter: { structureType: STRUCTURE_TOWER }
         });
-    let norepCans = Object.values(fief.sources).map(source => source.can)
+
     for(let tower of towers) {
-        var damagedStructures = tower.room.find(FIND_STRUCTURES, {
-            filter: (structure) => (((structure.hits < structure.hitsMax*0.8 || structure.hits < structure.hitsMax && structure.structureType != STRUCTURE_ROAD) && ![STRUCTURE_RAMPART,STRUCTURE_WALL].includes(structure.structureType)) && !norepCans.includes(structure.id))
-        });
 
         var damagedCreeps = tower.room.find(FIND_MY_CREEPS, {
             filter: (creep) => (creep.hits < creep.hitsMax)
         });
         
-        damagedStructures.sort((a, b) => a.hits - b.hits);
         damagedCreeps.sort((a, b) => a.hits - b.hits);
         //console.log(room.name)
         
@@ -1343,9 +1124,6 @@ const fiefManager = {
         else if(tower.energy > 100){
             if (damagedCreeps.length > 0 && tower.energy > 400){
                 tower.heal(damagedCreeps[0])
-            }
-            else if (damagedStructures.length > 0) {
-                tower.repair(damagedStructures[0]);
             }
         }
     }
@@ -1550,12 +1328,14 @@ function getDomainRooms(fief) {
         validRooms.push({roomName:thisRoom.roomName,depth:thisRoom.depth,scouted:false,type:type})
     }
     Memory.kingdom.fiefs[fief].domain = validRooms;
-    chronicle.log(`${room.name} -  Domain mapped. ${validRooms.length} rooms located.`,'fiefManager',3);
+    chronicle.log(`${fief} -  Domain mapped. ${validRooms.length} rooms located.`,'fiefManager',3);
     return validRooms;
 }
 
 function getControllerSpots(room, fief) {
     let controller = room.controller.pos;
+    let storage = room.storage ? room.storage.pos : null
+    let chain = storage ? storage.getRangeTo(controller) <= 4 : null
     let planCM = new PathFinder.CostMatrix();
 
     // Mark impassable spots from the room plan
@@ -1572,49 +1352,103 @@ function getControllerSpots(room, fief) {
         3: []
     };
 
-    let terrain = new Room.Terrain(room.name);
-    let queue = [];
-    let visited = new Set();
-    let directions = [
-        { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
-        { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
-        { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }
-    ];
-
-    // Start BFS from the controller position, always include the controller's position itself
-    queue.push({ pos: controller, range: 0 });
-    visited.add(controller.x + ',' + controller.y);
-
-    while (queue.length > 0) {
-        let current = queue.shift();
-        let { pos, range } = current;
-
-        // Skip walls or blocked areas except for the controller position itself
-        let terrainType = terrain.get(pos.x, pos.y);
-        if (range > 0 && (terrainType === TERRAIN_MASK_WALL || planCM.get(pos.x, pos.y) === 255)) {
-            continue;
-        }
-
-        // If within range and not a wall, add to the appropriate range list
-        if (range > 0 && range <= 3) {
-            controllerSpots[range].push(pos);
-        }
-
-        // Explore neighboring positions if within range 3
-        if (range < 3) {
-            for (let dir of directions) {
-                let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
-                let posKey = newPos.x + ',' + newPos.y;
-
-                if (!visited.has(posKey)) {
-                    visited.add(posKey);
-                    queue.push({ pos: newPos, range: range + 1 });
+    // -- Chain Logic
+    if(chain){
+        let terrain = new Room.Terrain(room.name);
+        let queue = [];
+        let visited = new Set();
+        let directions = [
+            { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+            { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+            { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }
+        ];
+    
+        // Start BFS from the storage position, always include the storage's position itself
+        queue.push({ pos: storage, range: 0 });
+        visited.add(storage.x + ',' + storage.y);
+    
+        while (queue.length > 0) {
+            let current = queue.shift();
+            let { pos, range } = current;
+    
+            // Skip walls or blocked areas except for the storage position itself
+            let terrainType = terrain.get(pos.x, pos.y);
+            if (range > 0 && (terrainType === TERRAIN_MASK_WALL || planCM.get(pos.x, pos.y) === 255)) {
+                continue;
+            }
+            // Skip spots unable to hit the controller
+            if(new RoomPosition(pos.x,pos.y,room.name).getRangeTo(controller) > 3){
+                continue;
+            }
+    
+            // If within range and not a wall, add to the appropriate range list
+            if (range > 0 && range <= 3) {
+                controllerSpots[range].push(pos);
+            }
+    
+            // Explore neighboring positions if within range 3
+            if (range < 3) {
+                for (let dir of directions) {
+                    let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
+                    let posKey = newPos.x + ',' + newPos.y;
+    
+                    if (!visited.has(posKey)) {
+                        visited.add(posKey);
+                        queue.push({ pos: newPos, range: range + 1 });
+                    }
                 }
             }
         }
     }
+    // -- Non Chain Logic
+    else{
+        let terrain = new Room.Terrain(room.name);
+        let queue = [];
+        let visited = new Set();
+        let directions = [
+            { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+            { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+            { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }
+        ];
+    
+        // Start BFS from the controller position, always include the controller's position itself
+        queue.push({ pos: controller, range: 0 });
+        visited.add(controller.x + ',' + controller.y);
+    
+        while (queue.length > 0) {
+            let current = queue.shift();
+            let { pos, range } = current;
+    
+            // Skip walls or blocked areas except for the controller position itself
+            let terrainType = terrain.get(pos.x, pos.y);
+            if (range > 0 && (terrainType === TERRAIN_MASK_WALL || planCM.get(pos.x, pos.y) === 255)) {
+                continue;
+            }
+    
+            // If within range and not a wall, add to the appropriate range list
+            if (range > 0 && range <= 3) {
+                controllerSpots[range].push(pos);
+            }
+    
+            // Explore neighboring positions if within range 3
+            if (range < 3) {
+                for (let dir of directions) {
+                    let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
+                    let posKey = newPos.x + ',' + newPos.y;
+    
+                    if (!visited.has(posKey)) {
+                        visited.add(posKey);
+                        queue.push({ pos: newPos, range: range + 1 });
+                    }
+                }
+            }
+        }
+    }
+    
 
-    return controllerSpots;
+
+
+    return [controllerSpots,chain];
 }
 
     /*let range = 3;

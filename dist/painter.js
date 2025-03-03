@@ -109,10 +109,24 @@ const painter = {
             //chronicle.log(`No config available in the architect.`,'painter',4)
             return;
         }
+        let plan;
+        let scores
+        if(!config.running){
+            if(!config.bestPlan) return;
+            [plan,scores] = config.best;
+        }
+        else if(config.currentPlans.length){
+            let planData = config.currentPlans[config.currentPlans.length-1];
+            plan = planData[3];
+            scores = planData[2];
+        }
+        else{
+            return;
+        }
         let roomVis = new RoomVisual(config.roomName);
         
-        let planData = config.currentPlans[config.currentPlans.length-1];
-        let [stageSubject,genes,scores,plan] = planData;
+        
+        if(!plan || ! scores) return;
         //chronicle.log(`Plan found. ${Object.keys(plan)}.`,'painter',4)
         for(let key of Object.keys(plan.roads)){
             let rds = plan.roads[key];
@@ -152,7 +166,7 @@ const painter = {
         }
         let count = 0;
         for(let line of scoreText){
-            roomVis.text(line,48,13+count,{color: 'white', fontSize: 10,align:count = 0 ? 'center' : 'right'});
+            roomVis.text(line,48,13+count,{color: 'white', fontSize: 10,align:'right'});
             count++
         }
         

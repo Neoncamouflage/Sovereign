@@ -140,7 +140,9 @@ const fiefPlanner = {
             if(fiefPlanner.subject < fiefPlanner.population.length){
                 //Get our current set of genes and pass it to the planner
                 let genes = fiefPlanner.population[fiefPlanner.subject]
-                let [basePlanCM,basePlan,planCPU] = this.generateRoomPlan(fiefPlanner.roomName,{
+                let result = this.generateRoomPlan(fiefPlanner.roomName,genes);
+                /**
+                 * {
                     eWeight:genes[0],
                     cWeight:genes[1],
                     sWeight:genes[2],
@@ -155,14 +157,16 @@ const fiefPlanner = {
                     minCDWeight:genes[11],
                     minCIWeight:genes[12],
                     minCFWeight:genes[13]
-                });
+                }
+                 */
                 //Returning negative 1 means bad genes.
-                if(basePlanCM == -1){
-                    fiefPlanner.totalCPU += planCPU;
-                    fiefPlanner.currentPlan = basePlan;
-                    fiefPlanner.currentCM = basePlanCM;
+                if(!result){
+                    fiefPlanner.totalCPU += -1;
+                    fiefPlanner.currentPlan = -1;
+                    fiefPlanner.currentCM = -1;
                 }
                 else{
+                    [basePlanCM,basePlan,planCPU] = result;
                     //Assign the plan and CM for scoring, and set the step
                     fiefPlanner.currentPlan = basePlan;
                     fiefPlanner.currentCM = basePlanCM.serialize();
@@ -674,6 +678,7 @@ const fiefPlanner = {
         basePlanCM.set(coreLocation.x,coreLocation.y,98)
         baseRoadsCM.set(coreLocation.x,coreLocation.y,255)
         basePlan.storage={x:coreLocation.x,y:coreLocation.y};
+        basePlan.extractor={x:mineral.x,y:mineral.y}
         let storagePos = new RoomPosition(basePlan.storage.x,basePlan.storage.y,roomName);
         let sourcePaths = [];
         let controllerPath = PathFinder.search(storagePos,{pos:controllerPos,range:1},{
@@ -692,6 +697,7 @@ const fiefPlanner = {
             baseRoadsCM.set(spot.x,spot.y,1)
         });
         basePlan.roads.controller = controllerPath;
+        basePlan.harvestSpots = {}
         sources.forEach(source => {
             let sourcePath = PathFinder.search(storagePos,{pos:new RoomPosition(source.x,source.y,roomName),range:1},{
                 // Same cost for everything because we're finding a centerpoint
@@ -708,6 +714,7 @@ const fiefPlanner = {
             if(lastSpot){
                 basePlanCM.set(lastSpot.x,lastSpot.y,25)
                 baseRoadsCM.set(lastSpot.x,lastSpot.y,255)
+                basePlan.harvestSpots[source.id] = {x:lastSpot.x,y:lastSpot.y}
             }
             else{
                 //console.log("No last spot for source",source.x,source.y)
@@ -769,8 +776,10 @@ const fiefPlanner = {
         //Remove the last spot in the path
         let lastSpot = mineralPath.pop();
         //Assign a value of 25 to mark it as a harvest spot.
+        //Also add to the basePlan
         basePlanCM.set(lastSpot.x,lastSpot.y,25)
         baseRoadsCM.set(lastSpot.x,lastSpot.y,255)
+        basePlan.harvestSpots[mineral.id] = {x:lastSpot.x,y:lastSpot.y}
         mineralPath.forEach(spot=>{
                 basePlanCM.set(spot.x,spot.y,99)
                 baseRoadsCM.set(spot.x,spot.y,1)
@@ -988,6 +997,14 @@ const fiefPlanner = {
                         }
                         basePlanCM.set(x,y,blobSpot);
                         basePlan[thisStruct].push({x:x,y:y,type:blobSpot})
+                        if(blobSpot == 76){
+                            basePlan.sourceLabs = basePlan.sourceLabs || [];
+                            basePlan.sourceLabs.push({x:x,y:y,type:blobSpot})
+                        }
+                        else if(blobSpot == 75){
+                            basePlan.targetLabs = basePlan.targetLabs || [];
+                            basePlan.targetLabs.push({x:x,y:y,type:blobSpot})
+                        }
                     }
                     //Don't replace ramparts
                     else if(blobSpot == 99 && basePlanCM.get(x,y) != 100){

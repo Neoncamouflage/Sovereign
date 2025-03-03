@@ -3,7 +3,7 @@ const supplyDemand = require('supplyDemand');
 const helper = require('functions.helper');
 
 
-//Functions for a random integer(inclusive) and random array selection
+//Functions for a random integer from 0 to max(inclusive) and random array selection
 global.randomInt = function(max) {
     return Math.floor(Math.random() * (max + 1));
 };
@@ -466,7 +466,7 @@ global.purgeOldScoutData = function(amt = 20000){
     for(let [room,roomData] of Object.entries(getScoutData())){
         
         if((Game.time - roomData.lastRecord) > amt){
-            chronicle.log(`Removing scout data for ${room}. Last seen: ${(Game.time - roomData.lastRecord)} ticks ago, greater than amt:${amt}.`,'global.purgeOldScoutData',4)
+            
             removeScoutData(room);
         }
     }
@@ -510,8 +510,12 @@ global.clearQueue = function(room='all'){
         Memory.kingdom.fiefs[room].spawnQueue = {};
     }
 }
-global.setAlarm = function({roomName,alarmType='general',hostiles=[],manualExpiry=false} = {}){
+global.setAlarm = function({roomName,alarmType='general',hostiles=[],manualExpiry=false,origin='global.setAlarm'} = {}){
     let expiration = manualExpiry || Game.time + Math.max(...hostiles.map(creep => creep.ticksToLive))
     heap.alarms[roomName] = {tick:Game.time,type:alarmType,creeps:hostiles.map(creep => creep.id),expiry:expiration}
-    chronicle.log(`Alarm raised in room ${roomName}. Type:${alarmType}. Hostile count:${hostiles.length}. Expiration:${expiration-Game.time} ticks.`,'global.setAlarm',3);
+    chronicle.log(`Alarm raised in room ${roomName}. Type: ${alarmType}. Hostile count: ${hostiles.length}. Expiration: ${expiration-Game.time} ticks.`,origin,3);
+}
+
+global.show = function(objectID){
+    return JSON.stringify(Game.getObjectById(objectID).memory);
 }

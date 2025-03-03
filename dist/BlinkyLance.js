@@ -27,6 +27,7 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
         let remoteHealing = false;
         let injuredFar = false;
         let closest;
+        creep.memory.stay = true;
         if(!target && hostiles && hostiles.length){
             target = creep.pos.findClosestByRange(hostiles)
         }
@@ -50,9 +51,10 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
         //If no target or position, defend self and heal
         if(!target && !targetPos){
             let structTargets = creep.room.find(FIND_STRUCTURES, {
-                filter: (structure) => structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_CONTROLLER&& structure.structureType != STRUCTURE_WALL
+                filter: (structure) => structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_CONTROLLER&& structure.structureType != STRUCTURE_INVADER_CORE && structure.structureType != STRUCTURE_WALL
             });
-            if(structTargets.length){
+            chronicle.log(`Structures found: ${structTargets}`,'BlinkyLance',4);
+            if(structTargets.length && !Memory.kingdom.holdings[creep.room.name] && !!Memory.kingdom.fiefs[creep.room.name]){
                 let stTarget = creep.pos.findClosestByRange(structTargets);
                 if(creep.pos.getRangeTo(stTarget) <=1){
                     creep.rangedMassAttack();
@@ -100,6 +102,7 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
             }
             //If target but no specific place to stand, just travel towards it until range 3
             else{
+                creep.memory.stay = false;
                 if(!hostiles || !hostiles.length){
                     if(targetPos){
                          let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{range:targetPos.range,military:true});
