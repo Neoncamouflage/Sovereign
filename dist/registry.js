@@ -74,7 +74,7 @@ const registry = {
                 }
                 newCreep.body = body
             }
-            
+            if(heap.wardens && heap.wardens[room.name] && (['mineralHarvester'].includes(newCreep.memory.job) || ['miner','repair','claimer'].includes(newCreep.memory.role))) continue
             
             
             //Check if spawn has energy
@@ -238,7 +238,7 @@ function getRepair(room){
     }
     let engAvail = room.energyCapacityAvailable;
     let mult = Math.floor(engAvail/partsCost)
-    let arrCap = Math.floor(MAX_CREEP_SIZE/parts.length)
+    let arrCap = Math.floor(24/parts.length)
     let newBod = [].concat(...Array(Math.min(mult,arrCap)).fill(parts));
     let totalCost = 0;
     newBod.forEach(b => {

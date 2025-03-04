@@ -115,7 +115,7 @@ var roleHarvester = {
 
                     let can = fief.mineral.can ? Game.getObjectById(fief.mineral.can) : false;
                 
-                    if(target.mineralAmount >0 && (!can || can.store.getFreeCapacity() > 0) && Game.time % 5 == 0){
+                    if(target.mineralAmount >0 && (!can || can.store.getFreeCapacity() > 0) && Game.time % 6 == 0){
                         //console.log("AYE")
                         let g =creep.harvest(target);
                         //console.log(g)
@@ -162,12 +162,17 @@ var roleHarvester = {
             }
             //Old link code, likely just remove
             if(link){
+                let harvLink = Game.getObjectById(link);
+                if(!harvLink){
+                    delete fief.sources[targetID].link
+                }
+                else{
                 //console.log("HERE")
                 //Stop flag in case link is full
                 //If we're at the point of using carry creeps
                 if(creep.store && creep.store.getCapacity() > 0){
                     //Check for a can to repair
-                    let harvLink = Game.getObjectById(link);
+                    
                     //If link is live
                     if(harvLink && harvLink.store[RESOURCE_ENERGY] != 800){
                         creep.transfer(harvLink,RESOURCE_ENERGY);
@@ -188,6 +193,8 @@ var roleHarvester = {
                         }
                     }
                 }
+                }
+
             }
         }
     }

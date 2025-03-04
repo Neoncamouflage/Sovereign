@@ -67,7 +67,7 @@ var roleDuo = {
                 }
             }
             if(creep.memory.type == 'ranged'){
-                if(!creep.memory.targetRoom || (creep.memory.tickPick && creep.memory.tickPick < Game.time - 150)){
+                if(creep.memory.harass && (!creep.memory.targetRoom || (creep.memory.tickPick && creep.memory.tickPick < Game.time - 150))){
                     creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1'])
                     creep.memory.tickPick = Game.time
                 }
@@ -92,7 +92,7 @@ var roleDuo = {
                 else{
                     target = roomTargets.length ? creep.pos.findClosestByRange(roomTargets) : creep.pos.findClosestByRange(targets)
                 }
-                if(target && (creep.room.name == targetRoom || creep.pos.getRangeTo(target) < 5)) {
+                if(target && (creep.room.name == targetRoom || creep.pos.getRangeTo(target) < 4)) {
                     let targetRange = creep.pos.getRangeTo(target);
                     if(((creep.pos.getRangeTo(healer) <= 1 || targetRange <=3) || [0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y)) && healer.fatigue == 0){
                     if(targetRange <= 1){
@@ -100,7 +100,7 @@ var roleDuo = {
                         creep.rangedMassAttack();
                         if(soldierFlag){
                             if(creep.room.name == creep.memory.targetRoom){
-                                creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1']);
+                                if(creep.memory.harass)creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1']);
                                 creep.memory.tickPick = Game.time
                             }
                             let res = PathFinder.search(healer.pos, {pos:target.pos,range:5}, {flee:true})
@@ -121,7 +121,7 @@ var roleDuo = {
                         creep.rangedAttack(target)
                         if(soldierFlag){
                             if(creep.room.name == creep.memory.targetRoom){
-                                creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1']);
+                                if(creep.memory.harass)creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1']);
                                 creep.memory.tickPick = Game.time
                             }
                             let res = PathFinder.search(healer.pos, {pos:target.pos,range:5}, {flee:true})
@@ -162,7 +162,7 @@ var roleDuo = {
                     creep.travelTo(new RoomPosition(25,25,creep.room.name),{ignoreRoads:true})
                 }
                 else{
-                    creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1'])
+                    if(creep.memory.harass)creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1'])
                     creep.memory.tickPick = Game.time;
                 }
                 let structTargets = creep.room.find(FIND_STRUCTURES, {

@@ -145,31 +145,57 @@ Creep.prototype.emptyStore = function () {
             this.travelTo(fief.storage)
         }
     }
-    else if(storage && storage.store.getFreeCapacity() > 0){
-        if(this.pos.getRangeTo(storage) > 1){
-            this.travelTo(storage);
-        }
-        else{
-            for(const thisType in this.store) {
-                this.transfer(storage, thisType);
-                break;
-            }
-        }
-    }
-    else if(terminal && terminal.store.getFreeCapacity() > 0){
-        if(this.pos.getRangeTo(terminal) > 1){
-            this.travelTo(terminal);
-        }
-        else{
-            for(const thisType in this.store) {
-                let g = this.transfer(terminal, thisType)
-                break;
-            }
-        }
-    }
     //If we're just chilling with energy, see what we can fill
     else if(this.room.name != this.memory.fief){
         this.travelTo(new RoomPosition(25,25,this.memory.fief))
+    }
+    else if([RESOURCE_MIST,RESOURCE_METAL,RESOURCE_BIOMASS,RESOURCE_SILICON].includes(Object.keys(this.store)[0])){
+        if(terminal && terminal.store.getFreeCapacity() > 0){
+            if(this.pos.getRangeTo(terminal) > 1){
+                this.travelTo(terminal);
+            }
+            else{
+                for(const thisType in this.store) {
+                    let g = this.transfer(terminal, thisType)
+                    break;
+                }
+            }
+        }
+        else if(storage && storage.store.getFreeCapacity() > 0){
+            if(this.pos.getRangeTo(storage) > 1){
+                this.travelTo(storage);
+            }
+            else{
+                for(const thisType in this.store) {
+                    this.transfer(storage, thisType);
+                    break;
+                }
+            }
+        }
+    }
+    else if(storage || terminal){
+        if(storage && storage.store.getFreeCapacity() > 0){
+            if(this.pos.getRangeTo(storage) > 1){
+                this.travelTo(storage);
+            }
+            else{
+                for(const thisType in this.store) {
+                    this.transfer(storage, thisType);
+                    break;
+                }
+            }
+        }
+        else if(terminal && terminal.store.getFreeCapacity() > 0){
+            if(this.pos.getRangeTo(terminal) > 1){
+                this.travelTo(terminal);
+            }
+            else{
+                for(const thisType in this.store) {
+                    let g = this.transfer(terminal, thisType)
+                    break;
+                }
+            }
+        }
     }
 };
 

@@ -21,6 +21,7 @@ const painter = {
         if(visuals.drawTest) this.drawTest();
         if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan)
         if(visuals.drawScores) this.drawScores(architect.config)
+        if(visuals.drawAllies) this.drawAllies()
         
     },
     setVisual: function(vis,setting='default'){
@@ -33,6 +34,35 @@ const painter = {
         else{
             //Default to true if no setting given
             Memory.visuals[vis] = typeof setting == 'boolean' ? setting : true;
+        }
+    },
+    drawAllies(){
+        return;
+        for(let ally of Object.keys(heap.simpleAllies)){
+            let data = heap.simpleAllies[ally];
+            let rooms = {}
+            for(let reqType of Object.keys(data.requests)){
+                let reqData = data.requests[reqType]
+                for(let each of reqData){
+                    rooms[each.roomName] = rooms[each.roomName] || {};
+                    let thisReq = rooms[each.roomName];
+
+                    if(reqType == 'resource'){
+                        thisReq.resources = thisReq.resources || {};
+                        thisReq.resources[each.resourceType] = {amount:each.amount,priority:each.priority }
+                    }
+                    else if(reqType == 'funnel'){
+                        thisReq.funnel = thisReq.funnel || {};
+                        thisReq.funnel = {amount:each.maxAmount}
+                    }
+
+                }
+            }
+            for(let room of Object.keys(rooms)){
+                let report = [`${room}`]
+                for(let each of rooms[room].resources){
+                }
+            }
         }
     },
     drawRoomPlan: function(roomName){

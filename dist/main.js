@@ -20,7 +20,7 @@ const architect = require('architect')
 let lastMemory;
 //profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
-RawMemory.setActiveSegments([0,1,2,3,4,5,6,7,8,9])
+RawMemory.setActiveSegments([0,1,2,5,6,7,8,9,90])
 Memory.lastReset = 0
 Memory.globalReset = Game.time;
 global.heap = {

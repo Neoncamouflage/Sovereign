@@ -20,6 +20,59 @@ const roleBuilder = {
             creep.memory.preflight = true;
         }
 
+        let boostLab;
+        /*if(creep.memory.needBoost){
+            if(creep.memory.boostLab){
+                boostLab = Game.getObjectById(creep.memory.boostLab)
+                if(!boostLab){
+                    delete creep.memory.boostLab
+                }
+                else{
+                    let y = tryBoost(boostLab)
+                    if(!y) return;
+                }
+            }
+            let labs = creep.room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_LAB);
+            if(!labs.length){
+                delete creep.memory.needBoost;
+            }
+            else{
+                boostLab = labs.filter(str.mineralType == "XLH2O" && str.store.getUsedCapacity("XLH2O") > creep.getActiveBodyparts(WORK)*30)[0];
+                if(!boostLab){
+                    boostLab = labs.filter(str.mineralType == "LH2O" && str.store.getUsedCapacity("LH2O") > creep.getActiveBodyparts(WORK)*30)[0];
+                }
+                if(!boostLab){
+                    boostLab = labs.filter(str.mineralType == "LH" && str.store.getUsedCapacity("LH") > creep.getActiveBodyparts(WORK)*30)[0];
+                }
+                if(boostLab){
+                    creep.memory.boostLab = boostLab.id;
+                    let x = tryBoost(boostLab)
+                    if(!x) return;
+                }
+                else{
+                    delete creep.memory.needBoost;
+                }
+            }
+
+            function tryBoost(boostLab){
+                if(creep.pos.getRangeTo(boostLab) > 1){
+                    creep.travelTo(boostLab);
+                    return false
+                }
+                else{
+                    let result = boostLab.boostCreep(creep);
+                    if(result != OK){
+                        delete creep.memory.boostLab;
+                    }
+                    else{
+                        delete creep.memory.needBoost;
+                    }
+                    return true
+                }
+            }
+
+        }*/
+
         //Non-army remote builder check for alarms
         if(creep.memory.job == 'remoteBuilder' && !creep.memory.troupe && global.heap.alarms[creep.memory.targetRoom]){     
             if(creep.room.name != creep.memory.fief){
@@ -204,27 +257,37 @@ const roleBuilder = {
                 }
                 let labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'XLH2O' && lab.store['XLH2O'] >30);
                 if(!labs.length){
-                    labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'LH2O' && lab.store['LH2O'] >30);
-                    if(!labs.length) creep.memory.boosted = true;
+                    labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'LH2O' && lab.store['LH2O'] >30);      
                 }
-                let tLab = creep.pos.findClosestByRange(labs);
-                if(creep.pos.getRangeTo(tLab) == 1){
-                    tLab.boostCreep(creep);
-                    body = body.filter(part => part.type == WORK && !part.boost);
-                    if(!body.length){
-                        creep.memory.boosted = true;
+                if(!labs.length){
+                    labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'LH' && lab.store['LH'] >30);      
+                }
+                if(!labs.length) creep.memory.boosted = 'nolabs';
+                else{
+                    let tLab = creep.pos.findClosestByRange(labs);
+                    if(creep.pos.getRangeTo(tLab) == 1){
+                        tLab.boostCreep(creep);
+                        body = body.filter(part => part.type == WORK && !part.boost);
+                        if(!body.length){
+                            creep.memory.boosted = true;
+                        }
+                        else{
+                            labs = labs.filter(lab => lab.id != tLab.id);
+                            tLab = creep.pos.findClosestByRange(labs);
+                            if(tLab && creep.pos.getRangeTo(tLab) > 1){
+                                creep.travelTo(tLab);
+                                return;
+                            }
+                            
+                        }
                     }
                     else{
-                        labs = labs.filter(lab => lab.id != tLab.id);
-                        tLab = creep.pos.findClosestByRange(labs);
-                        if(tLab && creep.pos.getRangeTo(tLab) > 1) creep.travelTo(tLab);
-                        return;
+                        creep.travelTo(tLab)
+                        return; 
                     }
+                    
                 }
-                else{
-                    creep.travelTo(tLab)
-                }
-                return;
+
             }
             let target = Game.getObjectById(creep.memory.targetID)
             //If we have a target, we repair or build it if below max hits
@@ -286,7 +349,7 @@ const roleBuilder = {
             //If we have a target and need energy, request
             if(!target || creep.pos.getRangeTo(target) > 6) continue;
             if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
-                supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity()*3,resourceType:RESOURCE_ENERGY,type:'dropoff'})
+                supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,priority:(heap.wardens && heap.wardens[room.name])? 12 : 5,type:'dropoff'})
             }
         }
 

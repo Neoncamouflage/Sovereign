@@ -282,6 +282,7 @@ const supplyDemand = {
         });
         //Loop through tasks and assign where possible
         for (let task of unassignedTasks) {
+            if(heap.wardens && heap.wardens[room.name] && task.international)continue
             let taskTarget = Game.getObjectById(task.targetID);
             if (!taskTarget || !task.amount) {
                 task.remove(room.name);
@@ -403,6 +404,7 @@ const supplyDemand = {
 
         let fills = [];
         let coreLink = Memory.kingdom.fiefs[room.name].links && Memory.kingdom.fiefs[room.name].links.coreLink
+        let remoteLinks = Memory.kingdom.fiefs[room.name].links && Memory.kingdom.fiefs[room.name].links.remoteLinks
         let link = Game.getObjectById(coreLink)
         //Only need to do fills if there's missing energy
         if(room.energyAvailable < room.energyCapacityAvailable) fills = room.find(FIND_MY_STRUCTURES).filter(struct => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(struct.structureType) && struct.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
@@ -412,6 +414,34 @@ const supplyDemand = {
             //if(link && haul.store.getFreeCapacity()>0){
                 //haul.withdraw(link,RESOURCE_ENERGY)
             //}
+            if(link && link.store[RESOURCE_ENERGY] > 0 && link.pos.isNearTo(haul.pos) && haul.store.getFreeCapacity()>0){
+                haul.withdraw(link,RESOURCE_ENERGY)
+            }
+            for(let lk of remoteLinks){
+                let lkg = Game.getObjectById(lk)
+                let lRange = haul.pos.getRangeTo(lkg);
+                if(lkg && (lkg.store[RESOURCE_ENERGY] < 800 || (link && link.store[RESOURCE_ENERGY] < 800 && lkg.cooldown < 5)) && !lkg.reserved && lRange < 5){
+
+                    if(lRange == 1 && !lkg.cooldown){
+                        haul.transfer(lkg,RESOURCE_ENERGY)
+                        if(haul.store[RESOURCE_ENERGY] > lkg.store.getFreeCapacity()){
+                            haul.state = "waiting"
+                            lkg.reserved = true;
+                        }
+                        else{
+                            haul.state = "idle"
+                            lkg.reserved = true;
+                            if(haul.memory.task)getTaskByID(haul.memory.fief,haul.memory.task).unassign(haul,'RemoteLink dump')
+
+                        }
+                    }
+                    else{
+                        if(lRange > 1) haul.travelTo(lkg);
+                        haul.state = "waiting"
+                        lkg.reserved = true;
+                    }
+                }
+            }
 
             let tFlag = false;
             for(let fill of fills){
@@ -590,8 +620,14 @@ const supplyDemand = {
                         creep.memory.state = IDLE;
                         }
                         else{
+                        if(pickTarget instanceof Creep){
+                            pickTarget.transfer(creep,task.resourceType);
+                        }
+                        else{
+                            let x = creep.withdraw(pickTarget,task.resourceType);
+                        }
                         //If we're in range, withdraw and finish the task
-                        let x = creep.withdraw(pickTarget,task.resourceType);
+
                         //console.log(x)
                         task.completeRun(creep)
                         creep.memory.state = IDLE;

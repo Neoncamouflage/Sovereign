@@ -24,6 +24,7 @@ const intelManager = require('intelManager');
 const painter = require('painter');
 const marshal = require('marshal');
 const Traveler = require('Traveler');
+const { simpleAllies } = require('simpleAllies');
 const kingdomManager = {
     run:function(){
         // - Assignments -
@@ -34,8 +35,10 @@ const kingdomManager = {
         //Troupe - Group of Lances with the same objective but different tasks (melee duo + ranged support, duo + hauler convoy for power banks, etc.)
         //ArmyManager - Strategic logic vs tactical for Lances/Troupes, mission management level. Handles strength calculations, Lance/Troupe requests/assignments, attack/retreat, etc.
         //SiegeManager - Handles room defense in the event of a siege. Takes control of all room elements, including army units.
-
-
+        simpleAllies.initRun();
+        console.log(simpleAllies.currentAlly,JSON.stringify(simpleAllies.allySegmentData))
+        if(!heap.simpleAllies)heap.simpleAllies = {}
+        heap.simpleAllies[simpleAllies.currentAlly] = simpleAllies.allySegmentData;
         //Assign creeps to their fiefs and sort by role
         kingdomCreeps = sortCreeps();
         if(!heap.kingdomStatus)heap.kingdomStatus = {};
@@ -62,9 +65,29 @@ const kingdomManager = {
             global.heap.funnelTarget = fRoom == null ? null : fRoom.name;
         }
         //---- SWC HARASSER CHECK ----
-        if(Game.time % 250 == 0){
+        /**
+         * E19S9
+         * ['E12S10','E11S10','E10S10','E9S10','E8S10','E7S10','E6S10','E5S10','E4S10','E3S10','E2S10','E1S10','E0S10','E0S9','E0S8','E0S7','E0S6','E0S5']
+         * ['E12S10','E11S10','E10S9','E10S8','E10S7','E10S6','E10S5','E10S4','E10S3','E10S2','E10S1','E10S0','E11S0','E12S0','E13S0']
+         * E28S8
+         * ['E0S0','E0S1','E0S2','E0S3','E0S4','E0S5','E0S6','E0S7','E0S8','E0S9','E0S10']
+         * ['E0S0','E1S0','E2S0','E3S0','E4S0','E5S0','E6S0','E7S0','E8S0','E9S0','E10S0','E11S0','E12S0']
+         */
+        if(Game.time % 3900 == 3200){
+            //spawnCreep('bait','5m1w','E19S9',65,{job:'tag',tagRooms:['E12S10','E11S10','E10S10','E9S10','E8S10','E7S10','E6S10','E5S10','E4S10','E3S10','E2S10','E1S10','E0S10','E0S9','E0S8','E0S7','E0S6','E0S5']})
+        }
+        if(Game.time % 3900 == 0){
+            //spawnCreep('bait','5m1w','E19S9',65,{job:'tag',tagRooms:['E12S10','E11S10','E10S9','E10S8','E10S7','E10S6','E10S5','E10S4','E10S3','E10S2','E10S1','E10S0','E11S0','E12S0','E13S0']})
+        }
+        if(Game.time % 3900 == 1700){
+            spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E0S1','E0S2','E0S3','E0S4','E0S5','E0S6','E0S7','E0S8','E0S9','E0S10']})
+        }
+        if(Game.time % 3900 == 2500){
+            spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E1S0','E2S0','E3S0','E4S0','E5S0','E6S0','E7S0','E8S0','E9S0','E10S0','E11S0','E12S0']})
+        }
+        if(Game.time % 920 == 0){
             if(!kingdomCreeps['E28S8'].diver || kingdomCreeps['E28S8'].diver.length < 2){
-                //spawnCreep('diver','6m4r1a1h','E28S8',60,{job:'harass',fief:'E28S8'})
+                //spawnCreep('duo','8r8m','E28S8',68,{job:'attacker',harass:true,changeType:'ranged',type:'portal'});spawnCreep('duo','5h5m','E28S8',68,{job:'healer'})
             }
         }
         for(const fief in Memory.kingdom.fiefs){
@@ -85,7 +108,9 @@ const kingdomManager = {
             if(Game.time % 3 == 0) registry.calculateSpawns(Game.rooms[fief],kingdomCreeps[fief]);
         }
 
-        
+        //simpleAllies.requestResource()
+        //simpleAllies.requestEcon()
+        simpleAllies.endRun()
         /*for(const settle in Memory.kingdom.settlements){
             return;
             //Figure this out for future settlements
@@ -94,7 +119,7 @@ const kingdomManager = {
         }*/
 
         runRoles(Game.creeps);
-        
+        //simpleAllies.endRun();
         //Run the painter for visuals if we have the cpu - Use painter estimate if we've recorded one, otherwise default 2
         if(Game.cpu.limit-Game.cpu.getUsed() > Memory.painterEstimate ? Memory.painterEstimate : 2){
             painter.run(kingdomCreeps);
@@ -106,6 +131,7 @@ const kingdomManager = {
         if(Memory.visuals.drawStatus){
             statusManager.run();
         }
+        
     }
 }
 

@@ -7,12 +7,7 @@ var roleUpgrader = {
         let fief = Memory.kingdom.fiefs[creep.memory.fief]
         let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType != STRUCTURE_RAMPART)
         if(creep.memory.status == 'spawning' && !creep.spawning) creep.memory.status = 'travel'
-        if(creep.memory.job != 'starterUpgrader' && cSites.length && creep.room.controller.level < 4 && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2){
-           
-            creep.memory.role = 'builder';
-
-        }
-        else if(cSites.length && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2){
+        if(creep.memory.job == 'starterUpgrader' && cSites.length && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2){
             let target;
             if(creep.memory.target) target = Game.getObjectById(creep.memory.target)
             if(!target){
@@ -39,21 +34,20 @@ var roleUpgrader = {
         let range = creep.pos.getRangeTo(creep.room.controller);
         if(range <=3){
             creep.upgradeController(creep.room.controller);
-            creep.memory.stay = true;
         }
-        else{
-            creep.memory.stay = false;
-        }
-
         //If we're not at range one, see if we can move closer
         if(fief.chain && creep.room.storage){
-            if(creep.pos.getRangeTo(creep.room.storage) !=1){
+            creep.memory.stay = false
+            if(creep.pos.getRangeTo(creep.room.storage) !=1 || creep.pos.getRangeTo(creep.room.controller) > 3){
+                console.log('Outta range!')
                 rangeLoop:
-                for(i=1;i<Math.min(4,creep.pos.getRangeTo(creep.room.storage));i++){
+                for(i=1;i<Math.max(2,Math.min(4,creep.pos.getRangeTo(creep.room.storage)));i++){
                     for(let spot of fief.controllerSpots[i]){
                         //No creep means move to that and break the loop
+                        console.log("Checking spot",JSON.stringify(spot))
                         if(!creep.room.lookForAt(LOOK_CREEPS,spot.x,spot.y).length){
                             creep.travelTo(new RoomPosition(spot.x,spot.y,creep.room.name));
+                            console.log("Going to spot")
                             break rangeLoop;
                         }
                     }
@@ -61,6 +55,7 @@ var roleUpgrader = {
             }
         }
         else if(fief.controllerSpots && range != 1){ //&& (creep.status == 'travel' || Game.time % 10 == 0)
+            creep.memory.stay = true;
             rangeLoop:
             for(i=1;i<Math.min(4,range);i++){
                 for(let spot of fief.controllerSpots[i]){
@@ -127,7 +122,7 @@ var roleUpgrader = {
                     //console.log(x,'t3')
                 }
                 else{
-                    //console.log(creep,'t4')
+                    console.log(creep,'t4')
                     if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
                 }
                 return;

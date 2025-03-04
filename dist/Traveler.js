@@ -498,17 +498,23 @@ class Traveler {
             else if (structure instanceof StructureContainer) {
                 matrix.set(structure.pos.x, structure.pos.y, 5);
             }
+            // -- Don't step on portals
+            else if(structure instanceof StructurePortal){
+                impassibleStructures.push(structure);
+            }
             else {
                 impassibleStructures.push(structure);
             }
         }
-        for (let site of room.find(FIND_MY_CONSTRUCTION_SITES)) {
+        //Don't step on ally sites
+        for (let site of room.find(FIND_CONSTRUCTION_SITES)) {
             if (site.structureType === STRUCTURE_CONTAINER || site.structureType === STRUCTURE_ROAD
-                || site.structureType === STRUCTURE_RAMPART) {
+                || site.structureType === STRUCTURE_RAMPART || isFriend(site)) {
                 continue;
             }
             matrix.set(site.pos.x, site.pos.y, 0xff);
         }
+        
         for (let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
