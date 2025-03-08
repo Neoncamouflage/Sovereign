@@ -48,34 +48,7 @@ Warden.prototype.run = function(hostiles,fiefCreeps) {
 
     //Get current hostile damage/heal maps and total demo power
     //For move/tough, can add those to the hostile creep object. creep.moveScore and creep.toughScore
-    for(let creep of hostiles){
-        let scores = {attack:0,rangedAttack:0,rangedMassAttack:0,heal:0,rangedHeal:0,dismantle:0,fatigue:0}
-        for(let part of creep.body){
-            if(!part.hits) continue;
-            let type = part.type;
-            let boosts = part.boost ? BOOSTS[type][part.boost] : {};
-            if(type == HEAL){
-                scores.heal += HEAL_POWER*(boosts.heal || 1);
-                scores.rangedHeal += RANGED_HEAL_POWER*(boosts.rangedHeal || 1)
-            }
-            else if(type == RANGED_ATTACK){
-                scores.rangedAttack += RANGED_ATTACK_POWER*(boosts.rangedAttack || 1);
-                scores.rangedMassAttack += RANGED_ATTACK_POWER*(boosts.rangedMassAttack || 1);
-            }
-            else if(type == WORK){
-                scores.dismantle += DISMANTLE_POWER*(boosts.dismantle || 1);
-            }
-            else if(type == ATTACK){
-                scores.attack += ATTACK_POWER*(boosts.attack || 1);
-            }
-            else if(type == MOVE){
-                scores.fatigue += 2*(boosts.fatigue || 1);
-            }
-            else if(type == TOUGH){
-                //Find a way to track
-            }
-        }
-    }
+      
     //Get current friendly damage/heal maps
 
 };

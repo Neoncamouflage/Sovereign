@@ -36,11 +36,11 @@ const kingdomManager = {
         //ArmyManager - Strategic logic vs tactical for Lances/Troupes, mission management level. Handles strength calculations, Lance/Troupe requests/assignments, attack/retreat, etc.
         //SiegeManager - Handles room defense in the event of a siege. Takes control of all room elements, including army units.
         simpleAllies.initRun();
-        console.log(simpleAllies.currentAlly,JSON.stringify(simpleAllies.allySegmentData))
+        //console.log(simpleAllies.currentAlly,JSON.stringify(simpleAllies.allySegmentData))
         if(!heap.simpleAllies)heap.simpleAllies = {}
         heap.simpleAllies[simpleAllies.currentAlly] = simpleAllies.allySegmentData;
         //Assign creeps to their fiefs and sort by role
-        kingdomCreeps = sortCreeps();
+        kingdomCreeps = setupCreeps();
         if(!heap.kingdomStatus)heap.kingdomStatus = {};
         heap.kingdomStatus.activeHoldings = []
         heap.stock = { ...heap.kingdomStatus.wares};
@@ -80,10 +80,10 @@ const kingdomManager = {
             //spawnCreep('bait','5m1w','E19S9',65,{job:'tag',tagRooms:['E12S10','E11S10','E10S9','E10S8','E10S7','E10S6','E10S5','E10S4','E10S3','E10S2','E10S1','E10S0','E11S0','E12S0','E13S0']})
         }
         if(Game.time % 3900 == 1700){
-            spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E0S1','E0S2','E0S3','E0S4','E0S5','E0S6','E0S7','E0S8','E0S9','E0S10']})
+            //spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E0S1','E0S2','E0S3','E0S4','E0S5','E0S6','E0S7','E0S8','E0S9','E0S10']})
         }
         if(Game.time % 3900 == 2500){
-            spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E1S0','E2S0','E3S0','E4S0','E5S0','E6S0','E7S0','E8S0','E9S0','E10S0','E11S0','E12S0']})
+            //spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E1S0','E2S0','E3S0','E4S0','E5S0','E6S0','E7S0','E8S0','E9S0','E10S0','E11S0','E12S0']})
         }
         if(Game.time % 920 == 0){
             if(!kingdomCreeps['E28S8'].diver || kingdomCreeps['E28S8'].diver.length < 2){
@@ -143,9 +143,6 @@ function runRoles(kingdomCreeps){
         let myCreep = Game.creeps[creep];
         let creepTotal = 0;
         let creepRole = '';
-        
-        
-
         switch(Game.creeps[creep].memory.role){
             case 'harvester':
                 roleHarvester.run(myCreep);
@@ -254,7 +251,7 @@ function runRoles(kingdomCreeps){
     }
 }
 
-function sortCreeps(){
+function setupCreeps(){
     let kingdomCreeps={reserve:[],}
     let milRoles = [
         'sapper',
@@ -267,6 +264,16 @@ function sortCreeps(){
         let creep = Game.creeps[creepName];
         let fief = creep.memory.fief;
         let role = creep.memory.role
+        //First process respawns for anything that needs it. Ticks are specified by creep or based on the distance from spawn
+        let fiefDist = fief ? Game.map.getRoomLinearDistance(fief,creep.room.name,true) : 100
+        if(creep.memory.respawnMe && !creep.spawning && !creep.memory.hasRespawn && creep.ticksToLive < (creep.memory.respawnTicks || fiefDist)){
+            let newMem = {...creep.memory};
+            delete newMem.boosted  //New creeps won't be boosted
+            spawnCreep(role,creep.body.map(part=>part.type),fief,creep.memory.sev || 50,newMem)
+            creep.memory.hasRespawn = true;
+        }
+
+
         if(role == 'scout'){
             kingdomCreeps.scouts = kingdomCreeps.scouts || []
             kingdomCreeps.scouts.push(creep);
@@ -296,5 +303,5 @@ function sortCreeps(){
     }
     return kingdomCreeps;
 }
-sortCreeps = profiler.registerFN(sortCreeps, 'sortCreeps');
+setupCreeps = profiler.registerFN(setupCreeps, 'setupCreeps');
 runRoles = profiler.registerFN(runRoles, 'runRoles');

@@ -1,7 +1,7 @@
 const registry = require('registry');
 const supplyDemand = require('supplyDemand');
 const helper = require('functions.helper');
-
+const Quad = require('Quad');
 
 //Functions for a random integer from 0 to max(inclusive) and random array selection
 global.randomInt = function(max) {
@@ -422,17 +422,6 @@ BigCostMatrix.deserialize = function(serializedStr) {
     return matrix;
 };
 
-global.bigTest = function(){
-    let cp1 = Game.cpu.getUsed();
-    let g = helper.getTowerMap(Game.rooms.E6S1);
-    let cp2 = Game.cpu.getUsed();
-    let l = g.serialize();
-    g = BigCostMatrix.deserialize(l);
-    let cp3 = Game.cpu.getUsed();
-    console.log("TEST RESULTS!")
-    console.log("Tower map CPU:",cp2-cp1,"Serialize/Deserialize CPU:",cp3-cp2)
-}
-
 global.getDistance = function(pos1,pos2){
     let route = PathFinder.search(pos1,{pos:pos2,range:1},{
         maxOps:20000,
@@ -516,6 +505,121 @@ global.setAlarm = function({roomName,alarmType='general',hostiles=[],manualExpir
     chronicle.log(`Alarm raised in room ${roomName}. Type: ${alarmType}. Hostile count: ${hostiles.length}. Expiration: ${expiration-Game.time} ticks.`,origin,3);
 }
 
-global.show = function(objectID){
+global.showMem = function(objectID){
     return JSON.stringify(Game.getObjectById(objectID).memory);
+}
+global.setMem = function(objectID,key,val){
+    if(!Game.getObjectById(objectID)){
+        chronicle.log(`Invalid ID! ${objectID}.`,'global.setMem',1);
+    }
+    Game.getObjectById(objectID).memory[key] = val
+}
+
+global.getCombatStats = function(creeps){
+    let groupScores = {}
+    for(let creep of creeps){
+        let scores = {attack:0,rangedAttack:0,rangedMassAttack:0,heal:0,rangedHeal:0,dismantle:0,fatigue:0}
+        for(let part of creep.body){
+            if(!part.hits) continue;
+            let type = part.type;
+            let boosts = part.boost ? BOOSTS[type][part.boost] : {};
+            if(type == HEAL){
+                scores.heal += HEAL_POWER*(boosts.heal || 1);
+                scores.rangedHeal += RANGED_HEAL_POWER*(boosts.rangedHeal || 1)
+            }
+            else if(type == RANGED_ATTACK){
+                scores.rangedAttack += RANGED_ATTACK_POWER*(boosts.rangedAttack || 1);
+                scores.rangedMassAttack += RANGED_ATTACK_POWER*(boosts.rangedMassAttack || 1);
+            }
+            else if(type == WORK){
+                scores.dismantle += DISMANTLE_POWER*(boosts.dismantle || 1);
+            }
+            else if(type == ATTACK){
+                scores.attack += ATTACK_POWER*(boosts.attack || 1);
+            }
+            else if(type == MOVE){
+                scores.fatigue += 2*(boosts.fatigue || 1);
+            }
+            else if(type == TOUGH){
+                //Find a way to track
+            }
+        }
+        groupScores[creep.id] = scores;
+    }
+    return groupScores
+}
+
+global.getTowerMap = function(room,serialized=false){
+    if(!(room instanceof Room)){
+        chronicle.log(`Room object must be provided to generate a tower map.`,'helper.getTowerMap',1)
+        return false;
+    }
+    let tCM = new BigCostMatrix();
+    let towers = room.find(FIND_STRUCTURES).filter(str=> str.structureType == STRUCTURE_TOWER);
+    if(!towers.length) return tCM
+    //console.log("TOWERS",towers)
+    let terrain = Game.map.getRoomTerrain(room.name);
+    for(let x=0;x<50;x++){
+        for(let y=0;y<50;y++){
+            if(terrain.get(x,y) == TERRAIN_MASK_WALL) continue;
+            let totalDmg = 0;
+            for(let each of towers){
+                let range = Math.max(Math.abs(each.pos.x - x), Math.abs(each.pos.y - y));
+                let amount = TOWER_POWER_ATTACK;
+                if(range == 0) continue;
+                if(range > TOWER_OPTIMAL_RANGE) {
+                    if(range > TOWER_FALLOFF_RANGE) {
+                        range = TOWER_FALLOFF_RANGE;
+                    }
+                    amount -= amount * TOWER_FALLOFF * (range - TOWER_OPTIMAL_RANGE) / (TOWER_FALLOFF_RANGE - TOWER_OPTIMAL_RANGE);
+                }
+                amount = Math.floor(amount);
+                totalDmg+=amount;
+            }
+            tCM.set(x,y,totalDmg);
+        }
+    }
+    if(serialized) return tCM.serialize();
+    return tCM;
+}
+
+global.getDamageMap = function(hostiles,stats, towerMap){
+    if(!stats) stats = getCombatStats(hostiles);
+    //Our damageCM is the provided tower map, if available;
+    let damageCM = towerMap || getTowerMap(hostiles[0] && hostiles[0].room) || new BigCostMatrix();
+    for(let creep of hostiles){
+        for(let x=-3;x<=3;x++){
+            for(let y=-3;y<=3;y++){
+                let base = damageCM.get(creep.pos.x+x,creep.pos.y+y)
+                base += stats[creep.id].rangedAttack;
+                if([-1,0,1].includes(y) && [-1,0,1].includes(x)) base += stats[creep.id].attack;
+                damageCM.set(creep.pos.x+x,creep.pos.y+y,base)
+            }
+        }
+    }
+    return damageCM;
+}
+
+global.testFunc = function(){
+    let newQuad = new Quad();
+    console.log("Quad created",newQuad.name)
+}
+global.damageMap = function(hostiles,stats,towerMap){
+    if(!stats) stats = getCombatStats(hostiles);
+    //Our damageCM is the provided tower map, if available;
+    let damageCM = towerMap || getTowerMap(hostiles[0] && hostiles[0].room) || new BigCostMatrix();
+    console.log(JSON.stringify(damageCM))
+    console.log(JSON.stringify(stats))
+    for(let creep of hostiles){
+        for(let x=-3;x<=3;x++){
+            for(let y=-3;y<=3;y++){
+                let base = damageCM.get(creep.pos.x+x,creep.pos.y+y)
+                base += stats[creep.id].rangedAttack;
+                if([-1,0,1].includes(y) && [-1,0,1].includes(x)) base += stats[creep.id].attack;
+                damageCM.set(creep.pos.x+x,creep.pos.y+y,base)
+            }
+        }
+    }
+    Memory.test.testBigCM = damageCM.serialize();
+    JSON.stringify(damageCM)
 }

@@ -42,6 +42,7 @@ global.heap = {
         lances:{},
         reserve:[]
     },
+    quads:[],
     funnelTarget:null
 }
 module.exports.loop = function () {

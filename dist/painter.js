@@ -37,21 +37,27 @@ const painter = {
         }
     },
     drawAllies(){
-        return;
+        let reports = []
+        let roomVis =  new RoomVisual();
         for(let ally of Object.keys(heap.simpleAllies)){
+            let allyReport = [ally];
             let data = heap.simpleAllies[ally];
             let rooms = {}
+            //console.log(ally,JSON.stringify(data))
+            if(!data.requests)continue;
             for(let reqType of Object.keys(data.requests)){
                 let reqData = data.requests[reqType]
                 for(let each of reqData){
-                    rooms[each.roomName] = rooms[each.roomName] || {};
-                    let thisReq = rooms[each.roomName];
-
                     if(reqType == 'resource'){
+                        rooms[each.roomName] = rooms[each.roomName] || {};
+                        let thisReq = rooms[each.roomName];
                         thisReq.resources = thisReq.resources || {};
                         thisReq.resources[each.resourceType] = {amount:each.amount,priority:each.priority }
                     }
                     else if(reqType == 'funnel'){
+                        continue;
+                        rooms[each.roomName] = rooms[each.roomName] || {};
+                        let thisReq = rooms[each.roomName];
                         thisReq.funnel = thisReq.funnel || {};
                         thisReq.funnel = {amount:each.maxAmount}
                     }
@@ -59,11 +65,29 @@ const painter = {
                 }
             }
             for(let room of Object.keys(rooms)){
-                let report = [`${room}`]
-                for(let each of rooms[room].resources){
+                allyReport.push(room)
+                if(!rooms[room].resources)continue;
+                for(let each of Object.keys(rooms[room].resources)){
+                    let info = rooms[room].resources[each];
+                    let pri = '';
+                    if(info.priority < 0.25) pri = '🟢'
+                    else if(info.priority < 0.5) pri = '🟡'
+                    else if(info.priority < 0.75) pri = '🟠'
+                    else if(info.priority < 1) pri = '🔴'
+                    allyReport.push(`${each} : ${info.amount} ${pri}`)
                 }
             }
+            reports.push(allyReport)
         }
+        let lineCount = 0
+        //console.log(JSON.stringify(reports))
+        for(let report of reports){
+            for(let line of report){
+                roomVis.text(line,25,25+lineCount, {color:'#ffa500',font:'1 Bridgnorth'});
+                lineCount++;
+            }
+        }
+
     },
     drawRoomPlan: function(roomName){
         let plans = JSON.parse(RawMemory.segments[1]);
@@ -286,6 +310,16 @@ const painter = {
                     let weight = testCM.get(x,y);
                     if(weight == 0) continue;
                     new RoomVisual().text(weight,x,y+0.25);
+                }
+            }
+        }
+        if(Memory.test.testBigCM){
+            let testCM = BigCostMatrix.deserialize(Memory.test.testBigCM)
+            for (let x = 0; x <= 49; x += 1) {
+                for (let y = 0; y <= 49; y += 1) {
+                    let weight = testCM.get(x,y);
+                    if(weight == 0) continue;
+                    new RoomVisual().text(weight,x,y+0.25,{font:'0.3'});
                 }
             }
         }

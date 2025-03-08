@@ -58,14 +58,14 @@ RangedLance.prototype.runCreeps = function(myCreeps){
         let creepID = creep.id;
         let targetPos = this.targetPos[creepID];
         let target = Game.getObjectById(this.target[creepID]);
-        console.log(creep.name,"has target",target,"and pos",JSON.stringify(targetPos))
+        //console.log(creep.name,"has target",target,"and pos",JSON.stringify(targetPos))
         //If no target or position, do nothing
         if(!target && !targetPos) return;
         //If we have a target position, we travel
         if(targetPos){
-            console.log(creep,"travelling")
+            //console.log(creep,"travelling")
             let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{range:targetPos.range});
-            console.log(JSON.stringify(x))
+            //console.log(JSON.stringify(x))
         }
         //If the target is in range, we dismantle
         if(target){

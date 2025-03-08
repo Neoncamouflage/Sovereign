@@ -1,7 +1,8 @@
 const Troupe = require('Troupe');
 const DEFAULT_MISSION_PRIORITY = 5;
 const profiler = require('screeps-profiler');
-const helper = require('functions.helper')
+const helper = require('functions.helper');
+const Quad = require('Quad');
 const marshal = {
     //Assign missions to troupes and run them
     run: function(kingdomCreeps){
@@ -18,15 +19,26 @@ const marshal = {
         for(let troupe of global.heap.army.troupes){
             troupe.run(kingdomCreeps);
         }
+
+
+        //Run quads
+        for(let quad of heap.quads){
+            quad.run();
+        }
+
+
         //Order any reserves to wait in their fief
         for(let crp of global.heap.army.reserve){
+            
             let creep = Game.getObjectById(crp)
+            
             let injured = creep.room.find(FIND_MY_CREEPS).filter(crp => crp.hits < crp.hitsMax)
             let hostiles = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp.owner.username) && !helper.isScout(crp))
             let attk = creep.getActiveBodyparts(ATTACK);
             let rng = creep.getActiveBodyparts(RANGED_ATTACK);
             let closeRange = false;
             if(hostiles.length && (attk>1 || rng>1)){
+                creep.memory.stay = true
                 let target = creep.pos.findClosestByRange(hostiles);
                 creep.travelTo(target,{range:rng > 1 ? 3 : 1});
                 creep.attack(target);
@@ -58,6 +70,7 @@ const marshal = {
                 }
             }
             else if(!hostiles.length){
+                if(creep.memory.stay)creep.memory.stay = false
                 if(creep.room.name != creep.memory.fief){
                     creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
                 }

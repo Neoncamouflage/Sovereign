@@ -478,11 +478,16 @@ const supplyDemand = {
             totalCarry += carryParts;
             
             if(global.heap.alarms[creep.room.name]){
-                if(creep.memory.task) getTaskByID(creep.memory.fief,creep.memory.task).unassign(creep,'Fleeing')
-                let words = helper.getSay({symbol:`${Game.time % 2 == 1 ? '🚨' : '📢'}`});
-                creep.say(words.join(''))
-                creep.memory.status = 'flee';
-                creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
+                let baddies = creep.room.find(FIND_HOSTILE_CREEPS).filter(c=>!helper.isSoldier(c) && !isFriend(c))
+                let bad = creep.pos.findClosestByRange(baddies)
+                if(bad && creep.pos.getRangeTo(bad) < 7){
+                    if(creep.memory.task) getTaskByID(creep.memory.fief,creep.memory.task).unassign(creep,'Fleeing')
+                        let words = helper.getSay({symbol:`${Game.time % 2 == 1 ? '🚨' : '📢'}`});
+                        creep.say(words.join(''))
+                        creep.memory.status = 'flee';
+                        creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
+                }
+
             }
             else if(creep.memory.status == 'flee'){
                 if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
@@ -579,7 +584,7 @@ const supplyDemand = {
                         creep.emptyStore();
                     }
                     //If chilling idle, go home if remote. If home then stay off room edges
-                    if(creep.room.name != creep.memory.fief || [0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
+                    else if(creep.room.name != creep.memory.fief || [0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
                         creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10,maxRooms:32});
                     }
                 }

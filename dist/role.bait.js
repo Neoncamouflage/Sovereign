@@ -15,7 +15,18 @@ var roleBait = {
         ];
         let targetRoom = creep.memory.targetRoom
         let target = Game.getObjectById(creep.memory.targetID);
-        const DEP_MAX_CD = 27;
+        const DEP_MAX_CD = 45;
+        if(creep.memory.job == 'harabi'){
+            if(creep.room.name == creep.target.room){
+                if(creep.store.getFreeCapacity() > 0){
+                    creep.travelTo(creep.room.storage);
+                    creep.withdraw(creep.room.storage,RESOURCE_ENERGY);
+                }
+                else{
+                    creep.travelTo(new RoomPosition(25,25,'E29S7'))
+                }
+            }
+        }
         if(creep.memory.job == 'tag'){
             /**
              * E19S9
@@ -93,7 +104,7 @@ var roleBait = {
                 return;
             }
             else if(!target){
-                let deps = creep.room.find(FIND_DEPOSITS).filter(dep => dep.lastCooldown < DEP_MAX_CD)[0]
+                let deps = creep.room.find(FIND_DEPOSITS).sort((a,b) => a.lastCooldown - b.lastCooldown)[0]
                 if(deps){
                     creep.memory.targetID = deps.id
                 }

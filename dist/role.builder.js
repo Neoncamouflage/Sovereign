@@ -169,7 +169,7 @@ const roleBuilder = {
                             closestTarget = each;
                         }
                     }
-                    console.log()
+                    //console.log()
                     if(closestTarget){
 
                         creep.travelTo(closestTarget)
@@ -245,9 +245,12 @@ const roleBuilder = {
 
         //Get all rampart construction sites and ramparts under the limit
         let fief = Memory.kingdom.fiefs[room.name]
+    
         let rampSites = room.find(FIND_MY_CONSTRUCTION_SITES)
+        let hostiles = room.find(FIND_HOSTILE_CREEPS).filter(c=>!helper.isScout(c) && !isFriend(c))
         let ramps = room.find(FIND_MY_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_RAMPART && struct.hits < fief.rampTarget);
         for(let creep of creeps){
+            creep.memory.stay = true
             if(room.controller.level >= 6 && !creep.memory.boosted){
                 let body = creep.body.filter(part => part.type == WORK && !part.boost);
                 //console.log("REAVER",body)
@@ -289,7 +292,24 @@ const roleBuilder = {
                 }
 
             }
-            let target = Game.getObjectById(creep.memory.targetID)
+            let target;
+            if(heap.wardens && heap.wardens[creep.room.name]){
+                ramps.sort((a, b) => a.hits - b.hits)
+                target = ramps[0];
+                if(hostiles.length){
+                    let closestBad = creep.pos.findClosestByRange(hostiles);
+                    if(creep.pos.getRangeTo(closestBad) < 4){
+                        let res = PathFinder.search(creep.pos, {pos:closestBad.pos,range:5}, {flee:true})
+                        let resPath = res.path;
+                        creep.travelTo(resPath[0])
+                        return;
+                    }
+                }
+                
+            }
+            else{
+                target = Game.getObjectById(creep.memory.targetID);
+            }
             //If we have a target, we repair or build it if below max hits
             //console.log("Buildtarget: ",target)
             if(target){

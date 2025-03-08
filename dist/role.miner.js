@@ -17,21 +17,26 @@ var roleMiner = {
 
         //If alarming, get to safety
         if(global.heap.alarms[creep.memory.holding]){     
-            if(creep.room.name != creep.memory.fief){
-                creep.memory.stay = false;
-                creep.memory.status = 'flee';
-                creep.drop(RESOURCE_ENERGY)
-                creep.travelTo(Game.rooms[creep.memory.fief].controller)
-                let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
-                creep.say(words.join(''))
-            }
-            else{
-                //console.log("AYE")
-                if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
-                    creep.travelTo(Game.rooms[creep.memory.fief].controller);
+            let baddies = creep.room.find(FIND_HOSTILE_CREEPS).filter(c=>helper.isSoldier(c) && !isFriend(c))
+            let bad = creep.pos.findClosestByRange(baddies)
+            if(creep.memory.holding != creep.room.name || (bad && creep.pos.getRangeTo(bad) < 7)){
+                if(creep.room.name != creep.memory.fief){
+                    creep.memory.stay = false;
+                    creep.memory.status = 'flee';
+                    creep.drop(RESOURCE_ENERGY)
+                    creep.travelTo(Game.rooms[creep.memory.fief].controller)
+                    let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
+                    creep.say(words.join(''))
                 }
+                else{
+                    //console.log("AYE")
+                    if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
+                        creep.travelTo(Game.rooms[creep.memory.fief].controller);
+                    }
+                }
+                return;
             }
-            return;
+
         }
 
         //Otherwise move to position

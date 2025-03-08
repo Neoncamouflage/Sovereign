@@ -429,7 +429,7 @@ var holdingManager = {
             if(remote){
 
                 let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => (helper.isSoldier(crp) || crp.getActiveBodyparts(CLAIM) > 0) && !isFriend(crp))
-                if(hostiles.length && !global.heap.alarms[holdingName] (!heap.wardens || !heap.wardens[fief])){
+                if(hostiles.length && !global.heap.alarms[holdingName] && (!heap.wardens || !heap.wardens[fief])){
                     setAlarm({roomName:holdingName,alarmType:hostiles[0].owner.username == 'Invader' ? 'invader' : 'creep',hostiles:hostiles,origin:'holdingManager'})
                     let hasMission = false;
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){

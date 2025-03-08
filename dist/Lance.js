@@ -109,6 +109,7 @@ Lance.prototype.populate = function(fief,kingdomCreeps,options={}){
                 kingdomCreeps[this.name].push(crp)
                 crp.memory.lance = this.name;
                 takeaway.push(crpID)
+                crp.memory.stay = true;
             }
             if(kingdomCreeps[this.name].length >= this.unitsNeeded){
                 foundReserve = true;

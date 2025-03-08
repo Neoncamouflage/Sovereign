@@ -58,6 +58,8 @@ const registry = {
             //If there's a body requested, use it. Otherwise, calculate based on creep role.
             let body;
             let cost;
+            //Set sev to memory if it isn't already, for our respawning function
+            if(!newCreep.memory.sev)newCreep.memory.sev = newCreep.sev;
             
             if(newCreep.body){
                 cost = 0;

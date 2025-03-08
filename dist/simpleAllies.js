@@ -157,7 +157,7 @@ class SimpleAllies {
         this.myRequests.funnel.push(args);
     }
     
-    /**
+    /**{credits:,sharableEnergy:,energyIncome:,mineralNodes}
      * Share how your bot is doing economically
      * @param {Object} args - a request object
      * @param {number} args.credits - total credits the bot has. Should be 0 if there is no market on the server

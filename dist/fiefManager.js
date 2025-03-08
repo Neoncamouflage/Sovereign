@@ -7,13 +7,14 @@ const supplyDemand = require('supplyDemand');
 const granary = require('granary');
 const registry = require('registry');
 const buildRole = require('role.builder');
-const Warden = require('Warden')
+const Warden = require('Warden');
 const fiefManager = {
     run:function(room,fiefCreeps){
         heap.fiefs[room.name].buildQueue = heap.fiefs[room.name].buildQueue || {}
         let buildQueue = heap.fiefs[room.name].buildQueue
         //console.log("BUILDQUEUE",JSON.stringify(buildQueue).length,JSON.stringify(buildQueue))
         let cpuStart = Game.cpu.getUsed();
+        let warden;
         //Set Reference
         let restartFlag = false;
         let sourceHold;
@@ -164,11 +165,10 @@ const fiefManager = {
 
         }
 
-        if(!fief.controllerSpots || (fief.controllerSpots && fief.controllerSpots.rcl < room.controller.level)){
+        if(!fief.controllerSpots || !fief.controllerSpots.base || (fief.controllerSpots && fief.controllerSpots.rcl < room.controller.level)){
             if(fief.roomPlan){
                 let results = getControllerSpots(room,fief);
-                fief.controllerSpots = results[0];
-                fief.chain = results[1];
+                fief.controllerSpots = results
                 fief.controllerSpots.rcl = room.controller.level
             }
 
@@ -467,14 +467,14 @@ const fiefManager = {
                 }
             }
         }
-
+        let ramps = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_RAMPART);
         //Check for hostiles to activate warden, only once we're RCL4
         if(room.controller.level >= 4){
-            let ramps = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_RAMPART);
+            
             //console.log("WARDEN CHECK",room.name,heap.wardens ? Object.keys(heap.wardens) : [])
             let hostiles = room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp) && !helper.isScout(crp));
-            let warden = heap.wardens && heap.wardens[room.name];
-            if(hostiles.length){
+            warden = heap.wardens && heap.wardens[room.name];
+            if(hostiles.length && (!room.controller.safeMode || room.controller.safeMode < 300)){
                 
                 //console.log("Hostiles")
                 //Run our warden if it already exists, else create one
@@ -504,7 +504,6 @@ const fiefManager = {
                 
             }
             else{
-                let ramps = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_RAMPART);
                 for(let ramp of ramps){
                     ramp.setPublic(true)
                 }
@@ -573,8 +572,20 @@ const fiefManager = {
             //-- Upgrader --
             let upMax = 0;
             if(fief.controllerSpots){
-                for(let each of Object.values(fief.controllerSpots)){
-                    if(Array.isArray(each)) upMax+=each.length;
+                if(fief.controllerSpots.storage && room.storage && room.storage.store[RESOURCE_ENERGY] > 10000){
+                    for(let each of Object.values(fief.controllerSpots.storage)){
+                        if(Array.isArray(each)) upMax+=each.length;
+                    }
+                }
+                else if(fief.controllerSpots.terminal && room.terminal && room.terminal.store[RESOURCE_ENERGY] > 10000){
+                    for(let each of Object.values(fief.controllerSpots.terminal)){
+                        if(Array.isArray(each)) upMax+=each.length;
+                    }
+                }
+                else{
+                    for(let each of Object.values(fief.controllerSpots.base)){
+                        if(Array.isArray(each)) upMax+=each.length;
+                    }
                 }
             }
             else{
@@ -590,25 +601,25 @@ const fiefManager = {
                     //registry.requestCreep({sev:20,memory:{role:'repair',fief:room.name,status:'spawning',preflight:false}})
                 //}
             }
-
+            let totalEnergy = 0;
+            if(room.storage)totalEnergy += room.storage.store[RESOURCE_ENERGY]
+            if(room.terminal)totalEnergy += room.terminal.store[RESOURCE_ENERGY]
 
             //Spawn operations when storage is available
             if(room.storage && room.storage.my){
                 let upgradersNeeded;
-                if(roomLevel == 8 || fief.holdUpgrade){
-                    console.log("Upgrade held",room.name)
+                if(roomLevel == 8 || fief.holdUpgrade || totalEnergy < 50000){
+                    //console.log("Upgrade held",room.name)
                     if(!fiefCreeps.upgrader && room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE[roomLevel]/2) registry.requestCreep({sev:35,body:[MOVE,CARRY,WORK,MOVE,WORK],memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
-                }
-                else if(room.storage.store[RESOURCE_ENERGY] < 50000){
-                    upgradersNeeded = 0;
                 }
                 else if([6,7].includes(roomLevel) && heap.funnelTarget && heap.funnelTarget != room.name && room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[roomLevel]/2){
                     //No upgrading if we're helping funnel and aren't in downgrade alert
+                    //console.log("Funneling, no upgrade",room.name)
                     upgradersNeeded = 0;
                 }
                 else{
-                    let tStore = room.terminal ? room.terminal.store[RESOURCE_ENERGY] : 0;
-                    upgradersNeeded = Math.min(upMax,room.controller.level > 5 ? Math.ceil((room.storage.store[RESOURCE_ENERGY]+tStore)/100000) : Math.ceil(room.storage.store[RESOURCE_ENERGY]/100000));
+                    upgradersNeeded = Math.min(upMax,Math.ceil(totalEnergy/100000));
+                    //console.log("Ups needed",upgradersNeeded)
                 }
                 if(!cSites.length && upgradersNeeded > 0 && (!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded)){
                     registry.requestCreep({sev:35,memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
@@ -633,6 +644,7 @@ const fiefManager = {
                     let forts = fiefCreeps.builder || [];
                     forts = forts.filter(crp => crp.memory.job == 'fortifier')
                     let fortsNeed = room.controller.level > 4 ? 1 : 2;
+                    if(heap.wardens && heap.wardens[room.name]) fortsNeed = 4;
                     if(forts.length < fortsNeed){
                         registry.requestCreep({sev:31,memory:{role:'builder',job:'fortifier',fief:room.name,status:'spawning',preflight:false}})
                     }
@@ -725,9 +737,9 @@ const fiefManager = {
                     //If we're below the minimum for our RCL, bump it up with a cap of the max hits for our level
                     fief.rampTarget = Math.min(RAMPART_HITS_MAX[room.controller.level],Math.max(fief.rampTarget,rampartMinimums[room.controller.level]))
                     if(averageNet > 0 || room.storage.store[RESOURCE_ENERGY] > 100000){
-                        let ramps = room.find(FIND_MY_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_RAMPART && struct.hits < fief.rampTarget);
+                        let lowRamps = ramps.filter(struct => struct.structureType == STRUCTURE_RAMPART && struct.hits < fief.rampTarget);
                         //Grow by 10% if there are none
-                        if(!ramps.length) fief.rampTarget += Math.round(fief.rampTarget*0.1);
+                        if(!lowRamps.length) fief.rampTarget += Math.round(fief.rampTarget*0.1);
                     }
                 }
                 
@@ -748,29 +760,27 @@ const fiefManager = {
                         }
                         //If no mineral is in the lab, order some
                         else if(!lab.mineralType){
-                            supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
-                                amount:Math.min(3000, 
+                            amt = Math.min(3000, 
                                 (room.storage ? room.storage.store[part] : 0) + 
                                 (room.terminal ? room.terminal.store[part] : 0)
-                            )
-                            ,priority:6})
+                            );
+                            if(amt)supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,amount:amt,priority:8})
                         }
                         //If the right mineral is in the lab, mark the source as good
                         else if(lab.mineralType == part){
                             goodSource++;
                             //Order more if less than half full
                             if(lab.store[lab.mineralType] < 1500){
-                                supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
-                                    amount:Math.min(3000, 
+                                amt = Math.min(3000, 
                                     (room.storage ? room.storage.store[part] : 0) + 
                                     (room.terminal ? room.terminal.store[part] : 0)
-                                )
-                                ,priority:6})
+                                );
+                                if(amt)supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,amount:amt,priority:6})
                             }
                         }
                     }
                 }
-                if(fief.labs.target){
+                if(fief.labs.target && REACTION_INGREDIENTS[fief.labs.target]){
                     log += '\n Target labs available'
                     let ingredients = REACTION_INGREDIENTS[fief.labs.target];
                     let labIDs = Object.keys(fief.labs.sourceLabs)
@@ -795,25 +805,31 @@ const fiefManager = {
                         }
                         //If no mineral is in the lab, order some
                         else if(!lab.mineralType){
-
-                            let t = supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
-                                amount:Math.min(3000, 
+                            let amt = Math.min(3000, 
                                 (room.storage ? room.storage.store[part] : 0) + 
-                                (room.terminal ? room.terminal.store[part] : 0))
-                            ,priority:8})
-                            log+=`\n${lab.id} has no mineral, dropoff request ${t}`
+                                (room.terminal ? room.terminal.store[part] : 0));
+                            if(amt){
+                                let t = supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
+                                    amount:amt
+                                ,priority:8})
+                                log+=`\n${lab.id} has no mineral, dropoff request ${t}`
+                            }
+
                         }
                         //If the right mineral is in the lab, mark the source as good
                         else if(lab.mineralType == part){
                             goodSource++;
                             //Order more if less than half full
                             if(lab.store[lab.mineralType] < 1500){
-                                let t = supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
-                                    amount:Math.min(3000, 
+                                let amt = Math.min(3000, 
                                     (room.storage ? room.storage.store[part] : 0) + 
-                                    (room.terminal ? room.terminal.store[part] : 0))
-                                ,priority:8})
-                                log+=`\n${lab.id} is low on mineral ${part}, dropoff request ${t}`
+                                    (room.terminal ? room.terminal.store[part] : 0));
+                                if(amt){
+                                    let t = supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
+                                        amount:amt
+                                    ,priority:8})
+                                    log+=`\n${lab.id} is low on mineral ${part}, dropoff request ${t}`
+                                }
                             }
                             
                         }
@@ -990,6 +1006,10 @@ const fiefManager = {
                 }
                 if(!coreTransfer){
                     for(let link of remoteLinks){
+                        if(!link){
+                            fief.links.remoteLinks = fief.links.remoteLinks.filter(id => !!Game.getObjectById(id));
+                            break;
+                        }
                         if((link && link.store[RESOURCE_ENERGY] == 800 && !link.cooldown) || (link && link.store[RESOURCE_ENERGY] >0 && !link.reserved)){
                             link.transferEnergy(coreLink)
                             coreTransfer = true;
@@ -1130,7 +1150,7 @@ const fiefManager = {
         }
 
         //If we have storage levels and safemode is over or low, run through rampart check every so often
-        if(Game.time % 200 == 0 && room.storage && room.storage.store[RESOURCE_ENERGY] > 20000 && ((room.controller.level >=4 && !room.controller.safeMode) || room.controller.safeMode < 3000)){
+        if(Game.time % 200 == 0 && room.storage && room.storage.store[RESOURCE_ENERGY] > 10000 && (ramps.length || (room.controller.level >=4 && !room.controller.safeMode) || room.controller.safeMode < 3000)){
             if(fief.rampartPlan){
                 //Count the current construction sites, no more than 10 for ramparts
                 let count = cSites.length;
@@ -1166,7 +1186,7 @@ const fiefManager = {
         towers = room.find(FIND_MY_STRUCTURES, {
             filter: { structureType: STRUCTURE_TOWER }
         });
-    let damageRamps = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_RAMPART && str.hits <= 1000)
+    let damageRamps = ramps.filter(str => str.structureType == STRUCTURE_RAMPART && str.hits <= 1000)
     for(let tower of towers) {
 
         var damagedCreeps = tower.room.find(FIND_MY_CREEPS, {
@@ -1178,9 +1198,10 @@ const fiefManager = {
             if (damagedCreeps.length > 0 && tower.energy > 400){
                 tower.heal(damagedCreeps[0])
             }
-        continue;
         
-        var hostiles = room.find(FIND_HOSTILE_CREEPS,{filter:(creep) => (!isFriend(creep))})
+        
+        var hostiles = roomBaddies.filter(bad=>(bad.body.length <25) || bad.owner.username == 'Invader');
+        
         let closestHostile = randomChoice(hostiles)
         if(damageRamps.length){
             tower.repair(randomChoice(damageRamps))
@@ -1395,24 +1416,81 @@ function getControllerSpots(room, fief) {
     let controller = room.controller.pos;
     let storage = room.storage ? room.storage.pos : null
     let chain = storage ? storage.getRangeTo(controller) <= 4 : null
+    let chainTerm = room.terminal && room.terminal.pos.getRangeTo(controller) <= 4
     let planCM = new PathFinder.CostMatrix();
 
     // Mark impassable spots from the room plan
     for (let [rcl, buildings] of Object.entries(fief.roomPlan)) {
         if (rcl > room.controller.level) break;
-        for (let [building, spot] of Object.entries(buildings)) {
-            if (building != STRUCTURE_ROAD) planCM.set(spot.x, spot.y, 255);
+        for (let [building, spots] of Object.entries(buildings)) {
+            for(let spot of spots){
+                if (building != STRUCTURE_ROAD) planCM.set(spot.x, spot.y, 255);
+            }
         }
     }
 
     let controllerSpots = {
-        1: [],
-        2: [],
-        3: []
     };
+    if(chainTerm){
+        controllerSpots.terminal = {
+            1: [],
+            2: [],
+            3: []
+        }
+        let terrain = new Room.Terrain(room.name);
+        let queue = [];
+        let visited = new Set();
+        let directions = [
+            { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+            { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+            { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }
+        ];
+    
+        // Start BFS from the storage position, always include the storage's position itself
+        queue.push({ pos: room.terminal.pos, range: 0 });
+        visited.add(room.terminal.pos.x + ',' + room.terminal.pos.y);
+    
+        while (queue.length > 0) {
+            let current = queue.shift();
+            let { pos, range } = current;
+    
+            // Skip walls or blocked areas except for the storage position itself
+            let terrainType = terrain.get(pos.x, pos.y);
+            if (range > 0 && (terrainType === TERRAIN_MASK_WALL || planCM.get(pos.x, pos.y) === 255)) {
+                continue;
+            }
+            // Skip spots unable to hit the controller
+            if(range > 0 && new RoomPosition(pos.x,pos.y,room.name).getRangeTo(controller) > 3){
+                continue;
+            }
+    
+            // If within range and not a wall, add to the appropriate range list
+            if (range > 0 && range <= 3) {
+                controllerSpots.terminal[range].push(pos);
+            }
+    
+            // Explore neighboring positions if within range 3
+            if (range <= 3) {
+                for (let dir of directions) {
+                    let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
+                    let posKey = newPos.x + ',' + newPos.y;
+    
+                    if (!visited.has(posKey)) {
+                        visited.add(posKey);
+                        queue.push({ pos: newPos, range: range + 1 });
+                    }
+                }
+            }
+        }
+    }
 
     // -- Chain Logic
     if(chain){
+        controllerSpots.storage = {
+            1: [],
+            2: [],
+            3: []
+        }
         let terrain = new Room.Terrain(room.name);
         let queue = [];
         let visited = new Set();
@@ -1436,17 +1514,17 @@ function getControllerSpots(room, fief) {
                 continue;
             }
             // Skip spots unable to hit the controller
-            if(new RoomPosition(pos.x,pos.y,room.name).getRangeTo(controller) > 3){
+            if(range > 0 && new RoomPosition(pos.x,pos.y,room.name).getRangeTo(controller) > 3){
                 continue;
             }
     
             // If within range and not a wall, add to the appropriate range list
             if (range > 0 && range <= 3) {
-                controllerSpots[range].push(pos);
+                controllerSpots.storage[range].push(pos);
             }
     
             // Explore neighboring positions if within range 3
-            if (range < 3) {
+            if (range <= 3) {
                 for (let dir of directions) {
                     let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
                     let posKey = newPos.x + ',' + newPos.y;
@@ -1460,54 +1538,68 @@ function getControllerSpots(room, fief) {
         }
     }
     // -- Non Chain Logic
-    else{
-        let terrain = new Room.Terrain(room.name);
-        let queue = [];
-        let visited = new Set();
-        let directions = [
-            { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
-            { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
-            { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }
-        ];
-    
-        // Start BFS from the controller position, always include the controller's position itself
-        queue.push({ pos: controller, range: 0 });
-        visited.add(controller.x + ',' + controller.y);
-    
-        while (queue.length > 0) {
-            let current = queue.shift();
-            let { pos, range } = current;
-    
-            // Skip walls or blocked areas except for the controller position itself
-            let terrainType = terrain.get(pos.x, pos.y);
-            if (range > 0 && (terrainType === TERRAIN_MASK_WALL || planCM.get(pos.x, pos.y) === 255)) {
-                continue;
-            }
-    
-            // If within range and not a wall, add to the appropriate range list
-            if (range > 0 && range <= 3) {
-                controllerSpots[range].push(pos);
-            }
-    
-            // Explore neighboring positions if within range 3
-            if (range < 3) {
-                for (let dir of directions) {
-                    let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
-                    let posKey = newPos.x + ',' + newPos.y;
-    
-                    if (!visited.has(posKey)) {
-                        visited.add(posKey);
-                        queue.push({ pos: newPos, range: range + 1 });
-                    }
+    controllerSpots.base = {
+        1: [],
+        2: [],
+        3: []
+    }
+    let terrain = new Room.Terrain(room.name);
+    let queue = [];
+    let visited = new Set();
+    let directions = [
+        { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 },
+        { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
+        { dx: -1, dy: 1 }, { dx: 0, dy: 1 }, { dx: 1, dy: 1 }
+    ];
+
+    // Start BFS from the controller position, always include the controller's position itself
+    queue.push({ pos: controller, range: 0 });
+    visited.add(controller.x + ',' + controller.y);
+
+    while (queue.length > 0) {
+        let current = queue.shift();
+        let { pos, range } = current;
+
+        // Skip walls or blocked areas except for the controller position itself
+        let terrainType = terrain.get(pos.x, pos.y);
+        if (range > 0 && (terrainType === TERRAIN_MASK_WALL || planCM.get(pos.x, pos.y) === 255)) {
+            continue;
+        }
+
+        // If within range and not a wall, add to the appropriate range list
+        if (range > 0 && range <= 3) {
+            controllerSpots.base[range].push(pos);
+        }
+
+        // Explore neighboring positions if within range 3
+        if (range <=3) {
+            for (let dir of directions) {
+                let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
+                let posKey = newPos.x + ',' + newPos.y;
+
+                if (!visited.has(posKey)) {
+                    visited.add(posKey);
+                    queue.push({ pos: newPos, range: range + 1 });
                 }
             }
         }
     }
     
+    //Sort all postions by range before returning
+    for(let chainSource of Object.values(controllerSpots)){
+        for(let layer of Object.values(chainSource)){
+            layer.sort((a, b) => {
+                //console.log(JSON.stringify(a),JSON.stringify(b))
+                const distanceA = room.controller.pos.getRangeTo(a.x, a.y);
+                const distanceB = room.controller.pos.getRangeTo(b.x, b.y);
+                return distanceA - distanceB;
+              });
+        }
+    }
 
 
 
-    return [controllerSpots,chain];
+    return controllerSpots;
 }
 
     /*let range = 3;

@@ -80,6 +80,7 @@ var roleDuo = {
                 let roomTargets = targets.filter(crp => ![0,49].includes(crp.pos.x) && ![0,49].includes(crp.pos.y))
                 let target;
                 let soldierFlag = false;
+                let damaged = creep.hits < creep.hitsMax;
                 if(creep.room.controller && creep.room.controller.safeMode){
                     targets = [];
                     priorityTargets = [];
@@ -92,7 +93,7 @@ var roleDuo = {
                 else{
                     target = roomTargets.length ? creep.pos.findClosestByRange(roomTargets) : creep.pos.findClosestByRange(targets)
                 }
-                if(target && (creep.room.name == targetRoom || creep.pos.getRangeTo(target) < 4)) {
+                if(target && (creep.room.name == targetRoom || (creep.pos.getRangeTo(target) < 4 && target.owner != 'Source Keeper'))) {
                     let targetRange = creep.pos.getRangeTo(target);
                     if(((creep.pos.getRangeTo(healer) <= 1 || targetRange <=3) || [0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y)) && healer.fatigue == 0){
                     if(targetRange <= 1){
@@ -106,11 +107,11 @@ var roleDuo = {
                             let res = PathFinder.search(healer.pos, {pos:target.pos,range:5}, {flee:true})
                             let resPath = res.path;
                             creep.travelTo(healer)
-                            console.log("Fleeing!","Ranged",resPath[0],)
+                            //console.log("Fleeing!","Ranged",resPath[0],)
                             if(creep.pos.getRangeTo(healer) == 1 && creep.fatigue == 0){
                                 healer.override = true;
                                 healer.travelTo(resPath[0])
-                                console.log("Fleeing!","Healer:",resPath[1])
+                                //console.log("Fleeing!","Healer:",resPath[1])
                             }
                             return;
                         }
@@ -127,30 +128,49 @@ var roleDuo = {
                             let res = PathFinder.search(healer.pos, {pos:target.pos,range:5}, {flee:true})
                             let resPath = res.path;
                             creep.travelTo(healer)
-                            console.log("Fleeing!","Ranged",resPath[0],)
+                            //console.log("Fleeing!","Ranged",resPath[0],)
                             if(creep.pos.getRangeTo(healer) == 1 && creep.fatigue == 0){
                                 healer.override = true;
                                 healer.travelTo(resPath[0])
-                                console.log("Fleeing!","Healer:",resPath[1])
+                                //console.log("Fleeing!","Healer:",resPath[1])
                             }
                             return;
                         }
                     }
-                        //If the target is on the edge of the room, move using range 1
-                        if(![0,49].includes(target.pos.x) && ![0,49].includes(target.pos.y)){
-                            if(creep.memory.edgeFight){
-                                creep.memory.edgeFight = false;
-                                creep.travelTo(target,{ignoreRoads:true});
+                    //If we're damaged and the other creep is bigger, keep fleeing
+                    else if(targetRange<=5 && damaged && target.body.length > creep.body.length){
+                        if(soldierFlag){
+                            if(creep.room.name == creep.memory.targetRoom){
+                                if(creep.memory.harass)creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1']);
+                                creep.memory.tickPick = Game.time
                             }
-                            else{
-                                creep.travelTo(target,{ignoreRoads:true});
+                            let res = PathFinder.search(healer.pos, {pos:target.pos,range:5}, {flee:true})
+                            let resPath = res.path;
+                            creep.travelTo(healer)
+                            //console.log("Fleeing!","Ranged",resPath[0],)
+                            if(creep.pos.getRangeTo(healer) == 1 && creep.fatigue == 0){
+                                healer.override = true;
+                                healer.travelTo(resPath[0])
+                                //console.log("Fleeing!","Healer:",resPath[1])
                             }
-                            
+                            return;
+                        }
+                    }
+                    //If the target is on the edge of the room, move using range 1
+                    if(![0,49].includes(target.pos.x) && ![0,49].includes(target.pos.y)){
+                        if(creep.memory.edgeFight){
+                            creep.memory.edgeFight = false;
+                            creep.travelTo(target,{ignoreRoads:true});
                         }
                         else{
-                            creep.travelTo(target,{ignoreRoads:true,range:1});
-                            creep.memory.edgeFight = true;
+                            creep.travelTo(target,{ignoreRoads:true});
                         }
+                        
+                    }
+                    else{
+                        creep.travelTo(target,{ignoreRoads:true,range:1});
+                        creep.memory.edgeFight = true;
+                    }
                     }
                 }
                 else if(targetRoom && creep.room.name != targetRoom){
@@ -158,15 +178,15 @@ var roleDuo = {
                         creep.travelTo(new RoomPosition(25, 25, targetRoom),{ignoreRoads:true});
                     }
                 }
-                else if(targetRoom && creep.room.name == targetRoom && (([0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y)) || ([0,49].includes(healer.pos.x) || [0,49].includes(healer.pos.y)))&& healer.fatigue == 0){
-                    creep.travelTo(new RoomPosition(25,25,creep.room.name),{ignoreRoads:true})
+                else if(targetRoom && creep.room.name == targetRoom && healer.fatigue == 0){
+                    creep.travelTo(creep.room.controller,{range:7,ignoreRoads:true})
                 }
                 else{
                     if(creep.memory.harass)creep.memory.targetRoom = randomChoice(['E1S1','E3S1','E4S3','E5S2','E2S3','E3S3','E2S4','E2S1'])
                     creep.memory.tickPick = Game.time;
                 }
                 let structTargets = creep.room.find(FIND_STRUCTURES, {
-                    filter: (structure) => structure.structureType != STRUCTURE_CONTROLLER && structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_WALL&& structure.structureType != STRUCTURE_CONTAINER
+                    filter: (structure) => (!structure.owner || !isFriend(structure)) && structure.structureType != STRUCTURE_CONTROLLER && structure.structureType != STRUCTURE_POWER_BANK&& structure.structureType != STRUCTURE_WALL&& structure.structureType != STRUCTURE_CONTAINER
                 });
                 let myRoom = Object.keys(Memory.kingdom.holdings).includes(creep.room.name) || Object.keys(Memory.kingdom.fiefs).includes(creep.room.name);
                 let targetStruct = creep.pos.findClosestByRange(structTargets);
@@ -337,8 +357,9 @@ var roleDuo = {
                 }
             }
             if(!portalling && !creep.override)creep.travelTo(attacker)
+            let targets = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp))
             if(creep.hits == creep.hitsMax && attacker.hits == attacker.hitsMax){
-                creep.heal(attacker);
+                if(targets.length)creep.heal(attacker);
             }
             else{
                 if(creep.hitsMax - creep.hits > attacker.hitsMax - attacker.hits){

@@ -692,7 +692,7 @@ class Traveler {
             let blocker
             try{blocker = Game.rooms[roomName].lookForAt(LOOK_CREEPS,nextX,nextY)[0];}
             catch(e){
-                console.log(e,roomName);
+                console.log('Traveler error',e,roomName);
                 console.log(JSON.stringify(creepData))
                 console.log(creep)
                 return;
