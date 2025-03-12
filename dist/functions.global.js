@@ -600,8 +600,12 @@ global.getDamageMap = function(hostiles,stats, towerMap){
     return damageCM;
 }
 
-global.testFunc = function(){
-    let newQuad = new Quad();
+global.getCreeps = function(role){
+    return Object.values(Game.creeps).filter(creep => creep.memory.role == role)
+}
+
+global.testFunc = function(opts){
+    let newQuad = new Quad(opts);
     console.log("Quad created",newQuad.name)
 }
 global.damageMap = function(hostiles,stats,towerMap){

@@ -535,7 +535,7 @@ const statusManager = {
                 //Push first line
                 fiefText.push(fiefStatus)
                 
-                fiefStatus =  `📈${fief ? fief.energyUse : 0}📝${fief ? fief.shippingOrders : 0}🚚${fief ? fief.shippingUse : 0}%`
+                fiefStatus =  `📈${fief ? fief.energyUse : 0}🕑${fief ? fief.spawnUse : 0}%🚚${fief ? fief.shippingUse : 0}%`  //📝${fief ? fief.shippingOrders : 0}
                 fiefText.push(fiefStatus)
 
             }

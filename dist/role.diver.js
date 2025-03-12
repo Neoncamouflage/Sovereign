@@ -7,6 +7,11 @@ var roleDiver = {
     //Object.values(Game.creeps).filter(crp => crp.memory.role = 'diver').forEach(x=>{x.memory.portalled = false})
     /** @param {Creep} creep **/
     run: function(creep) {
+        if(creep.memory.job == 'quad'){
+            if(creep.room.name == 'E0S0') creep.memory.donePortal = true;
+            if(!creep.memory.donePortal)creep.travelTo(new RoomPosition(44,44,'E30S10'))
+            else creep.travelTo(new RoomPosition(24,24,'E0S0'));
+        }
         if(creep.memory.job == 'harass'){
             let hRooms = creep.memory.hRooms || randomChoice([['E3S2','E2S3','E3S3','E2S4','E4S3','E5S2'],['E7S6','E8S7','E9S6','E8S8','E6S8','E6S9','E7S9']]); //['E2S7','E3S7','E4S7','E4S8'],['E7S6','E8S7','E9S6','E8S8','E6S8','E6S9','E7S9']
             if(!creep.memory.portalled && creep.room.name == 'E0S0'){

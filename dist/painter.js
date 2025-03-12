@@ -22,6 +22,7 @@ const painter = {
         if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan)
         if(visuals.drawScores) this.drawScores(architect.config)
         if(visuals.drawAllies) this.drawAllies()
+        if(visuals.drawColor) this.drawColor();
         
     },
     setVisual: function(vis,setting='default'){
@@ -301,6 +302,108 @@ const painter = {
                 if(total !=0) new RoomVisual(room.name).text('¤'+(total/1000).toFixed(0),building.pos.x,building.pos.y-1.2, {color:'#5AF414',font:'0.5 Comic Sans MS'});
             }
         }
+    },
+    drawColor(){
+        if(!Memory.colorGroups) Memory.colorGroups = {};
+        let colorRooms = ['E28S8'
+            //...Object.keys(Memory.kingdom.fiefs),
+            //...Object.keys(Memory.kingdom.holdings),
+        ];
+        for(let roomName of colorRooms){
+            if(!Memory.colorGroups[roomName]){
+                let rVis = new RoomVisual(roomName);
+                let groups = getWallGroups(roomName);
+                let perimeters = {};
+                let edgeDone = new Set();
+                //edgeDone.add(`${spot.x},${spot.y}`)
+                for(let id of Object.keys(groups)){
+                    let group = groups[id]
+                    perimeters[id] = findPerimeterTiles(group)
+                }
+                console.log("GROUPS",JSON.stringify(groups))
+                console.log("PERIS",JSON.stringify(perimeters))
+                //Perimeter tiles
+                let perimeterTiles = Object.keys(perimeters);
+                let totalGroups = perimeterTiles.length;
+                for(let perID of perimeterTiles){
+                    let groupTiles = perimeterTiles[perID]
+                    console.log("grouptiles",JSON.stringify(groupTiles))
+                    let hue = (360 / totalGroups) * perimeterTiles.indexOf(perID);
+                    for(let spot of groupTiles){
+                        console.log("Adding",spot)
+                        edgeDone.add(`${spot.x},${spot.y}`)
+                        rVis.circle(spot.x,spot.y,{fill: `hsl(${hue}, 100%, 50%)`});
+                    }
+                }
+                for(let groupID of Object.keys(groups)){
+                    let group = groups[groupID]
+                    //console.log(JSON.stringify(wallGroup))
+                    for(let spot of group){
+                        if(edgeDone.has(`${spot.x},${spot.y}`))return;
+                        rVis.circle(spot.x,spot.y,{fill:'black'});
+                    };
+                };
+            }
+        }
+        function findPerimeterTiles(wallGroup){
+            const isWallTile = (x, y) => wallGroup.some(tile => tile.x === x && tile.y === y);
+            const perimeterTiles = [];
+        
+            const directions = [
+                { dx: -1, dy: 0 }, // Left
+                { dx: 1, dy: 0 },  // Right
+                { dx: 0, dy: -1 }, // Up
+                { dx: 0, dy: 1 },  // Down
+                // Uncomment below for diagonal checks
+                { dx: -1, dy: -1 }, // Top-left
+                { dx: 1, dy: -1 },  // Top-right
+                { dx: -1, dy: 1 },  // Bottom-left
+                { dx: 1, dy: 1 },   // Bottom-right
+            ];
+        
+            wallGroup.forEach(tile => {
+                for (const { dx, dy } of directions) {
+                    const neighborX = tile.x + dx;
+                    const neighborY = tile.y + dy;
+                    if (!isWallTile(neighborX, neighborY) && (neighborX>=0 && neighborX<=49) && (neighborY>=0 && neighborY<=49)) {
+                        perimeterTiles.push(tile);
+                        break; // Break since one non-wall neighbor is enough to confirm it's a perimeter tile
+                    }
+                }
+            });
+            return perimeterTiles;
+        }
+        function getWallGroups(roomName){
+            let terrain = Game.map.getRoomTerrain(roomName);
+            const processed = Array(50).fill().map(() => Array(50).fill(false));
+            const wallGroups = {};
+            let currentGroupId = 0;
+            for (let x = 0; x < 50; x++) {
+                for (let y = 0; y < 50; y++) {
+                    if (!processed[x][y] && terrain.get(x, y) === TERRAIN_MASK_WALL) {
+                        wallGroups[currentGroupId] = [];
+                        floodFill(x, y);
+                        currentGroupId++;
+                    }
+                }
+            }
+
+            function floodFill(x, y) {
+                if (x < 0 || x >= 50 || y < 0 || y >= 50) return; // Out of bounds
+                if (processed[x][y] || terrain.get(x, y) !== TERRAIN_MASK_WALL) return; // Already processed or not wall
+
+                processed[x][y] = true; // Mark as processed
+                wallGroups[currentGroupId].push({x, y});
+
+                // Explore neighboring cells
+                floodFill(x+1, y);
+                floodFill(x-1, y);
+                floodFill(x, y+1);
+                floodFill(x, y-1);
+            }
+            return wallGroups
+        }
+        
     },
     drawTest(){
         if(Memory.test.testCM){

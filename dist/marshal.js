@@ -19,10 +19,13 @@ const marshal = {
         for(let troupe of global.heap.army.troupes){
             troupe.run(kingdomCreeps);
         }
-
+        //Run duos
+        for(let att of Object.keys(heap.duos)){
+            if(!Game.getObjectById(att))delete heap.duos[att]
+        }
 
         //Run quads
-        for(let quad of heap.quads){
+        for(let quad of Object.values(heap.quads)){
             quad.run();
         }
 

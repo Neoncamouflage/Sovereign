@@ -34,6 +34,7 @@ const registry = {
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
         //console.log("Calculating spawns. Tickmod:",Game.time % 3)
+        let energyRemaining = room.energyAvailable;
         let fief = Memory.kingdom.fiefs[room.name]
         let spawnQueue = global.heap.registry[room.name] || []
         let spawns = fief.spawns.map(spawn => Game.getObjectById(spawn))
@@ -60,7 +61,7 @@ const registry = {
             let cost;
             //Set sev to memory if it isn't already, for our respawning function
             if(!newCreep.memory.sev)newCreep.memory.sev = newCreep.sev;
-            
+
             if(newCreep.body){
                 cost = 0;
                 for(let part of newCreep.body){
@@ -68,7 +69,7 @@ const registry = {
                 }
             }
             else{
-                [body,cost] = getBody(newCreep.memory.role,room,(newCreep.memory.job || 'default'),fiefCreeps,newCreep)
+                [body,cost] = getBody(energyRemaining,newCreep.memory.role,room,(newCreep.memory.job || 'default'),fiefCreeps,newCreep)
                 //If cost is -1, log the body error and continue
                 if(cost == -1){
                     //console.log(body);
@@ -76,12 +77,14 @@ const registry = {
                 }
                 newCreep.body = body
             }
+
+            //Warden activation means no civilian creep spawning
             if(heap.wardens && heap.wardens[room.name] && (['mineralHarvester'].includes(newCreep.memory.job) || ['miner','repair','claimer'].includes(newCreep.memory.role))) continue
             
             
             //Check if spawn has energy
             //console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
-            if(room.energyAvailable >= cost){
+            if(energyRemaining >= cost){
                 let nextSpawn = freeSpawns.shift();
                 //If spawning, continue
                 if(!nextSpawn || nextSpawn.spawning) continue;
@@ -98,12 +101,12 @@ const registry = {
                     if(newCreep.respawn) Game.getObjectById(newCreep.respawn).memory.respawn = true;
                     //If it was a hard spawn, remove it
                     if(newCreep.hardSpawn){
-                        let index = Memory.hardSpawns[room.name].indexOf(newCreep);
-                        Memory.hardSpawns[room.name].splice(index,1);
+                        Memory.hardSpawns[room.name] = Memory.hardSpawns[room.name].filter(creepRequest => creepRequest !== newCreep);
                     }
+                    energyRemaining -= cost;
                 } 
                 if(spawnTry != OK){
-                    //console.log("Bad spawn:",spawnTry)
+                    chronicle.log(`Failed spawn: Error ${spawnTry}`,'registry',1);
                 }
                 //If no mre free spawns, break
             }
@@ -158,11 +161,12 @@ const registry = {
     requestCreep: function(plan){
         let roomName = plan.memory.fief;
         if(roomName == undefined){
-            //console.log("Fief missing while trying to spawn",plan.memory.role);
-            return
+            chronicle.log(`Fief missing while trying to spawn $${JSON.stringify(plan)}`,'registry',1);
+            return "Request failed"
         }
         global.heap.registry[roomName] = global.heap.registry[roomName] || [];
         global.heap.registry[roomName].push(plan);
+        return "Request God"
     }
 }
         
@@ -170,60 +174,63 @@ const registry = {
 module.exports = registry;
 profiler.registerObject(registry, 'registry');
 //#region Creep Body Switch
-function getBody(role,room,job='default',fiefCreeps,plan){
+function getBody(energyRemaining,role,room,job='default',fiefCreeps,plan){
     let parts;
     let mult;
     let newBod;
     switch(role){
         case 'repair':
-            return getRepair(room)
+            return getRepair(energyRemaining,room)
         case 'scout':
-            return getScout(room,fiefCreeps);
+            return getScout(energyRemaining,room,fiefCreeps);
         case 'harvester':
             switch(job){
                 case 'remoteHarvest':
                 case 'mineralHarvester':
-                    return getMHarvester(room,job)
+                    return getMHarvester(energyRemaining,room,job)
                 case 'energyHarvester':
-                    return getEHarvester(room,fiefCreeps)
+                    return getEHarvester(energyRemaining,room,fiefCreeps)
             }
             break;
         case 'claimer':
-            return getReserver(room,fiefCreeps);  
+            return getReserver(energyRemaining,room,fiefCreeps);  
             break;
         case 'miner':
-            return getMiner(plan)
+            return getMiner(energyRemaining,plan)
             break;
         case 'hauler':
-            return getHauler(room,fiefCreeps);
+            return getHauler(energyRemaining,room,fiefCreeps);
             break;
         case 'upgrader':
-            return getUpgrader(room,fiefCreeps,job);
+            return getUpgrader(energyRemaining,room,fiefCreeps,job);
             break;
         case 'sapper':
-            return getSapper(room);
+            return getSapper(energyRemaining,room);
             break;
         case 'skHarvester':
-            return getMHarvester(room);
+            return getMHarvester(energyRemaining,room);
             break;
         case 'archer':
-            return getArcher(room,plan);
+            return getArcher(energyRemaining,room,plan);
             break;
         case 'skirmisher':
-            return getSkirmisher(room,plan);
+            return getSkirmisher(energyRemaining,room,plan);
             break;
         case 'pikeman':
-            return getPikeman(room,plan);
+            return getPikeman(energyRemaining,room,plan);
             break;
         case 'settler':
-            return getSettler(room);
+            return getSettler(energyRemaining,room);
         case 'builder':
             switch(job){
                 case 'fortifier':
-                    return getFortifier(room,fiefCreeps);
+                    return getFortifier(energyRemaining,room,fiefCreeps);
                 default:
-                    return getFortifier(room,fiefCreeps);
+                    return getFortifier(energyRemaining,room,fiefCreeps);
             }
+            break;
+        case 'man-at-arms':
+            return getManAtArms(room,plan);
             break;
     }
     //console.log("GETBODY FAIL FOR",role,room,job,fiefCreeps,JSON.stringify(plan))
@@ -232,7 +239,36 @@ function getBody(role,room,job='default',fiefCreeps,plan){
 //#endregion
 //#region Creep Body Functions
 
-function getRepair(room){
+
+//Uniform blinky for quads
+//Preferably should scale based based on data in the plan for how much heal we need to cover
+function getManAtArms(room,plan){
+    //Just this default for testing
+    let parts = [RANGED_ATTACK,RANGED_ATTACK,MOVE,MOVE,MOVE,HEAL]
+    let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+
+    return [parts,setCost];
+
+    let energyAvailable = room.energyCapacityAvailable
+    //Max size is the set body size or energy cap, whichever is less
+    //Need to set up bodysize logic for the plan, for now default
+    let maxBody = parts.length;
+    let maxParts = Math.min(maxBody,Math.floor(energyAvailable / setCost));
+    let newBody = [];
+    let totalCost = 0;
+
+    newBody.push(...parts);
+    totalCost += setCost;
+    let cap = 2;
+    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50 && i <= cap; i++) {
+        newBody.push(...parts);
+        totalCost += setCost;
+    }
+
+    
+}
+
+function getRepair(energyRemaining,room){
     let parts = [MOVE,CARRY,WORK];
     let partsCost = 0;
     for(each of parts){
@@ -250,13 +286,13 @@ function getRepair(room){
 }
 
 //Energy harvester - Serf
-function getEHarvester(room,fiefCreeps){
+function getEHarvester(energyRemaining,room,fiefCreeps){
     let newBody = [MOVE,WORK];
     let partsCost = 0
     let maxWorkParts = 6;
     let [tickNet,avgNet] = granary.getIncome(room.name)
     //If we have 0 average and planned, and no harvesters, the energy is what we have now, otherwise max
-    let energyAvailable = fiefCreeps['harvester'] ? room.energyCapacityAvailable : room.energyAvailable;
+    let energyAvailable = fiefCreeps['harvester'] ? room.energyCapacityAvailable : energyRemaining;
     //Default 1 move part
     partsCost += BODYPART_COST[MOVE]+BODYPART_COST[WORK];
     //Fill with work parts until we max out on energy or hit the cap
@@ -274,7 +310,7 @@ function getEHarvester(room,fiefCreeps){
 }
 
 //Generalist - Settler
-function getSettler(room) {
+function getSettler(energyRemaining,room) {
     const parts = [MOVE, CARRY, MOVE, WORK];
     let partsCost = parts.reduce((sum, part) => sum + BODYPART_COST[part], 0);
     const engAvail = room.energyCapacityAvailable;
@@ -300,7 +336,7 @@ function getSettler(room) {
 
 
 //Miner - Yeoman
-function getMiner(plan){
+function getMiner(energyRemaining,plan){
     let holding = plan.memory.holding;
     /*
     Distance Ref
@@ -333,7 +369,7 @@ function getMiner(plan){
 }
 
 //Military Creeps
-function getSapper(room){
+function getSapper(energyRemaining,room){
     let parts = [MOVE,WORK]
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let energyAvailable = room.energyCapacityAvailable
@@ -352,7 +388,7 @@ function getSapper(room){
 
     return [newBody,totalCost];
 }
-function getArcher(room,plan){
+function getArcher(energyRemaining,room,plan){
     let parts = [MOVE,RANGED_ATTACK]
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let energyAvailable = room.energyCapacityAvailable
@@ -371,7 +407,7 @@ function getArcher(room,plan){
 
     return [newBody,totalCost];
 }
-function getPikeman(room,plan){
+function getPikeman(energyRemaining,room,plan){
     let parts = [MOVE,ATTACK]
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let energyAvailable = room.energyCapacityAvailable
@@ -390,7 +426,7 @@ function getPikeman(room,plan){
 
     return [newBody,totalCost];
 }
-function getSkirmisher(room,plan){
+function getSkirmisher(energyRemaining,room,plan){
     let parts = room.controller.level >=4 ?[MOVE,MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,RANGED_ATTACK,HEAL] : [MOVE,MOVE,MOVE,RANGED_ATTACK,RANGED_ATTACK,HEAL]
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let energyAvailable = room.energyCapacityAvailable
@@ -413,12 +449,12 @@ function getSkirmisher(room,plan){
 }
 
 //General hauler - Porter
-function getHauler(room,fiefCreeps){
+function getHauler(energyRemaining,room,fiefCreeps){
     let parts = room.storage && room.storage.my ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
     let partsCap = global.cpuAverage > 90 || room.controller.level == 8 ? 36 : parts.length == 2 ? 28 : 21;
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let maxCap = global.cpuAverage > 90 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable/2)
-    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? maxCap : room.energyAvailable;
+    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? maxCap : energyRemaining;
     let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];
@@ -436,14 +472,14 @@ function getHauler(room,fiefCreeps){
 }
 
 //Starter upgrader - Scribe
-function getUpgrader(room,fiefCreeps,job){
+function getUpgrader(energyRemaining,room,fiefCreeps,job){
     let parts = [MOVE,CARRY,WORK];
     let partsCost = 0;
     for(each of parts){
         partsCost += BODYPART_COST[each];
     }
     let isStarter = job == 'starterUpgrader';
-    let engAvail = (!fiefCreeps.upgrader && isStarter) ? room.energyAvailable : room.energyCapacityAvailable;
+    let engAvail = (!fiefCreeps.upgrader && isStarter) ? energyRemaining : room.energyCapacityAvailable;
     let mult = Math.floor(engAvail/partsCost)
     let arrCap = room.controller.level > 3 ? 4 : 2;
     //console.log(mult)
@@ -463,13 +499,13 @@ function getUpgrader(room,fiefCreeps,job){
     return [newBod,totalCost]
 }
 
-function getScout(room,fiefCreeps){
+function getScout(energyRemaining,room,fiefCreeps){
     //Make sure we have harvesters and haulers before we do any scouts
     if(!fiefCreeps.harvester || !fiefCreeps.hauler) return ['REGISTRY_BABY_FIEF',-1];
     
     return [[MOVE],50]
 }
-function getMHarvester(room,job = 'default'){
+function getMHarvester(energyRemaining,room,job = 'default'){
     let engAvail = room.energyCapacityAvailable
     parts = [MOVE,WORK,WORK];
     let partsCost = 0;
@@ -498,7 +534,7 @@ function getMHarvester(room,job = 'default'){
     return [newBod,partsCost];
 }
 
-function getReserver(room,fiefCreeps){
+function getReserver(energyRemaining,room,fiefCreeps){
     let parts = [MOVE,CLAIM];
     let partsCost = 0;
     for(each of parts){
@@ -519,7 +555,7 @@ function getReserver(room,fiefCreeps){
 }
 
 //Fortifier - Mason
-function getFortifier(room,fiefCreeps){
+function getFortifier(energyRemaining,room,fiefCreeps){
     let parts = [MOVE,CARRY,WORK];
     let partsCost = 0;
     for(each of parts){
@@ -537,7 +573,7 @@ function getFortifier(room,fiefCreeps){
 }
 
 //Builder - Carpenter
-function getBuilder(room,fiefCreeps){
+function getBuilder(energyRemaining,room,fiefCreeps){
     let nonWork = [MOVE,CARRY]
     let fullSet = [MOVE,CARRY,WORK,WORK];
     let fullCost = fullSet.reduce((acc, part) => acc + BODYPART_COST[part], 0);

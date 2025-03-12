@@ -17,7 +17,7 @@ const constants = {
     ROOM_CROSSROAD : 	 'crossroad',
 
     //Fief Constants
-    DEFAULT_MINERAL_NEED : 80000,
+    DEFAULT_MINERAL_NEED : 30000,
     STORAGE_SPACE_FOR_MINERAL_HARVEST : 100000,
     RAMPART_REPAIR_MINIMUM_ENERGY : 20000,
     DEFAULT_TERMINAL_ENERGY : 50000,
@@ -26,6 +26,7 @@ const constants = {
 
     //Lab Constants
     REACTION_INGREDIENTS : {},
+    MINERALS:[...Object.keys(MINERAL_MIN_AMOUNT),'G'],
 
     //Room Plan Constants
     STRUCTURE_KEYS : {

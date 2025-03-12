@@ -17,18 +17,11 @@ var roleDuo = {
             //Do preflight stuff
             creep.memory.preflight = true;
         }
-
-
         //ATTACKER
         if(creep.memory.job == 'attacker'){
             //Allows for manual or other code logic to direct until it's boosted
             if(creep.memory.needBoost && !creep.memory.boosted){
                 return;
-            }
-            if(creep.memory.respawn && creep.ticksToLive < 400 && !creep.memory.respawnDone){
-                //addCreep('W56N12','Squire',[MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL,HEAL],{role:'duo',job:'healer'});
-                //addCreep('W56N12','Knight',[MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,MOVE,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK,ATTACK],{role:'duo',job:'attacker',respawn:true,type:'melee',targetRoom:creep.memory.targetRoom});
-                creep.memory.respawnDone = true;
             }
             if(!creep.memory.stay) creep.memory.stay = true;
 
@@ -288,36 +281,43 @@ var roleDuo = {
                     if(creep.pos.getRangeTo(targetStruct) <= 1)creep.attack(targetStruct);
                 }
             }
-            else if(creep.memory.type == 'dismantle'){
+            else if(creep.memory.type == 'directDemo'){
+                let demoTarget = Game.getObjectById(creep.memory.killID)
                 if(targetRoom && creep.room.name != targetRoom){
                     if((creep.pos.getRangeTo(healer) <= 1 || [0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y))&& healer.fatigue == 0){
-                        creep.travelTo(new RoomPosition(25, 25, targetRoom),{ignoreRoads:true});
+                        if(targetRoom == 'E2S3')creep.travelTo(new RoomPosition(1, 29, targetRoom),{ignoreRoads:true});
+                        else creep.travelTo(new RoomPosition(25, 25, targetRoom),{ignoreRoads:true});
                     }
                 }
+                else if(targetRoom && creep.room.name == targetRoom && creep.room.controller.safeMode){
+                    creep.memory.targetRoom = creep.memory.backupRoom;
+                }
                 else if(targetRoom && creep.room.name == targetRoom && (([0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y)) || ([0,49].includes(healer.pos.x) || [0,49].includes(healer.pos.y)))&& healer.fatigue == 0){
-                    creep.travelTo(new RoomPosition(25,25,creep.room.name),{ignoreRoads:true})
+                    if(targetRoom == 'E2S3')creep.travelTo(new RoomPosition(1, 29, targetRoom),{ignoreRoads:true});
+                    else creep.travelTo(new RoomPosition(25, 25, targetRoom),{ignoreRoads:true});
                 }
                 else if(targetRoom && creep.room.name == targetRoom && creep.pos.getRangeTo(healer) <= 1&& healer.fatigue == 0){
-
-                    if(creep.memory.killID && Game.getObjectById(creep.memory.killID)){
-                        if(creep.pos.getRangeTo(Game.getObjectById(creep.memory.killID)) > 1 ){
-                            creep.travelTo(Game.getObjectById(creep.memory.killID),{ignoreRoads:true});
+                    if(demoTarget){
+                        if(creep.pos.getRangeTo(demoTarget) > 1 ){
+                            creep.travelTo(demoTarget);
                         }
                         else{
-                            creep.dismantle(Game.getObjectById(creep.memory.killID));
+                            creep.dismantle(demoTarget);
                         }
                     }
                     else{
                         let structTargets = creep.room.find(FIND_STRUCTURES, {
                             filter: (structure) => [STRUCTURE_SPAWN,STRUCTURE_TOWER].includes(structure.structureType)
                         });
-                        let targetStruct = creep.pos.findClosestByRange(structTargets);                    
-                        if(creep.pos.getRangeTo(targetStruct) > 1 ){
-                            creep.travelTo(targetStruct,{ignoreRoads:true,allowHostile:false});
-                        }
-                        else{
-                            creep.dismantle(targetStruct);
-                        }
+                        let targetStruct = creep.pos.findClosestByRange(structTargets);     
+                        if(targetStruct){
+                            if(creep.pos.getRangeTo(targetStruct) > 1 ){
+                                creep.travelTo(targetStruct,{ignoreRoads:true,allowHostile:false});
+                            }
+                            else{
+                                creep.dismantle(targetStruct);
+                            }
+                        }               
                     }
 
                 }
@@ -333,10 +333,11 @@ var roleDuo = {
             let attacker = Game.getObjectById(creep.memory.attacker);
             if(!attacker){
                 let attCheck = creep.room.find(FIND_MY_CREEPS,{filter: (att) => {
-                    return att.memory.role == 'duo' && !att.spawning && att.memory.job == 'attacker' && (att.memory.healer == creep.id || !att.memory.healer);
+                    return att.memory.role == 'duo' && !att.spawning && !att.checked && att.memory.job == 'attacker' && (att.memory.healer == creep.id || !att.memory.healer);
                 }})[0];
                 if(attCheck){
                     attacker = attCheck;
+                    attacker.checked
                     creep.memory.attacker = attCheck.id;
                 }else{
                     return;

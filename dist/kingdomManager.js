@@ -86,9 +86,9 @@ const kingdomManager = {
             //spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E1S0','E2S0','E3S0','E4S0','E5S0','E6S0','E7S0','E8S0','E9S0','E10S0','E11S0','E12S0']})
         }
         if(Game.time % 920 == 0){
-            if(!kingdomCreeps['E28S8'].diver || kingdomCreeps['E28S8'].diver.length < 2){
+            //if(!kingdomCreeps['E28S8'].diver || kingdomCreeps['E28S8'].diver.length < 2){
                 //spawnCreep('duo','8r8m','E28S8',68,{job:'attacker',harass:true,changeType:'ranged',type:'portal'});spawnCreep('duo','5h5m','E28S8',68,{job:'healer'})
-            }
+            //}
         }
         for(const fief in Memory.kingdom.fiefs){
             supplyDemand.prepShipping(fief);
@@ -258,7 +258,14 @@ function setupCreeps(){
         'archer',
         'pikeman',
         'skirmisher',
-        'halberdier',
+        'halberdier'
+    ]
+    //Memory keys that should not be kept in respawns
+    let purgeMem = [
+        'boosted',
+        'attacker',
+        'healer',
+        '_trav'
     ]
     for(let creepName in Game.creeps){
         let creep = Game.creeps[creepName];
@@ -266,14 +273,31 @@ function setupCreeps(){
         let role = creep.memory.role
         //First process respawns for anything that needs it. Ticks are specified by creep or based on the distance from spawn
         let fiefDist = fief ? Game.map.getRoomLinearDistance(fief,creep.room.name,true) : 100
-        if(creep.memory.respawnMe && !creep.spawning && !creep.memory.hasRespawn && creep.ticksToLive < (creep.memory.respawnTicks || fiefDist)){
+        if(creep.memory.respawnMe && !creep.spawning && !creep.memory.hasRespawn && creep.ticksToLive < (creep.memory.respawnTicks || (fiefDist*50+(creep.body.length*3)))){
             let newMem = {...creep.memory};
-            delete newMem.boosted  //New creeps won't be boosted
+            for(let key of purgeMem){
+                delete newMem[key]
+            }
             spawnCreep(role,creep.body.map(part=>part.type),fief,creep.memory.sev || 50,newMem)
             creep.memory.hasRespawn = true;
         }
 
-
+        //Assign reserved creeps for quads
+        /*if(creep.memory.quadReserved){
+            let quad = heap.quads[creep.memory.quadReserved]
+            if(!quad){
+                chronicle.log(`Invalid quad reservation. ${creep.name} has reservation ${creep.memory.quadReserved}.`,'kingdomManager',1);
+                creep.memory.role = 'skirmisher'
+                delete creep.memory.quadReserved;
+            }
+            else{
+                continue;
+            }
+        }
+        else if(role == 'man-at-arms'){
+            creep.memory.role = 'skirmisher'
+        }*/
+        //Scouts are kingdom-wide
         if(role == 'scout'){
             kingdomCreeps.scouts = kingdomCreeps.scouts || []
             kingdomCreeps.scouts.push(creep);

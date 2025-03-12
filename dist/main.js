@@ -42,6 +42,7 @@ global.heap = {
         lances:{},
         reserve:[]
     },
+    duos:[],
     quads:[],
     funnelTarget:null
 }

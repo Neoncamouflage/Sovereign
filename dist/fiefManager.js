@@ -10,6 +10,10 @@ const buildRole = require('role.builder');
 const Warden = require('Warden');
 const fiefManager = {
     run:function(room,fiefCreeps){
+        const getStoredResources = (resourceType) => {
+            return (room.storage ? room.storage.store[resourceType] || 0 : 0) + 
+                   (room.terminal ? room.terminal.store[resourceType] || 0 : 0);
+        };
         heap.fiefs[room.name].buildQueue = heap.fiefs[room.name].buildQueue || {}
         let buildQueue = heap.fiefs[room.name].buildQueue
         //console.log("BUILDQUEUE",JSON.stringify(buildQueue).length,JSON.stringify(buildQueue))
@@ -41,7 +45,6 @@ const fiefManager = {
         if(!fief.rampTarget) fief.rampTarget = 50000;
         
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
-        let starterCreeps = []
         let mySpawns = room.find(FIND_MY_SPAWNS).map(spawn => spawn.id);
         let storagePos = fief.roomPlan ? new RoomPosition(fief.roomPlan[4].storage[0].x,fief.roomPlan[4].storage[0].y,room.name) : null;
         let rampartMinimums = {
@@ -279,7 +282,7 @@ const fiefManager = {
         }
 
         //Every 100 ticks, check to see if we need to fill the build queue
-        if(Game.time % 100 == 0 && fief.roomPlan){
+        if(Game.time % 100 == 0 && fief.roomPlan && !fief.standby){
             buildQueue = {}
             //console.log("Checking for new constructions.")
             let cCount = 0;
@@ -441,9 +444,10 @@ const fiefManager = {
             let ute = ((totalSpawn / 3000) * 100);
             spawnUse[spawn] = ute;
             combinedSpawnUse += ute;
-            //console.log("Spawn Utilization for",Game.getObjectById(spawn).name+':\n',((totalSpawn / 3000) * 100).toFixed(2)+'%');
+            //console.log("Spawn Utilization for",Game.getObjectById(spawn).name+':\n',((totalSpawn / 3000) * 100).toFixed(2)+'%'+'---'+combinedSpawnUse +'---'+);
         });
-        fief.combinedSpawnUse = combinedSpawnUse/spawns.length;
+        if(spawns.length)fief.combinedSpawnUse = Math.round(combinedSpawnUse/spawns.length);
+        //console.log("SPUSE",fief.combinedSpawnUse)
         //#region Room Operation
         //#endregion
         //console.log("Spawn use:",combinedSpawnUse)
@@ -601,9 +605,7 @@ const fiefManager = {
                     //registry.requestCreep({sev:20,memory:{role:'repair',fief:room.name,status:'spawning',preflight:false}})
                 //}
             }
-            let totalEnergy = 0;
-            if(room.storage)totalEnergy += room.storage.store[RESOURCE_ENERGY]
-            if(room.terminal)totalEnergy += room.terminal.store[RESOURCE_ENERGY]
+            let totalEnergy = getStoredResources(RESOURCE_ENERGY)
 
             //Spawn operations when storage is available
             if(room.storage && room.storage.my){
@@ -618,7 +620,13 @@ const fiefManager = {
                     upgradersNeeded = 0;
                 }
                 else{
-                    upgradersNeeded = Math.min(upMax,Math.ceil(totalEnergy/100000));
+                    //Chaining significantly reduces the upgraders required
+                    if(fief.chain){
+                        upgradersNeeded = Math.min(upMax,Math.ceil(totalEnergy/150000));
+                    }
+                    else{
+                        upgradersNeeded = Math.min(upMax,Math.ceil(totalEnergy/100000));
+                    }
                     //console.log("Ups needed",upgradersNeeded)
                 }
                 if(!cSites.length && upgradersNeeded > 0 && (!fiefCreeps.upgrader || fiefCreeps.upgrader.length < upgradersNeeded)){
@@ -744,127 +752,201 @@ const fiefManager = {
                 }
                 
             }
-
-            //If we have source labs and a boost objective
-            if(fief.labs && fief.labs.sourceLabs){
-                let log = `${room.name} labs:`
+            //#region Lab Operation
+            //#endregion
+            //If we have labs set up, run lab code
+            if(fief.labs){
+                //First check for boost labs. These labs are ignored when running reactions so creeps can use them to boost
+                //Initialize if needed
                 if(!fief.labs.boostLabs || Array.isArray(fief.labs.boostLabs)) fief.labs.boostLabs = {};
-                //Combine the boosting and target supply requests
-                if(Object.keys(fief.labs.boostLabs).length){
-                    log += '\nBoostlabs available'
-                    for(let [labID,part] of Object.entries(fief.labs.boostLabs)){
-                        let lab = Game.getObjectById(labID)
-                        //If the wrong mineral is in the lab, remove it
-                        if(lab.mineralType && lab.mineralType != part){
-                            supplyDemand.addRequest(room,{type:'pickup',targetID:labID,resourceType:lab.mineralType,amount:lab.store[lab.mineralType],priority:8})
-                        }
-                        //If no mineral is in the lab, order some
-                        else if(!lab.mineralType){
-                            amt = Math.min(3000, 
-                                (room.storage ? room.storage.store[part] : 0) + 
-                                (room.terminal ? room.terminal.store[part] : 0)
-                            );
-                            if(amt)supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,amount:amt,priority:8})
-                        }
-                        //If the right mineral is in the lab, mark the source as good
-                        else if(lab.mineralType == part){
-                            goodSource++;
-                            //Order more if less than half full
-                            if(lab.store[lab.mineralType] < 1500){
-                                amt = Math.min(3000, 
-                                    (room.storage ? room.storage.store[part] : 0) + 
-                                    (room.terminal ? room.terminal.store[part] : 0)
-                                );
-                                if(amt)supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,amount:amt,priority:6})
-                            }
-                        }
-                    }
-                }
-                if(fief.labs.target && REACTION_INGREDIENTS[fief.labs.target]){
-                    log += '\n Target labs available'
-                    let ingredients = REACTION_INGREDIENTS[fief.labs.target];
-                    let labIDs = Object.keys(fief.labs.sourceLabs)
-                    let goodSource = 0;
-                    for(let i=0;i<2;i++){
-                        fief.labs.sourceLabs[labIDs[i]] = ingredients[i]
-                    }
-                    //If we're short on labs, add them
-                    if(!fief.labs.targetLabs || fief.labs.targetLabs.length+2 < CONTROLLER_STRUCTURES[STRUCTURE_LAB][room.controller.level] ){
-                        //console.log("ADDING LABS FOR",room.name)
-                        fief.labs.targetLabs = room.find(FIND_STRUCTURES).filter(s=>s.structureType == STRUCTURE_LAB && !Object.keys(fief.labs.sourceLabs).includes(s.id)).map(s=>s.id)
+                //Function to ensure a lab is prepared to boost or run
+                const prepareLab = (labID, resourceType, priority = 8) => {
+                    const lab = Game.getObjectById(labID);
+                    if(!lab) return false;
+                    
+                    //If wrong mineral, remove it
+                    if (lab.mineralType && lab.mineralType !== resourceType) {
+                        supplyDemand.addRequest(room, {
+                            type: 'pickup',
+                            targetID: labID,
+                            resourceType: lab.mineralType,
+                            amount: lab.store[lab.mineralType],
+                            priority
+                        });
+                        return false;
                     }
                     
-                    for(let [labID,part] of Object.entries(fief.labs.sourceLabs)){
-                        
-                        let lab = Game.getObjectById(labID)
-                        //If the wrong mineral is in the lab, remove it
-                        if(lab.mineralType && lab.mineralType != part){
-                            
-                            let t = supplyDemand.addRequest(room,{type:'pickup',targetID:labID,resourceType:lab.mineralType,amount:lab.store[lab.mineralType],priority:8})
-                            log+=`\n${lab.id} has wrong mineral ${lab.mineralType}, pickup request ${t}`
+                    //If no mineral or needs more, order some
+                    if(!lab.mineralType || lab.store[lab.mineralType] < 1500) {
+                        const amount = Math.min(3000, getStoredResources(resourceType));
+                        if (amount) {
+                            supplyDemand.addRequest(room, {
+                                type: 'dropoff',
+                                targetID: labID,
+                                resourceType,
+                                amount,
+                                priority
+                            });
                         }
-                        //If no mineral is in the lab, order some
-                        else if(!lab.mineralType){
-                            let amt = Math.min(3000, 
-                                (room.storage ? room.storage.store[part] : 0) + 
-                                (room.terminal ? room.terminal.store[part] : 0));
-                            if(amt){
-                                let t = supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
-                                    amount:amt
-                                ,priority:8})
-                                log+=`\n${lab.id} has no mineral, dropoff request ${t}`
-                            }
+                    }
+                    
+                    //Lab is ready if it has the correct mineral
+                    return lab.mineralType === resourceType;
+                };
 
+                //Handle boost labs
+                const boostLabIDs = Object.keys(fief.labs.boostLabs);
+                boostLabIDs.forEach(labID => {
+                    prepareLab(labID, fief.labs.boostLabs[labID]);
+                });
+                //Handle reaction labs
+                if(fief.labs.sourceLabs && fief.labs.target && REACTION_INGREDIENTS[fief.labs.target]){
+                    const ingredients = REACTION_INGREDIENTS[fief.labs.target];
+                    const sourceLabIDs = Object.keys(fief.labs.sourceLabs);
+                    const occupiedLabIDs = Object.keys(fief.labs.boostLabs || {});
+
+                    //Update source labs with correct ingredients
+                    for (let i = 0; i < Math.min(2, sourceLabIDs.length); i++) {
+                        fief.labs.sourceLabs[sourceLabIDs[i]] = ingredients[i];
+                    }
+                    
+                    //Find target labs if needed
+                    if (!fief.labs.targetLabs || 
+                        fief.labs.targetLabs.length + 2 < CONTROLLER_STRUCTURES[STRUCTURE_LAB][room.controller.level]) {
+                        fief.labs.targetLabs = room.find(FIND_STRUCTURES)
+                            .filter(s => s.structureType === STRUCTURE_LAB && 
+                                !sourceLabIDs.includes(s.id))
+                            .map(s => s.id);
+                    }
+                    //Manage source labs
+                    let readySources = 0;
+                    for(const labID of sourceLabIDs){
+                        if(occupiedLabIDs.includes(labID)){
+                            continue;
                         }
-                        //If the right mineral is in the lab, mark the source as good
-                        else if(lab.mineralType == part){
-                            goodSource++;
-                            //Order more if less than half full
-                            if(lab.store[lab.mineralType] < 1500){
-                                let amt = Math.min(3000, 
-                                    (room.storage ? room.storage.store[part] : 0) + 
-                                    (room.terminal ? room.terminal.store[part] : 0));
-                                if(amt){
-                                    let t = supplyDemand.addRequest(room,{type:'dropoff',targetID:labID,resourceType:part,
-                                        amount:amt
-                                    ,priority:8})
-                                    log+=`\n${lab.id} is low on mineral ${part}, dropoff request ${t}`
+                        else if(prepareLab(labID, fief.labs.sourceLabs[labID])) {
+                            readySources++;
+                        }
+                    };
+                    
+                    
+                    
+                    for (const targetID of fief.labs.targetLabs) {
+                        const target = Game.getObjectById(targetID);
+                        if (!target) continue;
+                        
+                        //Skip if lab is used for boosting
+                        if (occupiedLabIDs.includes(targetID)) continue;
+                        
+                        //Empty lab if needed
+                        if (target.mineralType && 
+                            (target.store[target.mineralType] > 2500 || target.mineralType !== fief.labs.target)) {
+                            supplyDemand.addRequest(room, {
+                                type: 'pickup',
+                                targetID,
+                                resourceType: target.mineralType,
+                                amount: target.store[target.mineralType],
+                                priority: 6
+                            });
+                        }
+                        
+                        //Run reaction if possible
+                        if (readySources === 2 && !target.cooldown) {
+                            const sources = sourceLabIDs.map(id => Game.getObjectById(id));
+                            target.runReaction(sources[0], sources[1]);
+                        }
+                    }
+                } 
+                //Empty target labs if no active reactions
+                else if (fief.labs.targetLabs) {
+                    const occupiedLabIDs = Object.keys(fief.labs.boostLabs || {});
+                    
+                    for (const targetID of fief.labs.targetLabs) {
+                        const target = Game.getObjectById(targetID);
+                        if (!target || occupiedLabIDs.includes(targetID) || !target.mineralType) continue;
+                        
+                        supplyDemand.addRequest(room, {
+                            type: 'pickup',
+                            targetID,
+                            resourceType: target.mineralType,
+                            amount: target.store[target.mineralType],
+                            priority: 8
+                        });
+                    }
+                }
+
+                function selectLabTarget() {
+                    //First check if we need any tier 1 resources
+                    for(const [compound, ingredients] of Object.entries(REACTION_INGREDIENTS)) {
+                        //Skip if not tier 1
+                        if(getResourceTier(compound) !== 1) continue;
+                        
+                        const currentAmount = getKingdomResources(compound);
+                        if(currentAmount < TIER1_MIN_AMOUNT) {
+                            //Check if we have the ingredients
+                            if(getKingdomResources(ingredients[0]) > 0 && getKingdomResources(ingredients[1]) > 0) {
+                                return compound;
+                            }
+                        }
+                    }
+                    
+                    //If all tier 1 resources are at minimum, check if we have enough surplus to make tier 2
+                    let allTier1AtSurplus = true;
+                    for(const compound in REACTION_INGREDIENTS) {
+                        if(getResourceTier(compound) === 1) {
+                            if(getKingdomResources(compound) < TIER1_MIN_AMOUNT + TIER1_SURPLUS) {
+                                allTier1AtSurplus = false;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    //If we have surplus of tier 1, look for tier 2 needs
+                    if(allTier1AtSurplus) {
+                        for(const [compound, ingredients] of Object.entries(REACTION_INGREDIENTS)) {
+                            if(getResourceTier(compound) !== 2) continue;
+                            
+                            const currentAmount = getKingdomResources(compound);
+                            if(currentAmount < TIER2_MIN_AMOUNT) {
+                                //Check if we have the ingredients
+                                if(getKingdomResources(ingredients[0]) > 0 && getKingdomResources(ingredients[1]) > 0) {
+                                    return compound;
                                 }
                             }
-                            
-                        }
-                    }
-                    for(let targetID of fief.labs.targetLabs){
-                        let target = Game.getObjectById(targetID);
-                        let occupied = Object.keys(fief.labs.boostLabs) || [];
-                        if(!occupied.includes(targetID) && target.mineralType && (target.store[target.mineralType] > 2500 || target.mineralType != fief.labs.target)){
-                            
-                            let t = supplyDemand.addRequest(room,{type:'pickup',targetID:targetID,resourceType:target.mineralType,amount:target.store[target.mineralType],priority:8})
-                            log+=`\n${target.id} needs pickup for mineral ${target.mineralType}, pickup request ${t}`
-                        }
-                        if(!!target.cooldown) continue;
-                        if(goodSource == 2){
-                            log += '\n Two good sources'
-                            let sources = labIDs.map(id => Game.getObjectById(id))
-                            target.runReaction(sources[0],sources[1])
-    
                         }
                         
-                    }
-
-                    //console.log(log)
-                }
-                else{
-                    for(let targetID of fief.labs.targetLabs){
-                        let target = Game.getObjectById(targetID);
-                        let occupied = Object.keys(fief.labs.boostLabs) || [];
-                        if(!occupied.includes(targetID) && target.mineralType){
-                            let t = supplyDemand.addRequest(room,{type:'pickup',targetID:targetID,resourceType:target.mineralType,amount:target.store[target.mineralType],priority:8})
-                            log+=`\n${target.id} needs emptied of mineral ${target.mineralType}, pickup request ${t}`
+                        //If all tier 2 resources are at minimum, check if we have enough surplus to make tier 3
+                        let allTier2AtSurplus = true;
+                        for(const compound in REACTION_INGREDIENTS) {
+                            if(getResourceTier(compound) === 2) {
+                                if(getKingdomResources(compound) < TIER2_MIN_AMOUNT + TIER2_SURPLUS) {
+                                    allTier2AtSurplus = false;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        //If we have surplus of tier 2, look for tier 3 needs
+                        if(allTier2AtSurplus) {
+                            for(const [compound, ingredients] of Object.entries(REACTION_INGREDIENTS)) {
+                                if(getResourceTier(compound) !== 3) continue;
+                                
+                                const currentAmount = getKingdomResources(compound);
+                                if(currentAmount < TIER3_MIN_AMOUNT) {
+                                    //Check if we have the ingredients
+                                    if(getKingdomResources(ingredients[0]) > 0 && getKingdomResources(ingredients[1]) > 0) {
+                                        return compound;
+                                    }
+                                }
+                            }
                         }
                     }
+                    
+                    //If we got here, no pressing needs - could return a default target or null
+                    return null;
                 }
             }
+                
 
             if(room.terminal){
                 //Maintain terminal levels as needed. Default energy amount set if the import manager hasn't assigned anything
@@ -1017,64 +1099,6 @@ const fiefManager = {
                         }
                     }
                 }
-            }
-
-
-            
-            //Periodic RCL5+ Check
-            if(false && Game.time % 70 == 0){
-            //Labs check -- SEASONAL, REMOVE AND REPLACE WITH REAL LOGIC
-            let goLabs = false;
-            if(fief.labTargets){
-                Object.values(fief.labTargets).forEach(each =>{
-                    if(room.storage.store[each]>5 || room.terminal.store[each]>5){
-                        goLabs = true;
-                    }
-                })
-            }
-            if(fief.labOutput && goLabs){
-                //Run reactions
-                fief.labOutput.forEach(lab =>{
-                    if(Game.getObjectById(lab).cooldown == 0){
-                        let inputLabs = Object.keys(fief.labTargets);
-                        let x = Game.getObjectById(lab).runReaction(Game.getObjectById(inputLabs[0]),Game.getObjectById(inputLabs[1]));
-                    }
-                })
-                //Spawn alchemist
-                if(!Game.creeps[fief.alchemist] && !spawnQueue[fief.alchemist]){
-                    let newName ='Alchemist '+helper.getName()+' of House '+room.name;
-                    spawnQueue[newName] = {
-                        sev:10,body:[MOVE,MOVE,MOVE,MOVE,CARRY,CARRY,CARRY,CARRY],
-                        memory:{role:'diver',job:'labs',fief:room.name,preflight:false}}
-                    fief.alchemist = newName;
-                }
-            }
-            else if(fief.labTargets && !fief.labOutput){
-                let targets = Object.keys(fief.labTargets);
-                let outLabs = room.find(FIND_MY_STRUCTURES,{filter: (structure) => {
-                    return structure.structureType == STRUCTURE_LAB && !targets.includes(structure.id);
-                }}).map(lab => lab.id);
-                fief.labOutput = outLabs;
-            }
-
-
-                //Linked harvester spots should destroy their cans
-                fiefSources.forEach(source =>{
-                    let thisSource = fief.sources[source]
-                    //If we have both a link and can registered
-                    if(thisSource.link && thisSource.can){
-                        //Double check they actually both exist. If link exists, see if can is there. If so, destroy. Otherwise just remove the assignment.
-                        if(Game.getObjectById(thisSource.link)){
-                            if(Game.getObjectById(thisSource.can)){
-                                Game.getObjectById(thisSource.can).destroy();
-                                delete thisSource.can
-                            }
-                            else{
-                                delete thisSource.can
-                            }
-                        }
-                    }
-                })
             }
             
 
@@ -1234,7 +1258,7 @@ const fiefManager = {
         if(fiefCreeps && fiefCreeps.length) totalCreeps = fiefCreeps.length;
         return {
             roomLevel:roomLevel,
-            wares: totalWares(room),
+            wares: totalWares(room,fief),
             totalCreeps: totalCreeps,
             fiefCreeps: fiefCreeps,
             hostileCreeps: roomBaddies,
@@ -1278,9 +1302,8 @@ function plantCSite(){
 
 }
 
-function totalWares(room) {
+function totalWares(room,fief) {
     let totalResources = {};
-
     // Sum resources in storage
     if (room.storage) {
         for (const resourceType in room.storage.store) {
@@ -1306,6 +1329,16 @@ function totalWares(room) {
     if(!totalResources[mineral.mineralType]){
         totalResources[mineral.mineralType] = 0;
         heap.kingdomStatus.wares[mineral.mineralType] = 0;
+    }
+    if(fief.labs){
+        let labIDs = Object.keys(fief.labs.sourceLabs);
+        labIDs.push(...fief.labs.targetLabs)
+        let labs = labIDs.map(id => Game.getObjectById(id));
+        for(let lab of labs){
+            if(lab.mineralType){
+                totalResources[lab.mineralType] = (totalResources[lab.mineralType] || 0) + lab.store[lab.mineralType];
+            }
+        }
     }
     return totalResources;
 }
@@ -1410,6 +1443,27 @@ function getDomainRooms(fief) {
     Memory.kingdom.fiefs[fief].domain = validRooms;
     chronicle.log(`${fief} -  Domain mapped. ${validRooms.length} rooms located.`,'fiefManager',3);
     return validRooms;
+}
+
+function getBoostTier(resource){
+    if(!resource) return 0;
+    
+    //Tier 1 compounds
+    if(resource.length === 2 || resource === 'ZK' || resource === 'UL') {
+        return 1;
+    }
+    
+    //Tier 2 compounds
+    if(resource.length === 4) {
+        return 2;
+    }
+    
+    //Tier 3 compounds
+    if(resource.length === 5) {
+        return 3;
+    }
+    
+    return 0; //Unknown or other resources
 }
 
 function getControllerSpots(room, fief) {
@@ -1601,41 +1655,3 @@ function getControllerSpots(room, fief) {
 
     return controllerSpots;
 }
-
-    /*let range = 3;
-    //Check if already calculated
-    if(Memory.kingdom.fiefs[fief].domain) return Memory.kingdom.fiefs[fief].domain;
-
-    //Otherwise, calculate them, then save and return
-    const match = fief.match(/([EW])(\d+)([NS])(\d+)/);
-    const horizDir = match[1];
-    const horizNum = parseInt(match[2], 10);
-    const vertDir = match[3];
-    const vertNum = parseInt(match[4], 10);
-
-    const rooms = [];
-
-    for (let dx = -range; dx <= range; dx++) {
-        for (let dy = -range; dy <= range; dy++) {
-
-            const newHorizNum = horizNum + dx;
-            const newVertNum = vertNum + dy;
-
-            let newHorizDir = horizDir;
-            let effectiveHorizNum = newHorizNum;
-            if (newHorizNum < 0) {
-                newHorizDir = horizDir === 'E' ? 'W' : 'E';
-                effectiveHorizNum = Math.abs(newHorizNum) - 1;
-            }
-
-            let newVertDir = vertDir;
-            let effectiveVertNum = newVertNum;
-            if (newVertNum < 0) {
-                newVertDir = vertDir === 'N' ? 'S' : 'N';
-                effectiveVertNum = Math.abs(newVertNum) - 1;
-            }
-
-            const newRoomName = `${newHorizDir}${effectiveHorizNum}${newVertDir}${effectiveVertNum}`;
-            rooms.push(newRoomName);
-        }
-    }*/

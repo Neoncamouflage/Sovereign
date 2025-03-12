@@ -1,10 +1,10 @@
 const helper = require('functions.helper');
-
+const registry = require('registry');
+const chronicle = require('./chronicle');
 // --States--
 //Forming - Form up creeps after spawning, convoying, or being broken
 //Idle    - Waiting for direction
 //Convoy  - Train formed to travel. p4>p3>p2>p1
-//Rotate  - Swap creep positions
 //Attack  - Target creeps
 //Siege   - Target room
 const POSITIONS = {
@@ -16,27 +16,21 @@ const POSITIONS = {
 let letters = ['𒉌','𒅗','𒍟','𒋲','𒋞','𒋘','𒉼','𒉽','𒉛','𒉃','𒈰','𒈞','𒈓','𒈔','𒈖','𒇸','𒆕','𒅐','𒅒','𒅅',
     '𒂡','𒁹','𒀸','𒀹','𒀺','𒀀','𒀃','𒋀','𒋦','𒋨','𒋧'];
 const SAYREF = {
-    forming:['𒋘','𒈓'],
-    idle:['𒅒','𒈔'],
-    convoy:['𒋞','𒈞','𒉛'],
-    attack:['𒉌',,'𒁹','𒀸','𒀹','𒀺',],
-    ranged:['𒋦','𒍟','𒋲'],
-    melee:['𒉽'],
-    demo:['𒁹'],
-    flee: ['𒇸',,'𒅗'],
-    cantFlee:['𒋧'],
-    siege:['𒂡','𒅅']
+    default:['𒅒','𒈔','𒅄','𒍟','𒋲'],
+    convoy:['𒋞','𒈞'],
+    attack:['𒋧','𒋦','𒋨']
 }
 function Quad(details={}){
     this.name = helper.getWarName();
+    this.lastRange = 99;
     this.p1 = details.p1;
     this.p2 = details.p2;
     this.p3 = details.p3;
     this.p4 = details.p4;
-    this.state = 'forming';
+    this.targetRoom = details.targetRoom;
+    this.state = 'startup';
     this.fief = details.fief || Object.keys(Memory.kingdom.fiefs)[0];
-    this.formPos = details.formPos || getFormPos(this);
-    heap.quads.push(this);
+    heap.quads[this.name] = this;
 }
 Quad.prototype.toString = function() {
     return `[quad ${this.name}]`;
@@ -44,19 +38,90 @@ Quad.prototype.toString = function() {
 
 //Assign creep to the quad. Used by kingdomManager when sorting creeps
 Quad.prototype.addCreep = function(creep) {
-    if(!Game.getObjectById(this.p1))this.p1 = creep.id;
+    let original = creep
+    if(!(creep instanceof Creep)) creep = Game.getObjectById(creep);
+    if(!creep){
+        chronicle.log(`Failed to add creep ${original}.`,this,1)
+    }
+    let current = [this.p1,this.p2,this.p3,this.p4]
+    if(current.includes(creep.id)){
+        return false;
+    }
+
+    if(!Game.getObjectById(this.p1)){this.p1 = creep.id;}
     else if(!Game.getObjectById(this.p2))this.p2 = creep.id;
     else if(!Game.getObjectById(this.p3))this.p3 = creep.id;
     else if(!Game.getObjectById(this.p4))this.p4 = creep.id;
     else{
         return false;
     }
+    creep.memory.quadReserved = this.name;
     return true;
 };
 
+Quad.prototype.release = function(){
+    delete heap.quads[this.name]
+}
+
 Quad.prototype.run = function() {
-    let creeps = {p1:Game.getObjectById(this.p1),p2:Game.getObjectById(this.p2),p3:Game.getObjectById(this.p3),p4:Game.getObjectById(this.p4)};
-    if(!creeps.p1 || creeps.p1.spawning)return;
+    //console.log(JSON.stringify(this))
+    let creeps = {p1:null,p2:null,p3:null,p4:null}
+    let liveCreeps = 0
+    for(let quadPos of Object.keys(creeps)){
+        let crp = this[quadPos] && Game.getObjectById(this[quadPos]);
+        if(!crp && this.state != 'startup'){
+            //Dead creep after startup means we've broken
+            this.release();
+            return;
+        }
+        else if(crp){
+            liveCreeps++;
+            creeps[quadPos] = crp;
+        }
+    }
+
+    //console.log("Live length",liveCreeps.length)
+    //If we have missing creeps and we're not in initial startup
+    /*if(liveCreeps.length < 4 && this.state != 'startup'){
+        for(let creep of liveCreeps){
+            creep.memory.role = 'skirmisher'
+        }
+        //Remove quad
+        delete heap.quads[this.name]
+        return;
+    }
+    //If less than 4 in startup, submit spawn request to fief
+    else if(liveCreeps.length < 4 && this.state == 'startup'){
+        let creepsNeeded = 4-liveCreeps.length;
+        //Pick up any creeps available
+        //console.log("Res length",heap.army.reserve.length)
+        for(let crp of heap.army.quads){
+            crp = Game.getObjectById(crp);
+            //console.log("Checking crp",crp.room.name == this.fief,['man-at-arms','skirmisher'].includes(crp.memory.role))
+            this.addCreep(crp);
+            heap.army.reserve = heap.army.reserve.filter(resID => resID != crp.id);
+            crp.memory.quadReserved = this.name;
+            chronicle.log(`Assigning ${crp.name} from reserves.`,this,3);
+            creepsNeeded--;
+            
+            if(creepsNeeded == 0)break;
+        }
+        if(Game.time % 3 == 0 && creepsNeeded){
+            chronicle.log(`Requesting ${creepsNeeded} creeps.`,this,3);
+            for(let i=0;i<creepsNeeded;i++){
+                registry.requestCreep({sev:60,memory:{role:'man-at-arms',fief:this.fief,status:'spawning',preflight:false,quadReserved:this.name}})
+            }
+        }
+
+    }
+    else */
+
+    if(liveCreeps == 4 && this.state == 'startup'){
+        chronicle.log(`Quad has all creeps, forming up.`,this,3);
+        this.state = 'forming'
+    }
+    else if(this.state == 'startup') return;
+    
     if(this.state == 'forming')formUp(this)
     //If fief is still forming then we wait
     if(this.state == 'forming')return;
@@ -74,15 +139,6 @@ Quad.prototype.run = function() {
 };
 
 function runAttack(quad,creeps,hostileCreeps,hostileStructs){
-    let facingRef = {
-        TOP: [TOP_LEFT,TOP,TOP_RIGHT],
-        BOTTOM: [BOTTOM_LEFT,BOTTOM,BOTTOM_RIGHT],
-        LEFT:[LEFT,BOTTOM_LEFT,TOP_LEFT],
-        RIGHT:[RIGHT,BOTTOM_RIGHT,TOP_RIGHT]
-    }
-    let rotateRef = {
-
-    }
     //If no tower map or moveCM for this room, get it
     if(!quad.roomData || !quad.roomData.towerMap || !quad.roomData.moveCM || !quad.roomData.roomName != creeps.p1.room.name){
         quad.roomData = {
@@ -91,16 +147,70 @@ function runAttack(quad,creeps,hostileCreeps,hostileStructs){
             moveCM:   getMoveCM(creeps.p1.room)
         }
     }
+    if(!hostileCreeps.length && !hostileStructs.length){
+        quad.state = 'idle'
+        return;
+    }
     let hostileStats = getCombatStats(hostileCreeps);
     let quadStats = getCombatStats(Object.values(creeps));
     let damageMap = getDamageMap(hostileCreeps,hostileStats, quad.roomData.towerMap);
     let peakIncomingDamage = Object.values(creeps).reduce((sum,creep) => sum+(damageMap.get(creep.pos.x,creep.pos.y)));
+    let keyStructs = hostileStructs.filter(str=>[STRUCTURE_TOWER,STRUCTURE_SPAWN,STRUCTURE_TERMINAL].includes(str.structureType))
+    let soldiers = hostileCreeps.filter(crp => helper.isSoldier(crp))
+    let flee = false;
     let totalRanged = 0;
     let totalHeal = 0;
     let totalAttack = 0;
     let totalDemo = 0;
-    let tactic;
-    let flee = false;
+    let closestRange = 99;
+    let primary;
+    let closestEnemy = {};
+    for(let each of Object.values(creeps)){
+        closestEnemy[each.id] = each.pos.findClosestByRange(hostileCreeps);
+        let foundRange = each.pos.getRangeTo(closestEnemy[each.id]);
+        if(closestRange < foundRange || !primary){
+            closestRange = foundRange;
+            primary = closestEnemy[each.id];
+        }
+    }
+    if(!primary && keyStructs.length){
+        for(let each of Object.values(creeps)){
+            closestEnemy[each.id] = each.pos.findClosestByRange(keyStructs);
+            let foundRange = each.pos.getRangeTo(closestEnemy[each.id]);
+            if(closestRange < foundRange || !primary){
+                closestRange = foundRange;
+                primary = closestEnemy[each.id];
+            }
+        }
+    }
+    else if(!primary && soldiers.length){
+        for(let each of Object.values(creeps)){
+            closestEnemy[each.id] = each.pos.findClosestByRange(soldiers);
+            let foundRange = each.pos.getRangeTo(closestEnemy[each.id]);
+            if(closestRange < foundRange || !primary){
+                closestRange = foundRange;
+                primary = closestEnemy[each.id];
+            }
+        }
+    }
+    else if(!primary && hostileStructs.length){
+        for(let each of Object.values(creeps)){
+            closestEnemy[each.id] = each.pos.findClosestByRange(hostileStructs);
+            let foundRange = each.pos.getRangeTo(closestEnemy[each.id]);
+            if(closestRange < foundRange || !primary){
+                closestRange = foundRange;
+                primary = closestEnemy[each.id];
+            }
+        }
+    }
+    //Find out if we're good to move closer. Range greater than 2, or greater than 1 if they aren't moving towards us
+    let goodMove = closestRange > 1 && (closestRange > 2 || quad.lastRange <= closestRange)
+    //Confirm we're still in good position
+    if(!(creeps.p1.pos.isNearTo(creeps.p2) && creeps.p1.pos.isNearTo(creeps.p3) && creeps.p1.pos.isNearTo(creeps.p4))){
+        goodMove = false;
+        formUp(quad);
+    }
+    quad.lastRange = quad.closestRange;
     //Figure out if we're using ranged or melee tactics
     for(let each of Object.values(quadStats)){
         totalRanged += each.rangedAttack;
@@ -110,7 +220,6 @@ function runAttack(quad,creeps,hostileCreeps,hostileStructs){
     }
     //Get potential heal for each hostile in range
     if(peakIncomingDamage > totalHeal) flee = true;
-
     if(flee){
         //BFS search for survivable damage
         let targetPos;
@@ -153,124 +262,142 @@ function runAttack(quad,creeps,hostileCreeps,hostileStructs){
             quad.subState = 'cantFlee'
         }
     }
-    //Rotate to face enemy creeps if we have melee
-    else if(hostileCreeps.length && totalAttack > 0){
-        quad.subState = 'melee'
-        let closest = creeps.p1.pos.findClosestByRange(hostileCreeps);
-        //Choose movement or/rotation
-        let enemyDirection = creeps.p1.pos.getDirectionTo(closest)
-        let newFace;
-        //Facing the wrong direction, rotate
-        if(!facingRef[quad.facing].includes(enemyDirection)){
-            //Find the first direction that will deal with the enemy direction and rotate to it.
-            for(let face of Object.keys(facingRef)){
-                let directions = facingRef[face];
-                if(directions.includes(enemyDirection)){
-                    newFace = face;
-                    break;
-                }
-            }
-            quadRotate(quad,creeps,newFace);
-        }
-        else{
-            quadMove(quad,creeps,hostileCreeps,closest.pos);
-        }
-    }
-    //Otherwise if we have hostile structures and we're a demo quad, rotate that way
-    else if(hostileStructs.length && totalDemo > 0){
-        quad.subState = 'demo'
-        let closest = creeps.p1.pos.findClosestByRange(hostileStructs);
-        //Choose movement or/rotation
-        let enemyDirection = creeps.p1.pos.getDirectionTo(closest)
-        let newFace;
-        //Facing the wrong direction, rotate
-        if(!facingRef[quad.facing].includes(enemyDirection)){
-            //Find the first direction that will deal with the enemy direction and rotate to it.
-            for(let face of Object.keys(facingRef)){
-                let directions = facingRef[face];
-                if(directions.includes(enemyDirection)){
-                    newFace = face;
-                    break;
-                }
-            }
-            quadRotate(quad,creeps,newFace);
-        }
-        else{
-            quadMove(quad,creeps,hostileCreeps,closest.pos);
-        }
-    }
-    else if(hostileCreeps.length){
-        quad.subState = 'ranged'
+
+    else if(hostileCreeps.length || hostileStructs.length){
         let squad = Object.values(creeps);
-        let closest = creeps.p1.pos.findClosestByRange(hostileCreeps);
-        console.log(quad,creeps,hostileCreeps,closest.pos)
-        quadMove(quad,creeps,hostileCreeps,closest.pos);
+        //console.log(quad,creeps,hostileCreeps,closest.pos)
 
-        let injured = squad.filter(crp => crp.hits < crp.hitsMax);
-        for(let each of squad){
-            if(injured.length) each.heal(randomChoice(injured));
-            else(each.heal(randomChoice(squad)));
-            let closest = each.pos.findClosestByRange(hostileCreeps);
-            if(each.pos.isNearTo(closest))each.rangedMassAttack();
-            else each.rangedAttack(closest);
+        //Every 4 ticks, recalculate where we should be
+        //if(trueGame.time % 4 == 0){
+        let newPositions = optimizePositions(creeps,hostileCreeps,hostileStructs,quadStats);
+        let needsShuffle = false;
+        //Get current positions in a format that matches new
+        let currentPositions = {};
+        for (let position in creeps) {
+            currentPositions[creeps[position].id] = position;
         }
-    }
+        for (let assignment of newPositions) {
+            let currentPosition = currentPositions[assignment.creepId];
+            if (currentPosition !== assignment.position) {
+                needsShuffle = true;
+                break;
+            }
+        }
+        if(needsShuffle){
+            console.log("Shuffling!",JSON.stringify(newPositions))
+            quad.formPos = creeps[p1].pos
+            shuffle(quad,newPositions)
+        }
+        else if(goodMove){
+            quadMove(quad,creeps,hostileCreeps,primary.pos);
+        }
+        //}
+        //else if(goodMove){
+            //quadMove(quad,creeps,hostileCreeps,primary.pos);
+        //}
+        let roomData = getScoutData(creeps.p1.room.name)
+        //Siege vs field combat
+        //Siege combat if we're in an enemy fief, prioritizing destroying their spawns
+        if(roomData && roomData.roomType == 'fief' && roomData.ownerType == 'enemy'){
+            let injured = squad.filter(crp => crp.hits < crp.hitsMax);
+            injured.sort((a,b) => a.hits - b.hits)
+            for(let each of squad){
+                let closest = closestEnemy[each.id];
+                if(each.pos.isNearTo(closest)){
+                    if(quadStats[each.id].attack>quadStats[each.id].rangedMassAttack){
+                        each.attack();
+                    }
+                    else{
+                        if(injured.length)each.heal(randomChoice(injured))
+                        else each.heal(randomChoice(squad));
+                        each.rangedMassAttack();
+                    }
+                }
+                else{
+                    each.rangedAttack(closest);
+                    if(injured.length)each.heal(randomChoice(injured))
+                    else each.heal(randomChoice(squad));
+                }
+            }
 
+        }
+        //Field combat if we're not
+        else{
+            let injured = squad.filter(crp => crp.hits < crp.hitsMax);
+            injured.sort((a,b) => a.hits - b.hits)
+            for(let each of squad){
+                let closest = closestEnemy[each.id];
+                if(each.pos.isNearTo(closest)){
+                    if(quadStats[each.id].attack>quadStats[each.id].rangedMassAttack){
+                        each.attack();
+                    }
+                    else{
+                        if(injured.length)each.heal(randomChoice(injured))
+                        else each.heal(randomChoice(squad));
+                        each.rangedMassAttack();
+                    }
+                }
+                else{
+                    each.rangedAttack(closest);
+                    if(injured.length)each.heal(randomChoice(injured))
+                    else each.heal(randomChoice(squad));
+                }
+            }
+        }
+
+
+    }
+    else if(!hostileCreeps.length && !hostileStructs.length){
+        quad.state = 'idle'
+    }
 
 }
 
 //Travel mode
 function runConvoy(quad,creeps,hostileCreeps,hostileStructs){
+    const LOOP_ORDER = ['p4', 'p3', 'p2'];
     const FOLLOWS = {
         'p4':'p3',
         'p3':'p2',
-        'p2':'p1',
-        'p1':'p1'
+        'p2':'p1'
     }
+    let goodCount = 0;
     let targetPos = new RoomPosition(25,25,quad.targetRoom);
-    //If P1 made it, form up
+    //If P1 made it to the target room, switch to formation
     if(creeps.p1.room.name == quad.targetRoom){
-        console.log("Convoy over, forming up")
+        //console.log("Convoy over, forming up")
         quad.state = 'forming';
         quad.formPos = getFormPos(quad)
         formUp(quad)
+        return;
     }
-    let tired = false;
-    for(let quadPos of Object.keys(creeps)){
-        let creep = creeps[quadPos];
-        if(creep.fatigue){
-            tired = true;
+    for(let quadPos of LOOP_ORDER){
+        //Get each creep and the one it follows
+        let creep = creeps[quadPos]
+        let following = creeps[FOLLOWS[quadPos]]
+        //Use move() if close enough as it costs less CPU
+       // console.log("Moving",quadPos)
+        if(creep.pos.getRangeTo(following) <= 1){
+            creep.move(following);
+        }
+        else{
+            creep.travelTo(following,{priority:1});
+        }
+        //If the next creep is further than 1 step away and isn't on a room edge, we break to catch up
+        if(creep.pos.getRangeTo(following) > 1 && (![0,49].includes(following.pos.x) && ![0,49].includes(following.pos.y))){
+            //console.log("Next creep too far")
             break;
         }
-    }
-    if(!tired){
-        for(let quadPos of Object.keys(FOLLOWS)){
-            let goodCount = 0;
-            let creep = creeps[quadPos]
-            let following = creeps[FOLLOWS[quadPos]]
-            //A creep is good to move if it's in range 1 of the one it's following, or the one it's following is on a room edge
-            if(creep.pos.getRangeTo(following) <= 1 || ([0,49].includes(following.pos.x) || [0,49].includes(following.pos.y)) || ([0,49].includes(creep.pos.x) || [0,49].includes(creep.pos.y)) ){//
-                if(quadPos == 'p1')creep.travelTo(targetPos,{range:25})
-                else{
-                    if(creep.pos.getRangeTo(following) == 1) creep.move(following)
-                    else creep.travelTo(following)
-                }
-            }
-            //Else we break, only the back of the chain will be good to move
-            else{
-                break;
-            }
-            //If all creeps are good, we move them all standard. Otherwise, each travels to the one ahead if not in range 1
-            if(false && goodCount == 4){
-                creeps.p1.travelTo(new RoomPosition(quad.targetPos.x,quad.targetPos.y,quad.targetRoom));
-                creeps.p2.goodMove ? creeps.p2.move(creeps.p1) : creeps.p2.travelTo(creeps.p1);
-                creeps.p3.goodMove ? creeps.p3.move(creeps.p2) : creeps.p3.travelTo(creeps.p2);
-                creeps.p4.goodMove ? creeps.p4.move(creeps.p3) : creeps.p4.travelTo(creeps.p3);
-            }
-
+        //If this creep is tired, we break because it won't be able to move
+        else if(creep.fatigue){
+            break;
         }
-        
-        
+        //If we didn't break, increase the count and move to the next creep
+        goodCount++;
+    }
+    //If we have 3 good creeps, that means the full chain is ready, and the lead creep can move as well
+    if(goodCount == 3){
+        creeps.p1.travelTo(targetPos,{range:25,priority:1})
     }
 }
 
@@ -286,14 +413,25 @@ function setAction(quad,creeps,hostileCreeps,hostileStructs){
         quad.state = 'convoy';
     }
 }
+function shuffle(quad,newPositions){
+    let origin = Game.getObjectById(quad.p1).pos
+    console.log("Origin position:",origin)
+    for(let newPos of Object.keys(newPositions)){
+        let creep = Game.getObjectById(newPositions[newPos]);
+        console.log("Moving creep to",newPos)
+        creep.move(origin.x+POSITIONS[newPos].x,origin.y+POSITIONS[newPos].y)
+    }
+}
 
 //Form up creeps based on quad structure
-function formUp(quad){
+function formUp(quad,shuffle){
     let creeps = {p1:Game.getObjectById(quad.p1),p2:Game.getObjectById(quad.p2),p3:Game.getObjectById(quad.p3),p4:Game.getObjectById(quad.p4)};
     let stillForming = false;
+    if(!quad.formPos)quad.formPos = getFormPos(quad);
+    //console.log("FORMPOS",JSON.stringify(quad.formPos))
     for(let quadPos of Object.keys(creeps)){
         let creep = creeps[quadPos];
-        console.log("Creep",creep,'position',quadPos,'forming up at',JSON.stringify(quad.formPos))
+        //console.log("Creep",creep,'position',quadPos,'forming up at',JSON.stringify(quad.formPos))
         if(!creep){
             stillForming = true;
             continue;
@@ -302,14 +440,15 @@ function formUp(quad){
         let targetY = quad.formPos.y+POSITIONS[quadPos].y
         if(!creep.pos.isEqualTo(targetX,targetY)){
             //If the position is default due to no vision, use range 25 or get a better spot if we now have vision
+            //console.log("FORMPOS2",targetX,targetY,JSON.stringify(quad.formPos))
             if(quad.formPos.noVis && Game.rooms[quad.formPos.roomName]){
-                console.log("FORMNOVIS",targetX,targetY,JSON.stringify(quad.formPos))
+                //console.log("FORMNOVIS",targetX,targetY,JSON.stringify(quad.formPos))
                 quad.formPos = getFormPos(quad);
-                creep.travelTo(new RoomPosition(targetX,targetY,quad.formPos.roomName));
+                creep.travelTo(new RoomPosition(targetX,targetY,quad.formPos.roomName),{priority:1});
             }
             else{
-                console.log("FORM",targetX,targetY,JSON.stringify(quad.formPos))
-                creep.travelTo(new RoomPosition(targetX,targetY,quad.formPos.roomName),{range:quad.formPos.noVis ? 25 : 0});
+                //console.log("FORM",targetX,targetY,JSON.stringify(quad.formPos))
+                creep.travelTo(new RoomPosition(targetX,targetY,quad.formPos.roomName),{priority:1,range:quad.formPos.noVis ? 25 : 0});
             }
             stillForming = true;
         }
@@ -319,19 +458,20 @@ function formUp(quad){
     
 }
 
-function getFormPos(details){
+function getFormPos(quad){
     //Formation room is the designated form room, or the fief, and finally need a good default option at some point
-    let formRoom = details.targetRoom || details.fief;
-    let formPosition;
+    let formRoom;
+    let formPosition = {};
     let distances;
     //If there's no creep1 to form up around, pick the middle;
-    if(!details.p1){
+    if(!quad.p1){
+        formRoom = quad.fief || quad.targetRoom;
         formPosition = {x:25,y:25,roomName:formRoom,noVis:true}
     }
     else{
-        let origin = details.p1;
-        if(!(origin instanceof Creep)) origin = Game.getObjectById(details.p1);
-        if(!origin) console.log("NOT A CREEP",origin,details.p1)
+        let origin = quad.p1;
+        if(!(origin instanceof Creep)) origin = Game.getObjectById(quad.p1);
+        if(!origin) console.log("NOT A CREEP",origin,quad.p1)
         formRoom = origin.room.name;    
         distances = findSpots();
 
@@ -367,7 +507,7 @@ function getFormPos(details){
             const { x, y, dist } = queue.shift();
 
             // Check if this cell meets the condition
-            if (distCM.get(x, y) >= minVal && ![0,1,48,49].includes(x) && ![0,1,48,49].includes(y)) {
+            if (distCM.get(x, y) >= minVal && x>1 && x<48 &&  y>1 && y<48) {
             return { x, y, dist };
             }
 
@@ -404,7 +544,12 @@ function getFormPos(details){
                 }
                 //If the form room is a fief, check the cost matrix so we don't form up on a road
                 if(isFief && checkCM){
-                    if(checkCM.get(x,y) == 1) distCM.set(x,y,255)
+                    if(checkCM.get(x,y) == 1){
+                        distCM.set(x,y,255)
+                        distCM.set(x-1,y,255)
+                        distCM.set(x,y-1,255)
+                        distCM.set(x-1,y-1,255)
+                    }
                 }
             }
         }
@@ -440,42 +585,28 @@ function getMoveCM(room){
     for(let y = 0; y < 50; y++) {
         for(let x = 0; x < 50; x++) {
             const tile = terrain.get(x, y);
-            if(tile == TERRAIN_MASK_WALL){
+            if(tile == TERRAIN_MASK_WALL || x==49 || y==49){                   //In progress
                 moveCM.set(x, y, 255);
                 if(x>0){moveCM.set(x-1, y, 255)}
                 if(y>0){moveCM.set(x, y-1, 255)}
                 if(x>0 && y>0){moveCM.set(x-1, y-1, 255)}
+            }
+            else if(tile == TERRAIN_MASK_SWAMP){
+                moveCM.set(x, y, 255);
+                if(x>0 && terrain.get(x-1, y) != TERRAIN_MASK_WALL){moveCM.set(x-1, y, 5)}
+                if(y>0 && terrain.get(x, y-1) != TERRAIN_MASK_WALL){moveCM.set(x, y-1, 5)}
+                if(x>0 && y>0 && terrain.get(x-1, y-1) != TERRAIN_MASK_WALL){moveCM.set(x-1, y-1, 5)}
+            }
+            else if(x == 49){
+                moveCM.set(x, y, 255);
+                if(y>0 && terrain.get(x-1, y) != TERRAIN_MASK_WALL){moveCM.set(x, y-1, 255)}
+                if(y>0 && terrain.get(x-1, y-1) != TERRAIN_MASK_WALL){moveCM.set(x-1, y-1, 255)}
             }
         }
     }
     Memory.test.testCM = moveCM.serialize()
     return moveCM;
     
-}
-
-//Prototype method for testing
-Quad.prototype.rotate = function(newFace){
-    let creeps = {p1:Game.getObjectById(this.p1),p2:Game.getObjectById(this.p2),p3:Game.getObjectById(this.p3),p4:Game.getObjectById(this.p4)};
-    quadRotate(this,creeps,newFace)
-}
-
-function quadRotate(quad,creeps,newFace){
-    let fatigued = Object.values(creeps).filter(c=>c.fatigue)
-    if(fatigued.length)return;
-    const directions = [TOP,RIGHT,BOTTOM,LEFT];
-    const spot = ['p1','p2','p3','p4'];
-    //Get indexes of our current and next positions
-    let current = directions.indexOf(quad.facing);
-    let next = directions.indexOf(newFace);
-    //Calculate how many rotations to get to the new position
-    let rotations = (next - current + directions.length) % directions.length;
-    //creeps is an object like this: {p1:[object Creep],p2:[object Creep],p3:[object Creep],p4:[object Creep]}
-    for(let quadPos of Object.keys(creeps)){
-        let newSpotIndex = (spot.indexOf(quadPos)+rotations) % directions.length
-        quad[spot[newSpotIndex]] = creeps[quadPos].id;
-    }
-    quad.facing = newFace;
-    formUp(quad)
 }
 
 function quadMove(quad,creeps,hostileCreeps,targetPos,range){
@@ -518,16 +649,117 @@ function quadMove(quad,creeps,hostileCreeps,targetPos,range){
     }
 }
 
+function optimizePositions(creeps, hostileCreeps, hostileStructs, scores) {  
+    const positions = ['p1', 'p2', 'p3', 'p4'];
+    const creepIds = Object.keys(creeps).map(pos => creeps[pos].id);
+    const scoreMatrix = {};
+    const positionTargets = {
+        p1:{1:{creeps:0,structs:0},2:{creeps:0,structs:0},3:{creeps:0,structs:0}},
+        p2:{1:{creeps:0,structs:0},2:{creeps:0,structs:0},3:{creeps:0,structs:0}},
+        p3:{1:{creeps:0,structs:0},2:{creeps:0,structs:0},3:{creeps:0,structs:0}},
+        p4:{1:{creeps:0,structs:0},2:{creeps:0,structs:0},3:{creeps:0,structs:0}},
+    }
+    //Get initial ranges to targets for each position
+    for(let quadPos of Object.keys(creeps)){
+        let creep = creeps[quadPos];
+        let targets = positionTargets[quadPos];
+        for(let each of hostileCreeps){
+            let range = creep.pos.getRangeTo(each);
+            if(range <= 3)targets[range].creeps++
+        }
+        for(let each of hostileStructs){
+            let range = creep.pos.getRangeTo(each);
+            if(range <= 3)targets[range].structs++
+        }
+    }
+
+    for (let creepId of creepIds) {
+        let damageScores = scores[creepId];
+        scoreMatrix[creepId] = {};
+        
+        for (let position of positions) {
+            let totalScore = 0;
+            let targets = positionTargets[position];
+            
+
+            if (damageScores.attack > 0) {
+                totalScore += damageScores.attack * Math.min(1,targets[1].creeps + targets[1].structs);
+            }
+            
+            if (damageScores.rangedAttack > 0) {
+                totalScore += damageScores.rangedAttack * Math.min(1,(
+                    targets[1].creeps + targets[1].structs +
+                    targets[2].creeps + targets[2].structs +
+                    targets[3].creeps + targets[3].structs
+                ));
+            }
+            
+            if (damageScores.rangedMassAttack > 0) {
+                totalScore += damageScores.rangedMassAttack * (
+                    (targets[1].creeps + targets[1].structs) * 10 +  //10 damage at range 1
+                    (targets[2].creeps + targets[2].structs) * 4 +   //4 damage at range 2
+                    (targets[3].creeps + targets[3].structs) * 1     //1 damage at range 3
+                );
+            }
+            
+            if (damageScores.heal > 0 || damageScores.rangedHeal > 0) {
+                //Allied creeps that need healing? Maybe use later
+            }
+            
+            if (damageScores.dismantle > 0) {
+                totalScore += Math.min(1,damageScores.dismantle * targets[1].structs);
+            }
+            
+            // Store the total score for this creep in this position
+            scoreMatrix[creepId][position] = totalScore;
+        }
+    }
+    
+    const QUAD_PERMUTATIONS = [
+        [0, 1, 2, 3], [0, 1, 3, 2], [0, 2, 1, 3], [0, 2, 3, 1], [0, 3, 1, 2], [0, 3, 2, 1],
+        [1, 0, 2, 3], [1, 0, 3, 2], [1, 2, 0, 3], [1, 2, 3, 0], [1, 3, 0, 2], [1, 3, 2, 0],
+        [2, 0, 1, 3], [2, 0, 3, 1], [2, 1, 0, 3], [2, 1, 3, 0], [2, 3, 0, 1], [2, 3, 1, 0],
+        [3, 0, 1, 2], [3, 0, 2, 1], [3, 1, 0, 2], [3, 1, 2, 0], [3, 2, 0, 1], [3, 2, 1, 0]
+      ];
+      
+      let bestScore = -Infinity;
+      let bestArrangement = null;
+      
+      for (const perm of QUAD_PERMUTATIONS) {
+        let totalScore = 0;
+        for (let i = 0; i < 4; i++) {
+          const creepId = creepIds[perm[i]];
+          totalScore += scoreMatrix[creepId][positions[i]];
+        }
+        
+        if (totalScore > bestScore) {
+          bestScore = totalScore;
+          bestArrangement = perm.map(idx => ({
+            creepId: creepIds[idx],
+            position: positions[idx]
+          }));
+        }
+    }
+    //console.log("BEST",JSON.stringify(bestArrangement))
+    return bestArrangement;
+}
+
 function quadSay(quad,creeps){
     //Complex states get substates instead
-    let state = ['attacking'].includes(quad.state) ? quad.subState : quad.state;
+    let state = quad.state  //['attacking'].includes(quad.state) ? quad.subState : quad.state;
     for(let creep of Object.values(creeps)){
         if(!creep) continue;
         if(randomInt(29) == 13){
             heap.say = Game.time;
-            let symbolPick = randomChoice(SAYREF[state])
+            let symbolPick;
+            if(SAYREF[state]){
+                symbolPick = randomChoice(SAYREF[state]);
+            }
+            else{
+                symbolPick = randomChoice(SAYREF['default'])
+            }
             //let words = helper.getSay({numLetters:1,symbol:`${}`});
-            creep.say(randomChoice(symbolPick))
+            creep.say(symbolPick)
         }
     }
 }

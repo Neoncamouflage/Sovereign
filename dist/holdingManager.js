@@ -99,6 +99,11 @@ var holdingManager = {
                 //console.log("Holding",each,"failed skipcheck.",Memory.kingdom.fiefs[holding.homeFief].combinedSpawnUse,"spawn use is more than",skipCheck)
                 continue;
             }
+            //If we have limited storage room, cut remotes
+            let storeSpace = Game.rooms[holding.homeFief].storage && Game.rooms[holding.homeFief].storage.store.getFreeCapacity()
+            let termSpace =  Game.rooms[holding.homeFief].terminal && Game.rooms[holding.homeFief].terminal.store.getFreeCapacity()
+            let totalSpace = storeSpace+termSpace
+            if(totalSpace < 100000) continue;
             kingdomCreeps[holding.homeFief] = kingdomCreeps[holding.homeFief] || []
             let fCreeps = kingdomCreeps[holding.homeFief];
             if(holding.homeFief && Game.rooms[holding.homeFief]) this.runHolding(each,fCreeps,fiefMap[holding.homeFief]);
@@ -561,8 +566,8 @@ var holdingManager = {
         }
 
         //With Vision
-        if(remote){
-            if(Game.time % 125 == 0 && Game.rooms[fief].storage && Game.rooms[fief].storage.my && Game.rooms[fief].storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000 && Object.keys(Game.constructionSites).length < 40){
+        if(remote){//Game.rooms[fief].storage && Game.rooms[fief].storage.my && Game.rooms[fief].storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000
+            if(Game.time % 125 == 0 && Game.rooms[holding.homeFief].controller.level >=3 && Object.keys(Game.constructionSites).length < 40){
                 //console.log("Construction check in ",holdingName)
                 //Set remote build based on whether we have active sites
                 if(spawnPad == 1){

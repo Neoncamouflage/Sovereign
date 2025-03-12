@@ -13,8 +13,8 @@ var roleGuard = {
             let words = helper.getSay({symbol:`${symbolPick[Game.time%symbolPick.length]}`});
             creep.say(words.join(''))
         }
-        if(!creep.memory.respawnMe && creep.ticksToLive < (creep.memory.targetRoom == 'E30S20' ? 600 : 300) && !creep.memory.respawned){
-            spawnCreep('guard','20m18a2h','E28S8',70,{targetRoom:creep.memory.targetRoom,fief:'E28S8',stay:true});
+        if(false && !creep.memory.respawnMe && creep.ticksToLive < (creep.memory.targetRoom == 'E30S20' ? 600 : 300) && !creep.memory.respawned){
+            spawnCreep('guard','20m18a2h','E28S8',70,{targetRoom:'E30S10',respawnMe:true,respawnTicks:340,fief:'E28S8',stay:true});
             creep.memory.respawned = true;
         }
         if(!creep.memory.targetRoom) creep.memory.targetRoom = 'E30S10';
@@ -36,7 +36,12 @@ var roleGuard = {
         }
         else if(target && !isFriend(target)) {
             if(![0,49].includes(target.pos.x) && ![0,49].includes(target.pos.y) && !target.pos.isEqualTo(targetPos))creep.travelTo(target);
-            creep.attack(target)
+            if(target.getActiveBodyparts(RANGED_ATTACK) == 0){
+                if(randomInt(7) == 2 && creep.hits > creep.hitsMax/2)creep.attack(target)
+            }
+            else{
+                creep.heal(creep)
+            }
         }
         else if(creep.room.name != creep.memory.targetRoom || creep.pos.getRangeTo(targetPos) > 1){
             creep.travelTo(targetPos,{range:1})

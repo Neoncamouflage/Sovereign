@@ -229,7 +229,6 @@ const supplyDemand = {
             for (let task of Object.values(shippingTasks)) {
                 for (let crpID of Object.keys(task.assignedHaulers)) {
                     if (!Game.getObjectById(crpID) || !Game.getObjectById(crpID).memory.task || Game.getObjectById(crpID).memory.task != task.taskID) {
-
                         delete task.assignedHaulers[crpID];
                     }
                 }
@@ -417,31 +416,34 @@ const supplyDemand = {
             if(link && link.store[RESOURCE_ENERGY] > 0 && link.pos.isNearTo(haul.pos) && haul.store.getFreeCapacity()>0){
                 haul.withdraw(link,RESOURCE_ENERGY)
             }
-            for(let lk of remoteLinks){
-                let lkg = Game.getObjectById(lk)
-                let lRange = haul.pos.getRangeTo(lkg);
-                if(lkg && (lkg.store[RESOURCE_ENERGY] < 800 || (link && link.store[RESOURCE_ENERGY] < 800 && lkg.cooldown < 5)) && !lkg.reserved && lRange < 5){
-
-                    if(lRange == 1 && !lkg.cooldown){
-                        haul.transfer(lkg,RESOURCE_ENERGY)
-                        if(haul.store[RESOURCE_ENERGY] > lkg.store.getFreeCapacity()){
+            if(remoteLinks){
+                for(let lk of remoteLinks){
+                    let lkg = Game.getObjectById(lk)
+                    let lRange = haul.pos.getRangeTo(lkg);
+                    if(lkg && (lkg.store[RESOURCE_ENERGY] < 800 || (link && link.store[RESOURCE_ENERGY] < 800 && lkg.cooldown < 5)) && !lkg.reserved && lRange < 5){
+    
+                        if(lRange == 1 && !lkg.cooldown){
+                            haul.transfer(lkg,RESOURCE_ENERGY)
+                            if(haul.store[RESOURCE_ENERGY] > lkg.store.getFreeCapacity()){
+                                haul.state = "waiting"
+                                lkg.reserved = true;
+                            }
+                            else{
+                                haul.state = "idle"
+                                lkg.reserved = true;
+                                if(haul.memory.task)getTaskByID(haul.memory.fief,haul.memory.task).unassign(haul,'RemoteLink dump')
+    
+                            }
+                        }
+                        else{
+                            if(lRange > 1) haul.travelTo(lkg);
                             haul.state = "waiting"
                             lkg.reserved = true;
                         }
-                        else{
-                            haul.state = "idle"
-                            lkg.reserved = true;
-                            if(haul.memory.task)getTaskByID(haul.memory.fief,haul.memory.task).unassign(haul,'RemoteLink dump')
-
-                        }
-                    }
-                    else{
-                        if(lRange > 1) haul.travelTo(lkg);
-                        haul.state = "waiting"
-                        lkg.reserved = true;
                     }
                 }
             }
+
 
             let tFlag = false;
             for(let fill of fills){

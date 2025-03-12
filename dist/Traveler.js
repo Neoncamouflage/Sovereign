@@ -46,7 +46,8 @@ class Traveler {
                     x: creep.pos.x,
                     y: creep.pos.y,
                     roomName: creep.room.name,
-                    direction:direction
+                    direction:direction,
+                    priority:options.priority||0
                 }
                 // -- Likely want to move this to the end, where we resolve intents. No need to call move() if we don't know
                 // -- Make sure nothing we use depends on the move() return value, since that won't be returned
@@ -156,7 +157,8 @@ class Traveler {
             x: creep.pos.x,
             y: creep.pos.y,
             roomName: creep.room.name,
-            direction:nextDirection
+            direction:nextDirection,
+            priority:options.priority||0
         }
         return creep.move(nextDirection);
     }
@@ -699,7 +701,7 @@ class Traveler {
             }
             //If there is, and it isn't also intending to move, request to swap - Also a check for permanently stationed creeps like fast fillers
             if(blocker){
-                if(!this.movementIntents[blocker.name] && blocker.fatigue == 0 && blocker.memory && !blocker.memory.stay){
+                if(!this.movementIntents[blocker.name] && blocker.fatigue == 0 && blocker.memory && (!blocker.memory.stay || creepData.priority)){
                     //Attempt swapping to the current creep
                     let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
                 }

@@ -84,6 +84,39 @@ if (!Creep.prototype._upgradeController) {
 //#region New Prototypes
 
 //#endregion
+
+//Gets applicable boosts for body
+Creep.prototype.getBoostOptions = function(){
+    const boosts = {};
+    //Object containing unboosted bodypart counts
+    const bodyParts = {};
+    for (const part of this.body) {
+        
+        if (!bodyParts[part.type]) {
+            bodyParts[part.type] = 0;
+        }
+        if (!part.boost) {
+            bodyParts[part.type]++;
+        }
+    }
+
+    for (const partType of Object.keys(bodyParts)) {
+        //Get all boosts for the part type
+        if (BOOSTS[partType]) {
+            const count = bodyParts[partType];
+            
+            //Add possible boosts to object
+            for (const boostType in BOOSTS[partType]) {
+                if (!boosts[boostType]) {
+                    boosts[boostType] = 0;
+                }
+                boosts[boostType] += count;
+            }
+        }
+    }
+    return boosts;
+}
+
 //Respawns creep
 Creep.prototype.respawn = function({ticks=250,sev=50} = {}) {
     if(Game.time % 3 == 0 && this.ticksToLive <= ticks && !this.memory.respawn) {
@@ -149,7 +182,7 @@ Creep.prototype.emptyStore = function () {
     else if(this.room.name != this.memory.fief){
         this.travelTo(new RoomPosition(25,25,this.memory.fief))
     }
-    else if([RESOURCE_MIST,RESOURCE_METAL,RESOURCE_BIOMASS,RESOURCE_SILICON].includes(Object.keys(this.store)[0])){
+    else if([RESOURCE_MIST,RESOURCE_METAL,RESOURCE_BIOMASS,RESOURCE_SILICON,...MINERALS].includes(Object.keys(this.store)[0])){
         if(terminal && terminal.store.getFreeCapacity() > 0){
             if(this.pos.getRangeTo(terminal) > 1){
                 this.travelTo(terminal);

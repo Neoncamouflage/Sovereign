@@ -6,6 +6,47 @@ var roleUpgrader = {
     run: function(creep) {
         let fief = Memory.kingdom.fiefs[creep.memory.fief]
         let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType != STRUCTURE_RAMPART)
+        if(creep.room.controller.level >= 6 && !creep.memory.boosted){
+            let body = creep.body.filter(part => part.type == WORK && !part.boost);
+            //console.log("REAVER",body)
+            if(!body.length){
+                creep.memory.boosted = true;
+                return;
+            }
+            let labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'XGH2O' && lab.store['XGH2O'] >30);
+            if(!labs.length){
+                labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'GH2O' && lab.store['GH2O'] >30);      
+            }
+            if(!labs.length){
+                //labs = creep.room.find(FIND_MY_STRUCTURES).filter(lab => lab.structureType == STRUCTURE_LAB && lab.mineralType && lab.mineralType == 'LH' && lab.store['LH'] >30);      
+            }
+            if(!labs.length) creep.memory.boosted = 'nolabs';
+            else{
+                let tLab = creep.pos.findClosestByRange(labs);
+                if(creep.pos.getRangeTo(tLab) == 1){
+                    tLab.boostCreep(creep);
+                    body = body.filter(part => part.type == WORK && !part.boost);
+                    if(!body.length){
+                        creep.memory.boosted = true;
+                    }
+                    else{
+                        labs = labs.filter(lab => lab.id != tLab.id);
+                        tLab = creep.pos.findClosestByRange(labs);
+                        if(tLab && creep.pos.getRangeTo(tLab) > 1){
+                            creep.travelTo(tLab);
+                            return;
+                        }
+                        
+                    }
+                }
+                else{
+                    creep.travelTo(tLab)
+                    return; 
+                }
+                
+            }
+
+        }
         if(creep.memory.status == 'spawning' && !creep.spawning) creep.memory.status = 'travel'
         if(creep.memory.job == 'starterUpgrader' && cSites.length && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2){
             let target;
