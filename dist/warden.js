@@ -98,3 +98,6 @@ function checkRamps(room,rampPlan){
 }
 
 module.exports = Warden;
+checkRamps = profiler.registerFN(checkRamps, 'checkRamps');
+getDefenseMap = profiler.registerFN(getDefenseMap, 'getDefenseMap');
+profiler.registerClass(Warden, 'Warden');

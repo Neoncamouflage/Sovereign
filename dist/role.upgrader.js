@@ -6,6 +6,7 @@ var roleUpgrader = {
     run: function(creep) {
         let fief = Memory.kingdom.fiefs[creep.memory.fief]
         let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType != STRUCTURE_RAMPART)
+        //Pick up boosts if available, this applies to all upgraders
         if(creep.room.controller.level >= 6 && !creep.memory.boosted){
             let body = creep.body.filter(part => part.type == WORK && !part.boost);
             //console.log("REAVER",body)
@@ -47,8 +48,8 @@ var roleUpgrader = {
             }
 
         }
-        if(creep.memory.status == 'spawning' && !creep.spawning) creep.memory.status = 'travel'
-        if(creep.memory.job == 'starterUpgrader' && cSites.length && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2){
+        //Instructions for initial room upgraders to help build when needed
+        if(creep.memory.job == 'starterUpgrader' && cSites.length && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2 && !creep.memory.scribeFirst){
             let target;
             if(creep.memory.target) target = Game.getObjectById(creep.memory.target)
             if(!target){
@@ -71,41 +72,49 @@ var roleUpgrader = {
             }
             return;
         }
-
+        else if(creep.memory.job == 'starterUpgrader' && !cSites.length && creep.ticksToLive >= 1450) creep.memory.scribeFirst = true
+        //If the creep is spawned in a different room, or somehow accidentally leaves, it should go to its home fief before doing anything else from this point
+        if(creep.room.name != creep.memory.fief){
+            let targetPos;
+            if(Game.rooms[creep.memory.fief]) targetPos = Game.rooms.controller
+            else targetPos = new RoomPosition(25,25,creep.memory.fief);
+            return;
+        }
         let range = creep.pos.getRangeTo(creep.room.controller);
         let chain;
         let chainOrigin;
         let prevOrigin = creep.memory.prevOrigin;
-        if(fief.controllerSpots.storage && creep.room.storage && creep.room.storage.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 50000)){
-            chain = 'storage'
-            chainOrigin = creep.room.storage
-            creep.memory.prevOrigin = 'storage'
-        }
-        else if(fief.controllerSpots.terminal && creep.room.terminal && creep.room.terminal.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 50000)){
+        //Prefer to chain energy from terminal, else storage, else use the base chaining system.
+        if(fief.controllerSpots.terminal && creep.room.terminal && creep.room.terminal.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 50000)){
             chain = 'terminal'
             chainOrigin = creep.room.terminal
             creep.memory.prevOrigin = 'terminal'
         }
-        else{
+        
+        else if(fief.controllerSpots.storage && creep.room.storage && creep.room.storage.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 50000)){
+            chain = 'storage'
+            chainOrigin = creep.room.storage
+            creep.memory.prevOrigin = 'storage'
+        }
+        else {
             chain = 'base'
         }
+        //Always take the upgrade action if we can.
         if(range <=3 && creep.store[RESOURCE_ENERGY] > 0){
             creep.upgradeController(creep.room.controller);
         }
-        //console.log(creep,"Origin:",chain)
+        //A valid chain origin means we execute the logic to pull from that source and chain the energy out to other creeps
         if(chainOrigin){
-            creep.memory.stay = true
+            creep.memory.stay = true //Tells otehr creeps not to push us out of this spot
+            //Always look if we can move closer, and do so if there's a spot.
             if(creep.pos.getRangeTo(chainOrigin) !=1 || creep.pos.getRangeTo(creep.room.controller) > 3){
-                //console.log('Outta range!')
                 rangeLoop:
                 for(i=1;i<4;i++){
                     for(let spot of fief.controllerSpots[chain][i]){
                         //No creep means move to that and break the loop
-                        //console.log("Checking spot",JSON.stringify(spot))
                         let buddy = creep.room.lookForAt(LOOK_CREEPS,spot.x,spot.y)[0]
                         if(!buddy){
                             creep.travelTo(new RoomPosition(spot.x,spot.y,creep.room.name));
-                            //console.log(creep,"going to spot",JSON.stringify(spot))
                             break rangeLoop;
                         }
                         else if(buddy.id == creep.id)break rangeLoop;
@@ -113,7 +122,8 @@ var roleUpgrader = {
                 }
             }
         }
-        else if(fief.controllerSpots.base && range != 1){ //&& (creep.status == 'travel' || Game.time % 10 == 0)
+        //No origin means we stack up in front of the controller and chain energy inward as it's delivered to those on the outside
+        else if(fief.controllerSpots.base && range != 1){
             creep.memory.stay = true;
             rangeLoop:
             for(i=1;i<Math.min(4,range);i++){
@@ -127,9 +137,8 @@ var roleUpgrader = {
             }
         }
 
-
+        //Base logic for chaining energy inward
         if(!chainOrigin && creep.store.getUsedCapacity() < creep.store.getCapacity()){
-            //console.log(creep,'t1')
             let gotTransfer = false;
             let isPacked = false;
             if(range < 3){
@@ -141,19 +150,6 @@ var roleUpgrader = {
                         if(buddy.my && buddy.pos.isNearTo(creep) &&  (buddy.memory.role == 'upgrader' || buddy.memory.status == 'upgrading') && !buddy.transferring){
                             buddy.transfer(creep,RESOURCE_ENERGY);
                             buddy.transferring = true;
-                            let dirRef = {
-                                1: '⬆️',
-                                2: '↗️',
-                                3: '➡️',
-                                4: '↘️',
-                                5: '⬇️',
-                                6: '↙️',
-                                7: '⬅️',
-                                8: '↖️',
-                            }
-                            //let words = helper.getSay({symbol:`${dirRef[buddy.pos.getDirectionTo(creep)]}`});
-                            //buddy.say(words.join(''))
-                            //console.log(buddy.name,buddy.pos,"TRANSFERRING TO",creep.name,creep.pos)
                             gotTransfer = true;
                             break;
                         }
@@ -166,6 +162,7 @@ var roleUpgrader = {
             if(gotTransfer) return;
             if(!isPacked && creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
         }
+        //Storage/terminal logic for chaining energy outward
         else {
             let gotTransfer = false;
             let storeRange = creep.pos.getRangeTo(chainOrigin)
@@ -185,19 +182,6 @@ var roleUpgrader = {
                         if(buddy.my && buddy.pos.isNearTo(creep) &&  (buddy.memory.role == 'upgrader' || buddy.memory.status == 'upgrading') && !buddy.transferring){
                             buddy.transfer(creep,RESOURCE_ENERGY);
                             buddy.transferring = true;
-                            let dirRef = {
-                                1: '⬆️',
-                                2: '↗️',
-                                3: '➡️',
-                                4: '↘️',
-                                5: '⬇️',
-                                6: '↙️',
-                                7: '⬅️',
-                                8: '↖️',
-                            }
-                            //let words = helper.getSay({symbol:`${dirRef[buddy.pos.getDirectionTo(creep)]}`});
-                            //buddy.say(words.join(''))
-                            //console.log(buddy.name,buddy.pos,"TRANSFERRING TO",creep.name,creep.pos)
                             gotTransfer = true;
                             break;
                         }

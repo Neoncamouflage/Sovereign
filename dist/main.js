@@ -5,6 +5,7 @@ require('chronicle');
 require('prototypes.room');
 require('prototypes.creep');
 require('prototypes.spawn');
+require('prototypes.Game');
 require('prototypes.roomposition');
 require('prototypes.military');
 require('functions.global');
@@ -18,39 +19,46 @@ const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner')
 const architect = require('architect')
 let lastMemory;
-//profiler.enable();
+profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 RawMemory.setActiveSegments([0,1,2,5,6,7,8,9,90])
 Memory.lastReset = 0
 Memory.globalReset = Game.time;
-global.heap = {
-    fiefs:{},
-    alarms:{},
-    stock:{},
-    kingdomStatus:{
-        fiefs:{},
-        activeHoldings:[],
-        totalHoldings:0,
-        lastReset:Game.time,
-        wares:{}
-    },
-    granary:{},
-    registry:{},
-    missions:{},
-    army:{
-        troupes:[],
-        lances:{},
-        reserve:[]
-    },
-    duos:[],
-    quads:[],
-    funnelTarget:null
-}
+
 module.exports.loop = function () {
+    if(['shard1','shard2','shard3'].includes(Game.shard.name)){
+        return;
+    }
     //return;
     profiler.wrap(function() {
     if (hasRespawned() || !Memory.kingdom){
         spinup.run();
+    }
+    if(!global.heap){
+        global.heap = {
+            roomStructs:{},
+            fiefs:{},
+            alarms:{},
+            stock:{},
+            kingdomStatus:{
+                fiefs:{},
+                activeHoldings:[],
+                totalHoldings:0,
+                lastReset:Game.time,
+                wares:{}
+            },
+            granary:{},
+            registry:{},
+            missions:{},
+            army:{
+                troupes:[],
+                lances:{},
+                reserve:[]
+            },
+            duos:[],
+            quads:[],
+            funnelTarget:null
+        }
     }
     //Reset movement
     Traveler.resetMovementIntents();
@@ -460,6 +468,7 @@ function recursiveMemoryProfile(memoryObject, sizes, currentDepth) {
         }
     }
 }
+
 
 function profileMemory(root = Memory, depth = 1) {
     const sizes = {};

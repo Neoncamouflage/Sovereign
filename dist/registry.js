@@ -49,7 +49,7 @@ const registry = {
         for(let each of spawnQueue){
             qprint+=`${each.memory.role} - ${each.sev}\n`
         }
-        //console.log(qprint)
+        console.log(qprint)
         //Sort the queue's keys based on severity
         spawnQueue.sort((a, b) => b.sev - a.sev);
         
@@ -83,7 +83,7 @@ const registry = {
             
             
             //Check if spawn has energy
-            //console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
+            console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(energyRemaining >= cost){
                 let nextSpawn = freeSpawns.shift();
                 //If spawning, continue
@@ -170,9 +170,6 @@ const registry = {
     }
 }
         
-
-module.exports = registry;
-profiler.registerObject(registry, 'registry');
 //#region Creep Body Switch
 function getBody(energyRemaining,role,room,job='default',fiefCreeps,plan){
     let parts;
@@ -451,7 +448,11 @@ function getSkirmisher(energyRemaining,room,plan){
 //General hauler - Porter
 function getHauler(energyRemaining,room,fiefCreeps){
     let parts = room.storage && room.storage.my ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
-    let partsCap = global.cpuAverage > 90 || room.controller.level == 8 ? 36 : parts.length == 2 ? 28 : 21;
+    let partsCap = (()=>{
+        if(global.cpuAverage > 90) return 36;
+        if(parts.length == 2 || room.controller.level == 8) return 20;
+        return 18;
+    })()
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let maxCap = global.cpuAverage > 90 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable/2)
     let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? maxCap : energyRemaining;
@@ -607,3 +608,8 @@ function getBuilder(energyRemaining,room,fiefCreeps){
     return [newBod,totalCost]
 }
 //#endregion
+
+
+module.exports = registry;
+profiler.registerObject(registry, 'registry');
+getBody = profiler.registerFN(getBody, 'getBody');

@@ -11,7 +11,6 @@ return - Return and recycle/sucide into FF can
 
 //Make Creep.say() public by default
 Creep.prototype._say = Creep.prototype.say;
-
 Creep.prototype.say = function(message, public = true) {
     return this._say(message, public);
 };
@@ -21,7 +20,7 @@ Creep.prototype.say = function(message, public = true) {
 
 if (!Creep.prototype._harvest) {
 
-    //Store the original method
+    //Store the original method so we can call it after our custom logic
     Creep.prototype._harvest = Creep.prototype.harvest;
 
     //Create our new function
@@ -30,7 +29,7 @@ if (!Creep.prototype._harvest) {
         let tEnergy = 0;
         if(target && target.energy) tEnergy= Math.min(target.energy,(this.getActiveBodyparts(WORK) * HARVEST_POWER))
 
-        //Call the actual harvest
+        //Call the real harvest
         let harvCall = this._harvest(target);
 
         //If success, register the income
@@ -57,6 +56,63 @@ if (!Creep.prototype._build) {
         if(buildCall == OK) granary.adjustIncome(this,tEnergy)
 
         return buildCall
+    }
+}
+
+if (!Creep.prototype._transfer) {
+    //Store the original method
+    Creep.prototype._transfer = Creep.prototype.transfer;
+
+    //Create our new function
+    Creep.prototype.transfer = function(target, resourceType, amount) {
+        //If we're refilling energy then update the maps
+        if (target instanceof Structure && [STRUCTURE_EXTENSION, STRUCTURE_SPAWN].includes(target.structureType)) {
+            const fiefData = heap.fiefs[this.room.name];
+            
+            if (fiefData && fiefData.extensionMap && fiefData.extensionMap.has(target.id)) {
+                const updateSpots = fiefData.extensionMap.get(target.id);
+                
+                //Loop through all spots and remove the extensions from their maps
+                for (let spot of updateSpots) {
+                    // Check both maps and handle consistently
+                    const maps = [
+                        { name: 'sourceRefills', map: fiefData.sourceRefills },
+                        { name: 'otherRefills', map: fiefData.otherRefills }
+                    ];
+                    
+                    for (const mapData of maps) {
+                        if (mapData.map && mapData.map.has(spot)) {
+                            const extensions = mapData.map.get(spot);
+                            extensions.delete(target.id);
+                            
+                            //If the set is now empty just delete the key from the map entirely
+                            if (extensions.size === 0) {
+                                mapData.map.delete(spot);
+                                
+                                //Clear creep memory if this was the target spot
+                                if (this.memory.refillTarget === spot) {
+                                    delete this.memory.refillTarget;
+                                }
+                            } else {
+                                mapData.map.set(spot, extensions);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        //Call the actual transfer
+        let transferCall;
+        //Only include amount if it was included originally
+        if (amount !== undefined) {
+            transferCall = this._transfer(target, resourceType, amount);
+        } else {
+            transferCall = this._transfer(target, resourceType);
+        }
+        
+        //Return the response
+        return transferCall;
     }
 }
 

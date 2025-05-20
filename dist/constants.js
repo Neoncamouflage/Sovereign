@@ -5,10 +5,11 @@ const constants = {
     SEGMENT_ROOM_PLANS:1,       //All finished room plans
     SEGMENT_ROOM_DEFENSE:2,     //Tower maps and similar defensive CM data
     SEGMENT_PLAN_GENERATIONS:5, //New room planner generation history
+    SEGMENT_MARKET_INFO:6,      //Market data for outside
     SEGMENT_LOGGING_ERR:7,      //Error results from functions and modules - Logs that indicate a critical/fatal error
     SEGMENT_LOGGING_WARN:8,     //Warning results from functions and modules - Logs that indicate unwanted or unexpected results
     SEGMENT_LOGGING_INFO:9,     //Miscellaneous logging results
-
+    
     //Room Definitions
     ROOM_STANDARD :      'room',
     ROOM_SOURCE_KEEPER : 'source_keeper',
@@ -27,6 +28,19 @@ const constants = {
     //Lab Constants
     REACTION_INGREDIENTS : {},
     MINERALS:[...Object.keys(MINERAL_MIN_AMOUNT),'G'],
+    //Minimum amounts to maintain for each boost tier
+    TIER1_MIN_AMOUNT: 5000,
+    TIER2_MIN_AMOUNT: 3000,
+    TIER3_MIN_AMOUNT: 2000,
+    
+    //Surplus amount to maintain before moving to next tier
+    TIER1_SURPLUS: 2000,
+    TIER2_SURPLUS: 1000,
+    
+    //Priority for different types of lab operations
+    PRIORITY_BOOST: 7,
+    PRIORITY_REACTION: 6,
+    PRIORITY_CLEANUP: 8,
 
     //Room Plan Constants
     STRUCTURE_KEYS : {

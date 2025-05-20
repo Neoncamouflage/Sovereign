@@ -48,6 +48,7 @@ const kingdomManager = {
         heap.kingdomStatus.fiefs = {};
         global.heap.army.reserve = kingdomCreeps.reserve || [];
         //console.log("Kingdom creeps!")
+
         //console.log(JSON.stringify(kingdomCreeps))
         // - Actions - 
         //Run scouting
@@ -57,39 +58,15 @@ const kingdomManager = {
         holdingManager.run(kingdomCreeps);
         marshal.run(kingdomCreeps);
         //Every 300 ticks, check for a funnel target
-        if(false && Game.time % 300 == 0){
+
+        if(Game.time % 300 == 0){
             let funnels = Object.values(Game.rooms).filter(rm => rm.controller && rm.controller.my && rm.controller.level == 6)
             let fRoom = funnels.reduce((maxRoom, room) => {
                 return (maxRoom === null || room.controller.progress > maxRoom.controller.progress) ? room : maxRoom;
             }, null);
             global.heap.funnelTarget = fRoom == null ? null : fRoom.name;
         }
-        //---- SWC HARASSER CHECK ----
-        /**
-         * E19S9
-         * ['E12S10','E11S10','E10S10','E9S10','E8S10','E7S10','E6S10','E5S10','E4S10','E3S10','E2S10','E1S10','E0S10','E0S9','E0S8','E0S7','E0S6','E0S5']
-         * ['E12S10','E11S10','E10S9','E10S8','E10S7','E10S6','E10S5','E10S4','E10S3','E10S2','E10S1','E10S0','E11S0','E12S0','E13S0']
-         * E28S8
-         * ['E0S0','E0S1','E0S2','E0S3','E0S4','E0S5','E0S6','E0S7','E0S8','E0S9','E0S10']
-         * ['E0S0','E1S0','E2S0','E3S0','E4S0','E5S0','E6S0','E7S0','E8S0','E9S0','E10S0','E11S0','E12S0']
-         */
-        if(Game.time % 3900 == 3200){
-            //spawnCreep('bait','5m1w','E19S9',65,{job:'tag',tagRooms:['E12S10','E11S10','E10S10','E9S10','E8S10','E7S10','E6S10','E5S10','E4S10','E3S10','E2S10','E1S10','E0S10','E0S9','E0S8','E0S7','E0S6','E0S5']})
-        }
-        if(Game.time % 3900 == 0){
-            //spawnCreep('bait','5m1w','E19S9',65,{job:'tag',tagRooms:['E12S10','E11S10','E10S9','E10S8','E10S7','E10S6','E10S5','E10S4','E10S3','E10S2','E10S1','E10S0','E11S0','E12S0','E13S0']})
-        }
-        if(Game.time % 3900 == 1700){
-            //spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E0S1','E0S2','E0S3','E0S4','E0S5','E0S6','E0S7','E0S8','E0S9','E0S10']})
-        }
-        if(Game.time % 3900 == 2500){
-            //spawnCreep('bait','5m1w','E28S8',65,{job:'tag',portal:true,tagRooms:['E0S0','E1S0','E2S0','E3S0','E4S0','E5S0','E6S0','E7S0','E8S0','E9S0','E10S0','E11S0','E12S0']})
-        }
-        if(Game.time % 920 == 0){
-            //if(!kingdomCreeps['E28S8'].diver || kingdomCreeps['E28S8'].diver.length < 2){
-                //spawnCreep('duo','8r8m','E28S8',68,{job:'attacker',harass:true,changeType:'ranged',type:'portal'});spawnCreep('duo','5h5m','E28S8',68,{job:'healer'})
-            //}
-        }
+
         for(const fief in Memory.kingdom.fiefs){
             supplyDemand.prepShipping(fief);
             kingdomCreeps[fief] = kingdomCreeps[fief] || [];
@@ -119,6 +96,7 @@ const kingdomManager = {
         }*/
 
         runRoles(Game.creeps);
+
         //simpleAllies.endRun();
         //Run the painter for visuals if we have the cpu - Use painter estimate if we've recorded one, otherwise default 2
         if(Game.cpu.limit-Game.cpu.getUsed() > Memory.painterEstimate ? Memory.painterEstimate : 2){
@@ -131,7 +109,6 @@ const kingdomManager = {
         if(Memory.visuals.drawStatus){
             statusManager.run();
         }
-        
     }
 }
 

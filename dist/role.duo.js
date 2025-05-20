@@ -205,10 +205,6 @@ var roleDuo = {
                 }
             }
             if(creep.memory.type == 'melee'){
-                if(creep.pos.isEqualTo(new RoomPosition(5,5,'E0S0'))){
-                    creep.move(BOTTOM)
-                    return;
-                }
                 let targets = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp))
                 let priorityTargets = targets.filter(crp => helper.isSoldier(crp))
                 let roomTargets = targets.filter(crp => ![0,49].includes(crp.pos.x) && ![0,49].includes(crp.pos.y))

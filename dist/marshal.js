@@ -179,3 +179,4 @@ function generateMissionID(){
 global.addMission = marshal.addMission;
 module.exports = marshal;
 profiler.registerObject(marshal, 'marshal');
+profiler.registerClass(Mission, 'Mission');

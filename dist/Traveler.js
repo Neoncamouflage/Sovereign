@@ -79,6 +79,7 @@ class Traveler {
         if (state.stuckCount >= options.stuckValue && Math.random() > .5) {
             options.ignoreCreeps = false;
             options.freshMatrix = true;
+            options.wasStuck = true;
             delete travelData.path;
         }
         // TODO:handle case where creep moved by some other function, but destination is still the same
@@ -297,7 +298,7 @@ class Traveler {
                         Traveler.addCreepsToMatrix(room, matrix);
                     }
                 }
-                else if (options.ignoreCreeps || roomName !== originRoomName) {
+                else if (describeRoom(room.name) != ROOM_SOURCE_KEEPER && (options.ignoreCreeps || roomName !== originRoomName)) {
                     matrix = this.getStructureMatrix(room, options.freshMatrix);
                 }
                 else {
@@ -535,7 +536,17 @@ class Traveler {
      */
     static addCreepsToMatrix(room, matrix) {
         room.find(FIND_CREEPS).forEach((creep) => {
-            matrix.set(creep.pos.x, creep.pos.y, 0xff)
+            if(creep.owner.username == 'Source Keeper'){
+                for(let x=-3;x<=3;x++){
+                    for(let y=-3;y<=3;y++){
+                        matrix.set(creep.pos.x+x, creep.pos.y+y, 0xff)
+                    }
+                }
+            }
+            else{
+                matrix.set(creep.pos.x, creep.pos.y, 0xff)
+            }
+            
         });
         return matrix;
     }
@@ -588,7 +599,7 @@ class Traveler {
         }
         //For each mission creep, check if there's an adjacent empty on the way with same size carry. If so, swap missions and cargo.
         for(let each of missionHaulers){
-            if(!global.heap.relays || global.heap.relays.includes(each.id)) continue;
+            if(!global.heap.relays || global.heap.relays.includes(each.id) || !each.memory._trav || !each.memory._trav.path) continue;
             let path = each.memory._trav.path.substr(1);
             let nextDirection = parseInt(path[0], 10);
             let selfStore = each.store.getUsedCapacity();

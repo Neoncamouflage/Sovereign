@@ -6,7 +6,7 @@ const intelManager = {
     toScout:[],
     run: function(scouts,fiefs){
         let scoutData = global.heap.scoutData;
-        const SCOUT_MAX = 3;
+        const SCOUT_MAX = 7;
         if(!scouts || !fiefs) return;
         //If we have no scouts, order one
         if(Game.time % 3 == 0){
@@ -85,6 +85,7 @@ const intelManager = {
             }
             else if(creep.memory.exitTarget){
                 let mem = creep.memory.exitTarget;
+                //console.log("MEM",JSON.stringify(mem))
                 let exitPos = new RoomPosition(mem.x,mem.y,mem.roomName);
                 if(creep.pos.isEqualTo(exitPos)){
                     if(creep.memory.stuckCheck){
@@ -114,7 +115,9 @@ const intelManager = {
         });
 
         function getExit(creep){
+            let portals = creep.room.find(FIND_STRUCTURES).filter(str=>str.structureType == STRUCTURE_PORTAL);
             let exits = Game.map.describeExits(creep.room.name);
+            let portalRooms = [];
             //console.log("Viable exits:",JSON.stringify(exits))
             let exitRooms = Object.values(exits).filter(roomName => {
                 //If another scout is already doing it, deny
@@ -134,6 +137,10 @@ const intelManager = {
                 let good = (roomData.roomType != 'fief' || roomData.ownerType != 'enemy') || Game.time - roomData.lastRecord > 20000;
                 return good;
             });
+            if(portals.length){
+                portalRooms = portals.map(prt => prt.destination.roomName)
+                exitRooms.push(...portalRooms)
+            }
             //console.log("Viable exits after trimming:",exitRooms)
 
             delete creep.memory.exitTarget
@@ -199,17 +206,28 @@ const intelManager = {
                 
             }
             //Now we path to the exit
-            let exitDir = Object.keys(exits).find(key => exits[key] === roomPick);
-            //console.log("EXIT DIR IS",exitDir,typeof(exitDir))
-            let exitOpts = creep.room.find(Number(exitDir))
-            //console.log("EXIT OPTS ARE",exitOpts)
-            let exitPos = creep.pos.findClosestByRange(exitOpts);
-            //console.log("EXIT POS IS",exitPos)
-
-            if (exitPos) {
-                creep.memory.exitTarget = {x:exitPos.x,y:exitPos.y,roomName:exitPos.roomName,target:roomPick}
-                creep.travelTo(exitPos);
+            //Check if it's a portal
+            let exitPos;
+            if(portalRooms.includes(roomPick)){
+                let portalPick = portals.filter(prt => prt.destination.roomName == roomPick)[0].pos;
+                creep.memory.exitTarget = {x:portalPick.x,y:portalPick.y,roomName:portalPick.roomName,target:roomPick}
+                creep.travelTo(portalPick)
             }
+            else{
+                let exitDir = Object.keys(exits).find(key => exits[key] === roomPick);
+                //console.log("EXIT DIR IS",exitDir,typeof(exitDir))
+                let exitOpts = creep.room.find(Number(exitDir))
+                //console.log("EXIT OPTS ARE",exitOpts)
+                exitPos = creep.pos.findClosestByRange(exitOpts);
+                //console.log("EXIT POS IS",exitPos)
+                if (exitPos) {
+                    creep.memory.exitTarget = {x:exitPos.x,y:exitPos.y,roomName:exitPos.roomName,target:roomPick}
+                    creep.travelTo(exitPos);
+                }
+            }
+
+
+
         }
     }
 }

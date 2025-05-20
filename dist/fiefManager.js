@@ -14,27 +14,22 @@ const fiefManager = {
             return (room.storage ? room.storage.store[resourceType] || 0 : 0) + 
                    (room.terminal ? room.terminal.store[resourceType] || 0 : 0);
         };
+
         heap.fiefs[room.name].buildQueue = heap.fiefs[room.name].buildQueue || {}
         let buildQueue = heap.fiefs[room.name].buildQueue
-        //console.log("BUILDQUEUE",JSON.stringify(buildQueue).length,JSON.stringify(buildQueue))
-        let cpuStart = Game.cpu.getUsed();
         let warden;
         //Set Reference
-        let restartFlag = false;
-        let sourceHold;
         let fief = Memory.kingdom.fiefs[room.name];
         let factory = room.find(FIND_MY_STRUCTURES,{filter:{structureType:STRUCTURE_FACTORY}})[0];
-        let fiefHeap = heap[room.name];
-        if(!fief.builders)fief.builders = [];
         if(!fief.rclTimes){
             fief.rclTimes = {tick:Game.time};
         }
-        if(!fief.upgraders)fief.upgraders = [];
         //Check if mineral data set up at all. If not, create and assign mineral
         if(!fief.mineral) fief.mineral = {id:room.find(FIND_MINERALS)[0].id}
+        if(!fief.refills){
+        }
         // - Assignments -
         let roomBaddies = room.find(FIND_HOSTILE_CREEPS).filter(crp => !isFriend(crp));
-        let spawnQueue = fief.spawnQueue;
         let roomLevel = room.controller.level;
         if(!fief.rclTimes[roomLevel]){
             fief.rclTimes[roomLevel] = Game.time - fief.rclTimes.tick;
@@ -168,7 +163,7 @@ const fiefManager = {
 
         }
 
-        if(!fief.controllerSpots || !fief.controllerSpots.base || (fief.controllerSpots && fief.controllerSpots.rcl < room.controller.level)){
+        if(!fief.controllerSpots || !fief.controllerSpots.base || (fief.controllerSpots && fief.controllerSpots.rcl < room.controller.level && ((roomLevel == 6 && room.terminal) || (roomLevel == 4 && room.storage) || ![4,6].includes(roomLevel)))){
             if(fief.roomPlan){
                 let results = getControllerSpots(room,fief);
                 fief.controllerSpots = results
@@ -199,7 +194,7 @@ const fiefManager = {
                     if(each == STRUCTURE_SPAWN && firstSpawn.name == 'Origin Keep'){
                         //console.log("Origin spawn detected")
                         //If we're replacing the origin spawn but aren't ready with energy, skip it
-                        if(room.controller.level < 5 || !room.storage || !room.storage.my || !room.storage.store[RESOURCE_ENERGY] > 30000){
+                        if(room.controller.level <= 5 || !room.storage || !room.storage.my || !room.storage.store[RESOURCE_ENERGY] > 30000){
                             //console.log("Storage pass")
                             continue;
                         }
@@ -296,8 +291,8 @@ const fiefManager = {
                         let floor = room.lookForAt(LOOK_TERRAIN,coordinate.x,coordinate.y);
                         if((!spot.length || !spot.some(element => element.structureType == building)) && (floor != 'wall' || building == STRUCTURE_EXTRACTOR) && !spotSite.length){
                             
-                            //If it's a road we don't build until room level 3
-                            if(building != STRUCTURE_ROAD || roomLevel >= 3){
+                            //If it's a road we don't build until room level 3, same for first room spawn and level 5
+                            if((building != STRUCTURE_ROAD || roomLevel >= 3) && (building != STRUCTURE_SPAWN || (roomLevel >= 5 || room.find(FIND_MY_SPAWNS)[0].name != 'Origin Keep'))){
                                 //let g =room.createConstructionSite(coordinate.x,coordinate.y,building)
                                 if(buildQueue[building]){
                                     buildQueue[building].push({x:coordinate.x,y:coordinate.y});
@@ -451,6 +446,12 @@ const fiefManager = {
         //#region Room Operation
         //#endregion
         //console.log("Spawn use:",combinedSpawnUse)
+
+        //Check every tick to see if we need to process extensions for refilling
+        if(room.energyAvailable < room.energyCapacityAvailable && fief.roomPlan) getRefillMaps(room,fief);
+        //else if(heap.fiefs[room.name].refillers) delete heap.fiefs[room.name].refillers;
+
+
         //Add any scouted domain rooms to holdings, longer standing fiefs have a longer wait
         if(Game.time % (150*room.controller.level) == 0){
             //Get scouted domain rooms, exclude SK for now
@@ -467,7 +468,7 @@ const fiefManager = {
                 //If scouted, add to holdings and mark scouted in the domain
                 dRoom.scouted = true;
                 if(!Memory.kingdom.holdings[dRoom.roomName] && dData.roomType != 'fief'){
-                    Memory.kingdom.holdings[dRoom.roomName] = {standby:true,homeFief:room.name};
+                    Memory.kingdom.holdings[dRoom.roomName] = {standby:false,homeFief:room.name};
                 }
             }
         }
@@ -487,8 +488,11 @@ const fiefManager = {
                 }
                 else{
                     //let ramps = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_RAMPART);
-                    for(let ramp of ramps){
-                        ramp.setPublic(false)
+                    if(fief.rampsOpen){
+                        for(let ramp of ramps){
+                            ramp.setPublic(false)
+                        }
+                        fief.rampsOpen = false;
                     }
                     warden = new Warden(room);
                     if(!heap.wardens) heap.wardens = {};
@@ -498,8 +502,11 @@ const fiefManager = {
             }
             else if(warden && warden.lastActive){
 
-                for(let ramp of ramps){
-                    ramp.setPublic(true)
+                if(!fief.rampsOpen){
+                    for(let ramp of ramps){
+                        ramp.setPublic(true)
+                    }
+                    fief.rampsOpen = true;
                 }
                 if(Game.time-warden.lastActive > 10){
                     chronicle.log(`${room.name} - Warden watch period expired. Room control returned.`,'fiefManager',3);
@@ -508,9 +515,13 @@ const fiefManager = {
                 
             }
             else{
-                for(let ramp of ramps){
-                    ramp.setPublic(true)
+                if(!fief.rampsOpen){
+                    for(let ramp of ramps){
+                        ramp.setPublic(true)
+                    }
+                    fief.rampsOpen = true;
                 }
+
             }
         }
         
@@ -621,7 +632,7 @@ const fiefManager = {
                 }
                 else{
                     //Chaining significantly reduces the upgraders required
-                    if(fief.chain){
+                    if(fief.controllerSpots && room.name != heap.funnelTarget && (fief.controllerSpots.storage || fief.controllerSpots.terminal)){
                         upgradersNeeded = Math.min(upMax,Math.ceil(totalEnergy/150000));
                     }
                     else{
@@ -659,7 +670,7 @@ const fiefManager = {
                 }              
 
                 //If we need a remote builder and there isn't one or it's dead, request one
-                if(fief.remoteBuild && room.storage.store['energy'] > 30000){
+                if(fief.remoteBuild){
                     let remo = fiefCreeps.builder || [];
                     //Check for remote builders that aren't part of the army
                     remo = remo.filter(crp => crp.memory.job == 'remoteBuilder' && !crp.memory.troupe)
@@ -669,14 +680,31 @@ const fiefManager = {
 
 
                 if(roomLevel >=6 && extractor){
-                    let mineral = Game.getObjectById(fief.mineral.id)
-                    if(!Memory.kingdom.mineralNeed) Memory.kingdom.mineralNeed = {};
-                    let mineralNeed = Memory.kingdom.mineralNeed[mineral.mineralType] || DEFAULT_MINERAL_NEED
-                    if(!mineral.ticksToRegeneration && room.storage.store.getFreeCapacity() > STORAGE_SPACE_FOR_MINERAL_HARVEST && heap.stock[mineral.mineralType] < mineralNeed){
-                        if(!fiefCreeps.harvester || !fiefCreeps.harvester.filter(crp => crp.memory.target == mineral.id).length){
-                            registry.requestCreep({sev:33,memory:{role:'harvester',job:'mineralHarvester',fief:room.name,target:mineral.id,status:'spawning',preflight:false}})
+                    if(fief.mineral.can){
+                        let mineral = Game.getObjectById(fief.mineral.id)
+                        if(!Memory.kingdom.mineralNeed) Memory.kingdom.mineralNeed = {};
+                        let mineralNeed = Memory.kingdom.mineralNeed[mineral.mineralType] || DEFAULT_MINERAL_NEED
+                        if(!mineral.ticksToRegeneration && room.storage.store.getFreeCapacity() > STORAGE_SPACE_FOR_MINERAL_HARVEST && (heap.stock[mineral.mineralType] < mineralNeed || mineral.mineralAmount < 10000)){
+                            if(!fiefCreeps.harvester || !fiefCreeps.harvester.filter(crp => crp.memory.target == mineral.id).length){
+                                registry.requestCreep({sev:33,memory:{role:'harvester',job:'mineralHarvester',fief:room.name,target:mineral.id,status:'spawning',preflight:false}})
+                            }
                         }
                     }
+                    else{
+                        if(fief.mineral.harvestSpot){
+                            let spot = room.lookForAt(LOOK_STRUCTURES,fief.mineral.harvestSpot.x,fief.mineral.harvestSpot.y).filter(str=> str.structureType == STRUCTURE_CONTAINER)[0];
+                            if(spot){
+                                fief.mineral.can = spot.id;
+                            }
+                            else{
+                                spot = room.lookForAt(LOOK_CONSTRUCTION_SITES,fief.mineral.harvestSpot.x,fief.mineral.harvestSpot.y).filter(str=> str.structureType == STRUCTURE_CONTAINER)[0];
+                                if(!spot){
+                                    room.createConstructionSite(fief.mineral.harvestSpot.x,fief.mineral.harvestSpot.y,STRUCTURE_CONTAINER)
+                                }
+                            }
+                        }
+                    }
+
                 }
 
                 //Support room check
@@ -858,21 +886,37 @@ const fiefManager = {
                     }
                 } 
                 //Empty target labs if no active reactions
-                else if (fief.labs.targetLabs) {
+                else{
                     const occupiedLabIDs = Object.keys(fief.labs.boostLabs || {});
-                    
-                    for (const targetID of fief.labs.targetLabs) {
-                        const target = Game.getObjectById(targetID);
-                        if (!target || occupiedLabIDs.includes(targetID) || !target.mineralType) continue;
-                        
-                        supplyDemand.addRequest(room, {
-                            type: 'pickup',
-                            targetID,
-                            resourceType: target.mineralType,
-                            amount: target.store[target.mineralType],
-                            priority: 8
-                        });
+                    if(fief.labs.targetLabs){
+                        for (const targetID of fief.labs.targetLabs) {
+                            const target = Game.getObjectById(targetID);
+                            if (!target || occupiedLabIDs.includes(targetID) || !target.mineralType) continue;
+                            
+                            supplyDemand.addRequest(room, {
+                                type: 'pickup',
+                                targetID,
+                                resourceType: target.mineralType,
+                                amount: target.store[target.mineralType],
+                                priority: 8
+                            });
+                        }
                     }
+                    if(fief.labs.sourceLabs){
+                        for (const targetID of Object.keys(fief.labs.sourceLabs)) {
+                            const target = Game.getObjectById(targetID);
+                            if (!target || occupiedLabIDs.includes(targetID) || !target.mineralType) continue;
+                            
+                            supplyDemand.addRequest(room, {
+                                type: 'pickup',
+                                targetID,
+                                resourceType: target.mineralType,
+                                amount: target.store[target.mineralType],
+                                priority: 8
+                            });
+                        }
+                    }
+
                 }
 
                 function selectLabTarget() {
@@ -968,7 +1012,7 @@ const fiefManager = {
             if(heap.funnelTarget && room.terminal && [6,7].includes(roomLevel)){
                 //If we are not the funnel target
                 if(room.name != heap.funnelTarget && !cSites.length){
-                    if(room.storage.store[RESOURCE_ENERGY] > 50000){
+                    if(room.storage.store[RESOURCE_ENERGY] > 50000 && room.terminal.store.getFreeCapacity() > 10000){
                         supplyDemand.addRequest(room,{type:'dropoff',resourceType:'energy',amount:Math.min(room.storage.store[RESOURCE_ENERGY] - 50000,room.terminal.store.getFreeCapacity()),targetID:room.terminal.id,international:false,priority:4})
                     }
                     if(room.terminal.store[RESOURCE_ENERGY] > 50000){
@@ -1277,9 +1321,6 @@ const fiefManager = {
     }
 };
 
-module.exports = fiefManager;
-profiler.registerObject(fiefManager, 'fiefManager');
-
 
 
 function getSev(role){
@@ -1296,10 +1337,6 @@ function getSev(role){
         'manager':85
     }
     return sevList[role] || 50;
-}
-
-function plantCSite(){
-
 }
 
 function totalWares(room,fief) {
@@ -1464,6 +1501,108 @@ function getBoostTier(resource){
     }
     
     return 0; //Unknown or other resources
+}
+
+//Builds two maps of road coordinates and their associated extensions
+function getRefillMaps(room,fief){
+    //console.log(room.name,'getting refills')
+    //We shouldn't be calling this function unless we already have an extension map, but check just in case
+    if(!heap.fiefs[room.name].extensionMap){
+        //console.log("Exension map doesn't exist, building")
+        getExtensionMap(room,fief);
+    }
+
+    //Fetch the extension map and create the two refill maps if not already there
+    let extensionMap = heap.fiefs[room.name].extensionMap;
+    let sourceRefills = heap.fiefs[room.name].sourceRefills || new Map();
+    let otherRefills = heap.fiefs[room.name].otherRefills || new Map();
+    //console.log("Current lengths. extensionMap:",extensionMap.size,'sourceRefills:',sourceRefills.size,'otherRefills:',otherRefills.size)
+    //Get all roads that lead to sources
+    let sourceRoute = new Set(fief.roomPlan[3].road.map(spot => `${spot.x},${spot.y}`))
+    //Go through all extensions and action the empty ones
+    for(let extensionID of extensionMap.keys()){
+        let thisExt = Game.getObjectById(extensionID);
+        //If not completely full, add it to the refill sets
+        if(thisExt.store.getFreeCapacity(RESOURCE_ENERGY) > 0){
+            //Get all road spots tied to this extension
+            let someSpots = false
+            for(let spot of extensionMap.get(extensionID)){
+                //If the road spot is in the source route set, add to source refills map. Otherwise add to other.
+                if(sourceRoute.has(spot)){
+                    //Get the current set of extensions for this road spot, or make a new one if it doesn't exist
+                    let sourceSet = (sourceRefills.get(spot) || new Set());
+                    //Add this extension to the set and assign it back to this spot in the map
+                    sourceSet.add(extensionID)
+                    sourceRefills.set(spot, sourceSet)
+                }
+                else{
+                    //Get the current set of extensions for this road spot, or make a new one if it doesn't exist
+                    let otherSet = (otherRefills.get(spot) || new Set());
+                    //Add this extension to the set and assign it back to this spot in the map
+                    otherSet.add(extensionID)
+                    otherRefills.set(spot, otherSet)
+                }
+            }
+        }
+    }
+    //Check if  both refill maps are empty. If so, that means there are extensions not in the main map and we need to rebuild it
+    if(sourceRefills.size+otherRefills.size == 0){
+        //console.log(room.name,"refills are zero, requesting extension map");
+        getExtensionMap(room);
+        return;
+    }
+    //console.log("Presort size",sourceRefills.size,otherRefills.size)
+    sourceRefills = sortMapBySetSize(sourceRefills);
+    otherRefills = sortMapBySetSize(otherRefills);
+    //console.log("Aftersort",sourceRefills.size,otherRefills.size)
+    //Assign both of our refill maps back to their places
+    heap.fiefs[room.name].sourceRefills = sourceRefills
+    heap.fiefs[room.name].otherRefills = otherRefills
+    //console.log("Heap check",heap.fiefs[room.name].sourceRefills.size,heap.fiefs[room.name].otherRefills.size)
+}
+
+function sortMapBySetSize(map) {
+    let entries = Array.from(map.entries());
+    entries.sort((a, b) => b[1].size - a[1].size);
+    return new Map(entries);
+}
+
+//Builds the main extension map, which has extension IDs for the keys and string coordinates of adjacent roads for values
+function getExtensionMap(room){
+    //console.log("Getting extension map for",room.name)
+    //Create three array variables to hold structures that we find in the room
+    let extensions = room.find(FIND_STRUCTURES).filter(str => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(str.structureType));
+    let roads = [];
+    for(let levels of Object.values(Memory.kingdom.fiefs[room.name].roomPlan)){
+        if(levels[STRUCTURE_ROAD]){
+            roads.push(...levels[STRUCTURE_ROAD].map(rd => {return {'pos':rd}}))
+        }
+    }
+    //console.log(extensions.length,'extensions and',roads.length,'roads')
+    let otherRoads = new Set(roads.map(road => `${road.pos.x},${road.pos.y}`));
+    //Get the existing map to build on if it exists, otherwise make a new one from scratch
+    let extensionRoadMap =  heap.fiefs[room.name].extensionMap || new Map();
+    for(let each of extensions){
+        //Set up this extension in the map
+        if(!extensionRoadMap.has(each.id))extensionRoadMap.set(each.id,new Set())
+        let foundSpot = false;
+        //Check all adjacent positions
+        for(let x = -1;x<=1;x++){
+            for(let y = -1;y<=1;y++){
+                //skip center
+                if(x==0 && y==0)continue
+                let checkPos = `${each.pos.x+x},${each.pos.y+y}`
+                //If the adjacent coordinate belongs to a road, add that coordinate to the set for this ID
+                if(otherRoads.has(checkPos)){
+                    foundSpot = true;
+                    extensionRoadMap.get(each.id).add(checkPos)
+                }
+            }
+        }
+    }
+
+    //Update the map
+    heap.fiefs[room.name].extensionMap = extensionRoadMap
 }
 
 function getControllerSpots(room, fief) {
@@ -1655,3 +1794,10 @@ function getControllerSpots(room, fief) {
 
     return controllerSpots;
 }
+
+module.exports = fiefManager;
+profiler.registerObject(fiefManager, 'fiefManager');
+getControllerSpots = profiler.registerFN(getControllerSpots, 'getControllerSpots');
+getDomainRooms = profiler.registerFN(getDomainRooms, 'getDomainRooms');
+manageResourceCollection = profiler.registerFN(manageResourceCollection, 'manageResourceCollection');
+totalWares = profiler.registerFN(totalWares, 'totalWares');

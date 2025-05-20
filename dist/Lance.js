@@ -120,7 +120,7 @@ Lance.prototype.populate = function(fief,kingdomCreeps,options={}){
 
     //Update reserve units if we found them.
     if(takeaway.length){
-        global.heap.army.reserve = global.heap.army.reserve.filter(resID => !takeaway.includes(resID));
+        heap.army.reserve = global.heap.army.reserve.filter(resID => !takeaway.includes(resID));
     }
     //If we didn't find enough to fill, order a creep
     if(!foundReserve){

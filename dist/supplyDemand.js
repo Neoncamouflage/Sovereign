@@ -2,10 +2,6 @@ const helper = require('functions.helper');
 const registry = require('registry');
 const profiler = require('screeps-profiler');
 const supplyDemand = {
-    makeTask: function(details={}){
-        let newTask = new Task(details.type,details.resourceType,details.targetID,details.amount,details.priority,details.international,details.targetRoom,details.taskID,details.assignedHaulers,details.tick)
-        return newTask;
-    },
     prepShipping: function(roomName){
         if (!global.heap) global.heap = {};
         if (!global.heap.shipping) global.heap.shipping = {};
@@ -16,7 +12,6 @@ const supplyDemand = {
         }
     },
     manageShipping: function(roomName,fiefCreeps){
-        
         //Primary management function for a room to handle all supply/demand tasks
         //Run prepShipping for the room to ensure we're set up
         let room = Game.rooms[roomName];
@@ -29,7 +24,7 @@ const supplyDemand = {
             STRUCTURE_POWER_SPAWN,
             STRUCTURE_TOWER
         ]
-        const MAX_IDLE = 0.08;
+        const MAX_IDLE = 0.15;
 
         //global.heap.shipping[roomName].forEach(task =>{
             //console.log(JSON.stringify(task));
@@ -49,7 +44,8 @@ const supplyDemand = {
 
 
         if(energyStructures.length){
-            
+            //Flag so we only request one refill mission
+            let refillDone = false;
             energyStructures.forEach(struct =>{
                 let structNeed = struct.store.getFreeCapacity(RESOURCE_ENERGY);
                 //console.log("Structure need for",struct.structureType,"is",struct.store.getFreeCapacity(RESOURCE_ENERGY))
@@ -87,6 +83,27 @@ const supplyDemand = {
                             });
                         }
                         break;
+                    //Extensions and spawns get dropoff if there's no storage/terminal
+                    case STRUCTURE_EXTENSION:
+                    case STRUCTURE_SPAWN:
+                        if((struct.name && struct.name == 'Origin Keep') || ((!room.storage || room.storage.store.getUsedCapacity(RESOURCE_ENERGY) == 0) && (!room.terminal || room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) == 0))){
+                            this.addRequest(room,{
+                                type:'dropoff',
+                                targetID:struct.id,
+                                amount:structNeed,
+                                priority:9
+                            });
+                        }
+                        else if(!refillDone){
+                            this.addRequest(room,{
+                                type:'refill',
+                                priority:9,
+                                targetID:room.controller.id,
+                                amount:Infinity
+                            });
+                            refillDone = true;
+                        }
+                        break;
                     //Labs get refilled past 3k
                     case STRUCTURE_POWER_SPAWN:
                         if(structNeed > 3000){
@@ -97,23 +114,6 @@ const supplyDemand = {
                             });
                             
                         }
-                        break;
-                    //Spawns and extensions always get added
-                    case STRUCTURE_SPAWN:
-                            this.addRequest(room,{
-                                type:'dropoff',
-                                targetID:struct.id,
-                                amount:structNeed,
-                                priority:9
-                            });
-                        break;
-                    case STRUCTURE_EXTENSION:
-                            this.addRequest(room,{
-                                type:'dropoff',
-                                targetID:struct.id,
-                                amount:structNeed,
-                                priority:9
-                            });
                         break;
                 }
             });
@@ -139,6 +139,10 @@ const supplyDemand = {
         
         //Calculate utilization and request more haulers if needed
             let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length
+            //Utilization minimum gets increased based on active remote demand vs hauler carry
+            let totalCarry = poolHaulers.reduce((sum,current) => sum+current.store.getCapacity(),0)
+            utilization = Math.min(utilization,totalCarry/((heap.fiefs[roomName].holdingDist || 0)*20))
+            console.log('\nMAX_IDLE:',MAX_IDLE,'\nholdingDist:',heap.fiefs[roomName].holdingDist,'\nCalculated idle from history:',global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length,'\nLast tick idle',global.heap.shipping[roomName].utilization[0],'\nMinimum idle from holdings:',totalCarry/((heap.fiefs[roomName].holdingDist || 0)*20),'\nResult:',utilization)
             //Extra check, no spawning if half or more haulers are currently idle
             if(MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5){
                 registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : room.storage && room.storage.store[RESOURCE_ENERGY] > 100 ? 100 :  fiefCreeps.length > 2 ? 50 : 60,memory:{role:'hauler',fief:roomName,preflight:false,state:'idle'}})
@@ -187,17 +191,30 @@ const supplyDemand = {
         //Shipping tasks have to be retrieved after we assign the room
         let shippingTasks = global.heap.shipping[room.name].requests;
         //Mandatory data. If missing, return error
-        if(!details.type || !details.targetID || !details.amount){
+        if(!details.type || (details.type !== 'refill' && (!details.targetID || !details.amount))){
             console.log(`ERR_MISSING_DETAILS - ${room.name} Type:${!details.type}, TargetID:${!details.targetID}, Amount:${!details.amount}. Details:${JSON.stringify(details)}`)
             return -3;
-
         }
         if(!details.resourceType) details.resourceType = RESOURCE_ENERGY
         if(!details.international) details.international = false;
         //Check for an existing task for this target and type, update and return ID if already there
         for (let taskID in shippingTasks) {
             let task = shippingTasks[taskID];
-            if (task.targetID == details.targetID && task.resourceType == details.resourceType){
+            //Refill task logic
+            if(details.type == 'refill'){
+                if(task.type === 'refill'){
+                    if(details.priority && details.priority > task.priority){
+                        //console.log("Updated priority")
+                        task.priority = details.priority;
+                    }
+                    else if(!details.priority){
+                        details.priority = DEFAULT_PRIORITY;
+                    }
+                    return taskID
+                }
+            }
+            //Other logic
+            else if (task.targetID == details.targetID && task.resourceType == details.resourceType){
                 //Check for priority update
                 if(details.priority && details.priority > task.priority){
                     //console.log("Updated priority")
@@ -217,13 +234,25 @@ const supplyDemand = {
             }
         }
         //If no match, set up new task.
-        let newTask = new Task(details.type,details.resourceType,details.targetID,details.amount,details.priority,details.international)
+        let newTask = new Task(details.type,details.resourceType,details.targetID,details.amount,details.priority,details.international);
         shippingTasks[newTask.taskID] = newTask
 
         return newTask.taskID; //Returning ID in case the requester wants it for something
     },
     assignTasks: function(allHaulers,room){
-        let shippingTasks = global.heap.shipping[room.name].requests;
+        //See if we need 1 or 2 refillers, and fetch any current ones
+        /*let needRefill = room.energyAvailable < room.energyCapacityAvailable
+        let refillsNeeded = room.energyAvailable / room.energyCapacityAvailable > 0.5 ? 1 : 2
+        let refillers = heap.fiefs[room.name].refillers && heap.fiefs[room.name].refillers.map(crp=> Game.getObjectById(crp)).filter(crp => !!crp && crp.ticksToLive > 100) || []
+        if(needRefill) console.log(room.name,'needs refills. Refillers:',refillers,refillers.map(crp => crp.pos))
+        if(!needRefill && refillers.length){
+            for(let each of refillers){
+                each.memory.state = 'idle';
+            }
+        }
+        allHaulers = allHaulers.filter(crp => crp.memory.state != 'refill')*/
+
+        let shippingTasks = heap.shipping[room.name].requests;
         //Every 5 ticks, check assigned haulers to see if we need to clear them out.
         if(Game.time % 5 == 0){
             for (let task of Object.values(shippingTasks)) {
@@ -236,8 +265,6 @@ const supplyDemand = {
         }
         
         let unassignedTasks = Object.values(shippingTasks).filter(task => task.unassignedAmount() > 0);
-        
-
 
         //Categorize haulers
         //Split off specifically the idle haulers for now
@@ -250,6 +277,7 @@ const supplyDemand = {
         let haulersByResource = {};
         let terminal = room.terminal;
         let storage = room.storage;
+        let storagePos = storage ? storage.pos : Memory.kingdom.fiefs[room.name].roomPlan ? new RoomPosition(Memory.kingdom.fiefs[room.name].roomPlan[4][STRUCTURE_STORAGE][0].x,Memory.kingdom.fiefs[room.name].roomPlan[4][STRUCTURE_STORAGE][0].y,room.name) : new RoomPosition(25,25,room.name)
         
         //If no idle haulers then return
         if(!idleHaulers.length) return;
@@ -292,9 +320,12 @@ const supplyDemand = {
             }
 
             let assigned = false;
-            let assignedHauler = {};
+            // Handdle refill tasks
+            if (task.type === 'refill'){
+                assigned = assignRefill(task, haulersByResource, emptyHaulers);
+            }
             // Handle dropoff tasks
-            if (task.type === 'dropoff') {
+            if (!assigned && task.type === 'dropoff') {
                 assigned = assignDropoff(task, taskTarget, haulersByResource, emptyHaulers, terminal, storage);
             }
     
@@ -316,12 +347,53 @@ const supplyDemand = {
             }
         }
 
+        function assignRefill(task, haulersByResource, emptyHaulers) {
+            let current = Object.keys(task.assignedHaulers).length;
+            let totalStore = Object.values(task.assignedHaulers || {}).reduce((sum, value) => sum + value, 0);
+            let refillAmount = room.energyCapacityAvailable - room.energyAvailable;
+            //No more than 3 assigned to refill and stores only need to be 50% of the energy gap
+            if(current >=3 || totalStore/refillAmount > 0.5){
+                //Since we don't need more, check instead if we should replace based on distance
+                let refillers = Object.keys(task.assignedHaulers).map(id => Game.getObjectById(id)).filter(crp => !!crp)
+                let furthestRefiller = {creep:null,range:0}
+                for(let each of refillers){
+                    let dist = getTileDistance(storagePos,each.pos);
+                    if(dist > furthestRefiller.range){
+                        furthestRefiller.creep = each;
+                        furthestRefiller.range = dist;
+                    }
+                }
+                if(furthestRefiller.range <= 25) return [false,null];
+                let energyPick = storagePos.getClosestByTileDistance(haulersByResource[task.resourceType] || []);
+                let emptyPick = storagePos.getClosestByTileDistance(emptyHaulers || []);
+                let finalPick = !!energyPick && !! emptyPick ? storagePos.getClosestByTileDistance([energyPick,emptyPick]) : energyPick || emptyPick
+                if(finalPick && getTileDistance(storagePos,finalPick.pos) <= furthestRefiller.range/2){
+                    task.unassign(furthestRefiller.creep,'Closer refiller found');
+                    task.assignTo(finalPick);
+                    if(emptyHaulers) emptyHaulers = emptyHaulers.filter(h => h.id !== finalPick.id);
+                    if(haulersByResource[task.resourceType]) haulersByResource[task.resourceType] = haulersByResource[task.resourceType].filter(h => h.id !== finalPick.id);
+                    return [true,finalPick]
+                }
+                return [false,null];
+            }
+            //Get closest of all haulers to assign
+            let energyPick = storagePos.getClosestByTileDistance(haulersByResource[task.resourceType] || []);
+            let emptyPick = storagePos.getClosestByTileDistance(emptyHaulers || []);
+            let finalPick = !!energyPick && !! emptyPick ? storagePos.getClosestByTileDistance([energyPick,emptyPick]) : energyPick || emptyPick
+            if(finalPick){
+                task.assignTo(finalPick);
+                if(emptyHaulers) emptyHaulers = emptyHaulers.filter(h => h.id !== finalPick.id);
+                if(haulersByResource[task.resourceType]) haulersByResource[task.resourceType] = haulersByResource[task.resourceType].filter(h => h.id !== finalPick.id);
+                return [true,finalPick]
+            }
+            return [true,finalPick]
+        }
+
         function assignDropoff(task, taskTarget, haulersByResource, emptyHaulers, terminal, storage) {
             if (haulersByResource[task.resourceType]) {
                 let eligibles = haulersByResource[task.resourceType].filter(hauler => hauler.store.getUsedCapacity(task.resourceType) > 0);
                 if (eligibles.length) {
                     let hauler = taskTarget.pos.getClosestByTileDistance(eligibles);
-
                     task.assignTo(hauler);
                     haulersByResource[task.resourceType] = haulersByResource[task.resourceType].filter(h => h.id !== hauler.id);
                     return true;
@@ -383,13 +455,12 @@ const supplyDemand = {
         const DROPOFF = 'dropoff';
         const RENEW = 'renew';
         const TOW = 'tow';
-        const STATES = [IDLE,PICKUP,DROPOFF,RENEW,TOW];
+        const REFILL = 'refill';
+        const STATES = [IDLE,PICKUP,DROPOFF,RENEW,TOW,REFILL];
         let shippingTasks = global.heap.shipping[room.name].requests;
         let isIdle = 0;
         let totalCarry = 0;
         let combos = [];
-        let homeStore = room.storage;
-        let homeTerm = room.terminal;
         let [emptyHauls,energyHauls] = haulers.reduce((arr,hauler) => {
             if(hauler.store[RESOURCE_ENERGY]) arr[1].push(hauler);
             //Pushing to empty haulers goes here
@@ -401,22 +472,21 @@ const supplyDemand = {
         //If a hauler is next to an empty spawn/extension, fill
         //Also get upgraders and builders
 
-        let fills = [];
         let coreLink = Memory.kingdom.fiefs[room.name].links && Memory.kingdom.fiefs[room.name].links.coreLink
         let remoteLinks = Memory.kingdom.fiefs[room.name].links && Memory.kingdom.fiefs[room.name].links.remoteLinks
         let link = Game.getObjectById(coreLink)
-        //Only need to do fills if there's missing energy
-        if(room.energyAvailable < room.energyCapacityAvailable) fills = room.find(FIND_MY_STRUCTURES).filter(struct => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(struct.structureType) && struct.store.getFreeCapacity(RESOURCE_ENERGY) > 0);
         //Track IDs of fills so we can clear their tasks
         let fillTransfers = []
         for(let haul of energyHauls){
             //if(link && haul.store.getFreeCapacity()>0){
                 //haul.withdraw(link,RESOURCE_ENERGY)
             //}
+            //All energy haulers pull from the core link
             if(link && link.store[RESOURCE_ENERGY] > 0 && link.pos.isNearTo(haul.pos) && haul.store.getFreeCapacity()>0){
                 haul.withdraw(link,RESOURCE_ENERGY)
             }
-            if(remoteLinks){
+            //None refill haulers fill remote links
+            if(haul.memory.state != 'refill' && remoteLinks){
                 for(let lk of remoteLinks){
                     let lkg = Game.getObjectById(lk)
                     let lRange = haul.pos.getRangeTo(lkg);
@@ -444,21 +514,26 @@ const supplyDemand = {
                 }
             }
 
-
-            let tFlag = false;
-            for(let fill of fills){
-                if(haul.pos.isNearTo(fill)){
-                    haul.transfer(fill,RESOURCE_ENERGY);
-                    //Grab the id to clear the task
-                    fillTransfers.push(fill.id)
-                    tFlag = true;
-                    break;
-                }
+            //All haulers check to see if they can ad hoc fill
+            let checkPos = `${haul.pos.x},${haul.pos.y}`
+            if(heap.fiefs[room.name].sourceRefills && heap.fiefs[room.name].sourceRefills.has(checkPos)){
+                let fillTargets = heap.fiefs[room.name].sourceRefills.get(checkPos);
+                let target = Game.getObjectById(fillTargets.values().next().value);
+                haul.transfer(target,RESOURCE_ENERGY);
+                fillTransfers.push(target.id);
+                continue
             }
-            if(tFlag) continue;
+            else if(heap.fiefs[room.name].otherRefills && heap.fiefs[room.name].otherRefills.has(checkPos)){
+                let fillTargets = heap.fiefs[room.name].otherRefills.get(checkPos);
+                let target = Game.getObjectById(fillTargets.values().next().value);
+                haul.transfer(target,RESOURCE_ENERGY);
+                fillTransfers.push(target.id);
+                continue
+            }
+            //Non refill haulers ad hoc fill builders/ugraders
             let buildUps = haul.room.find(FIND_MY_CREEPS).filter(c=>(c.memory.role == 'upgrader' || c.memory.role == 'builder') && c.store.getFreeCapacity()>c.store.getCapacity()/2)
             for(let targetCrp of buildUps){
-                if(haul.pos.isNearTo(targetCrp)){
+                if(haul.memory.state != 'refill' && haul.pos.isNearTo(targetCrp)){
                     haul.transfer(targetCrp,RESOURCE_ENERGY);
                     break;
                 }
@@ -473,6 +548,8 @@ const supplyDemand = {
         for(let every of fillTasks){
             every.remove(room.name)
         }
+
+        //Hauler action loop
         haulers.forEach(creep => {
             let postFlag = true;
             let carryParts = creep.getActiveBodyparts(CARRY);
@@ -522,7 +599,7 @@ const supplyDemand = {
                 if(!checkTask){
                     delete creep.memory.task
                 }
-                else if(checkTask.assignedHaulers[creep.id] <= 0 || checkTask.assignedHaulers[creep.id] == null){
+                else if(checkTask.type != 'refill' && checkTask.assignedHaulers[creep.id] <= 0 || checkTask.assignedHaulers[creep.id] == null){
                     //console.log(Game.time)
                    // console.log("Task ID",creep.memory.task,"in room",creep.memory.fief,"unassigning due to assigned inventory:",checkTask.assignedHaulers[creep.id],"in task",JSON.stringify(checkTask))
                     checkTask.unassign(creep,checkTask.assignedHaulers[creep.id] <= 0 ? "Assigned amount is <=0." : "No result for this creep in assigned haulers") 
@@ -533,7 +610,8 @@ const supplyDemand = {
                 state = IDLE;
                 creep.memory.state = IDLE;
             }
-            
+
+
             //console.log("Hauler",creep.name,'task:',JSON.stringify(creep.memory.task),'state:',creep.memory.state)
             if(state == IDLE){
                 if(creep.memory.task){
@@ -575,6 +653,10 @@ const supplyDemand = {
                             state = DROPOFF;
                         }
                     }
+                    else if(newTask.type == 'refill'){
+                        creep.memory.state = REFILL;
+                        state = REFILL;
+                    }
                 }
                 else{
                     //No task
@@ -591,7 +673,94 @@ const supplyDemand = {
                     }
                 }
             }
-
+            if(state == REFILL){
+                creep.say('⚡')
+                let refillTask = getTaskByID(creep.memory.fief,creep.memory.task);
+                console.log(creep,room.name,'ENERGY EVEN',room.energyAvailable == room.energyCapacityAvailable)
+                if(room.energyAvailable == room.energyCapacityAvailable || ((!room.storage || room.storage.store.getUsedCapacity(RESOURCE_ENERGY) == 0) && (!room.terminal || room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) == 0))){
+                    refillTask.remove(creep.memory.fief)
+                    creep.memory.state = IDLE;
+                    state = IDLE;
+                }
+                //If we're empty, go fill up
+                else if(creep.store.getUsedCapacity(RESOURCE_ENERGY) == 0){
+                    console.log(creep,"getting energy for refill",creep.pos)
+                    let roomStore = room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 0;
+                    let roomTerm = room.terminal && room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) > 0;
+                    let roomTarget;
+                    if(roomStore && roomTerm){
+                        roomTarget = getTileDistance(creep.pos,room.storage.pos) > getTileDistance(creep.pos,room.terminal.pos) ? room.terminal : room.storage;
+                    }
+                    else if(roomStore){
+                        roomTarget = room.storage;
+                        
+                    }
+                    else if(roomTerm){
+                        roomTarget = room.terminal;
+                        
+                    }
+                    if(creep.pos.getRangeTo(roomTarget) > 1){
+                        creep.travelTo(roomTarget);
+                    }
+                    else{
+                        //If we have other resources, dump one, withdraw energy
+                        if(Object.keys(creep.store).length) creep.transfer(roomTarget,Object.keys(creep.store)[0])
+                        creep.withdraw(roomTarget,RESOURCE_ENERGY);
+                    }
+                }
+                //If we have energy, go start dropping it off
+                else{
+                    let sourceMap = heap.fiefs[room.name].sourceRefills;
+                    let otherMap = heap.fiefs[room.name].otherRefills;
+                    //If we already have a target
+                    if(creep.memory.refillTarget){
+                        if(!otherMap.has(creep.memory.refillTarget) && !sourceMap.has(creep.memory.refillTarget)){
+                            delete creep.memory.refillTarget;
+                            if(otherMap && otherMap.size) {
+                                console.log(creep, "getting othermap");
+                                creep.memory.refillTarget = getRefillTarget(creep, otherMap, room.name);
+                            }
+                            else if(sourceMap && sourceMap.size) {
+                                console.log(creep, "getting sourcemap");
+                                creep.memory.refillTarget = getRefillTarget(creep, sourceMap, room.name);
+                            }
+                            else{
+                                refillTask.remove(creep.memory.fief)
+                                creep.memory.state = IDLE;
+                                state = IDLE;
+                                return;
+                            }
+                        }
+                        let [x, y] = creep.memory.refillTarget.split(',').map(num => parseInt(num));
+                        let targetPos = new RoomPosition(x, y, room.name);
+                        console.log(creep,"refilling",targetPos,'total refills',sourceMap.has(creep.memory.refillTarget) ? sourceMap.get(creep.memory.refillTarget).size : otherMap.has(creep.memory.refillTarget) ? otherMap.get(creep.memory.refillTarget).size : 'No map has target')
+                        if(creep.pos.getRangeTo(targetPos) > 0){
+                            creep.travelTo(targetPos);
+                        }
+                        else{
+                            let refillExt;
+                            if(otherMap.has(creep.memory.refillTarget)){
+                                refillExt = Game.getObjectById(otherMap.get(creep.memory.refillTarget).values().next().value);
+                                creep.transfer(refillExt,RESOURCE_ENERGY)
+                            }
+                            else if(sourceMap.has(creep.memory.refillTarget)){
+                                refillExt = Game.getObjectById(sourceMap.get(creep.memory.refillTarget).values().next().value);
+                                creep.transfer(refillExt,RESOURCE_ENERGY)
+                            }
+                        }
+                    }
+                    //If we need to get a target
+                    else if(otherMap && otherMap.size) {
+                        console.log(creep, "getting othermap");
+                        creep.memory.refillTarget = getRefillTarget(creep, otherMap, room.name);
+                    }
+                    else if(sourceMap && sourceMap.size) {
+                        console.log(creep, "getting sourcemap");
+                        creep.memory.refillTarget = getRefillTarget(creep, sourceMap, room.name);
+                    }
+                }
+                return;
+            }
             if(state == TOW){
 
             }
@@ -756,6 +925,7 @@ const supplyDemand = {
             let usedStore = creep.store.getUsedCapacity();
             //If state is idle, all idle
             if(state==IDLE){
+                //See if we can be usefulby renewing
                 isIdle += carryParts
                 //No postflag means we didn't do anything, no need to rerun
                 if(postFlag) postIdles.push(creep)
@@ -806,7 +976,7 @@ const supplyDemand = {
                     [PICKUP]:  '📤',
                     [DROPOFF]: '📥'
                 }
-                let words = helper.getSay({symbol:signs[state]});
+                let words = signs[state] ? helper.getSay({symbol:signs[state]}) : '𒃽'
                 creep.say(words.join(''))
             }
 
@@ -853,6 +1023,9 @@ Task.prototype.assignTo = function(hauler,amount='default') {
     //Assign default amount of as much as possible unless an amount is specified
     if(this.type == 'dropoff'){
         this.assignedHaulers[hauler.id] = amount == 'default' ? Math.min(hauler.store.getUsedCapacity(this.resourceType),this.unassignedAmount()) : amount;
+    }
+    else if(this.type == 'refill'){
+        this.assignedHaulers[hauler.id] = hauler.store.getCapacity();
     }
     else{
         this.assignedHaulers[hauler.id] = amount == 'default' ? Math.min(hauler.store.getFreeCapacity(),this.unassignedAmount()) : amount;
@@ -965,7 +1138,38 @@ Task.prototype.unassign = function(hauler,reason) {
     //Delete hauler task
     delete hauler.memory.task
 };
+
+function getRefillTarget(creep, map, roomName) {
+    if (!map || map.size === 0) return null;
+    
+    let positions = [];
+    for (let coordStr of map.keys()) {
+        let currentSetSize = map.get(coordStr).size;
+        
+        // Parse coordinates and calculate range
+        let [x, y] = coordStr.split(',').map(num => parseInt(num));
+        let roomPos = new RoomPosition(x, y, roomName);
+        let range = creep.pos.getRangeTo(roomPos);
+        
+        // Calculate a score that balances range and set size
+        // Lower score is better: range (smaller is better) minus set size (larger is better)
+        let score = range - (Math.floor(currentSetSize/2));
+        
+        positions.push({
+            coordStr: coordStr,
+            range: range,
+            setSize: currentSetSize,
+            score: score
+        });
+    }
+    
+    // Sort by the calculated score (lowest score first)
+    positions.sort((a, b) => a.score - b.score);
+    
+    // Return the position with the best score
+    return positions.length > 0 ? positions[0].coordStr : null;
+}
 profiler.registerObject(supplyDemand, 'supplyDemand');
+profiler.registerClass(Task, 'Task');
 module.exports = supplyDemand;
 global.addSupplyRequest = supplyDemand.addRequest;
-

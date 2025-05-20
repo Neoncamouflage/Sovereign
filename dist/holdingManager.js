@@ -9,6 +9,13 @@ const ADD_REMOVE_INTERVAL = 100
 var holdingManager = {
 
     run: function(kingdomCreeps){
+        //Clear out tracked holdings
+        if(heap.fiefs){
+            for(let each of Object.values(heap.fiefs)){
+                each.holdingDist = 0
+            }
+        }
+
         const CPU_ADD_LIMIT = Game.cpu.limit * 0.8 //Add if we're below 80%
         const CPU_REMOVE_LIMIT = Game.cpu.limit * 0.9 //Remove if we're above 90%
         for(let ck of Object.keys(Memory.kingdom.holdings)){
@@ -35,37 +42,40 @@ var holdingManager = {
                 continue;
             }
             //console.log("CHECKING",key,"STANDBY: ",Memory.kingdom.holdings[key].standby)
-            if(Memory.kingdom.holdings[key].standby){
+            if(!Memory.kingdom.holdings[key].standby){
+                activeHoldings.push(key)
+            }
+            //if(Memory.kingdom.holdings[key].standby){
                 //First we check to see if we should consider this a real standby addition. If not, we continue so the loop keeps going
 
                 //If overridden, continue
-                if(Memory.kingdom.holdings[key].override) continue;
+                //if(Memory.kingdom.holdings[key].override) continue;
                 //If the room is at or over 90% spawn use then just ignore this one
-                if(Memory.kingdom.fiefs[Memory.kingdom.holdings[key].homeFief].combinedSpawnUse >= 90) continue;
+                //if(Memory.kingdom.fiefs[Memory.kingdom.holdings[key].homeFief].combinedSpawnUse >= 90) continue;
 
                 //If we have the spare CPU, activate it - only check this every so often, less often for higher GCL
-                if(avCPU < CPU_ADD_LIMIT && Game.time % (ADD_REMOVE_INTERVAL*Game.rooms[Memory.kingdom.holdings[key].homeFief].controller.level) == 0){
-                    Memory.kingdom.holdings[key].standby = false;
+                //if(avCPU < CPU_ADD_LIMIT && Game.time % (ADD_REMOVE_INTERVAL*Game.rooms[Memory.kingdom.holdings[key].homeFief].controller.level) == 0){
+                    //Memory.kingdom.holdings[key].standby = false;
                     //If we add it to actives, break so we stop considering them.
-                    activeHoldings.push(key);
-                    break;
-                }
+                    //activeHoldings.push(key);
+                    //break;
+                //}
                 //Else we're done looking
-                else{
-                    break;
-                }
-            }
-            else{
+                //else{
+                    //break;
+                //}
+            //}
+            //else{
                 //console.log("Adding to active holdings")
-                activeHoldings.push(key)
-            }
+                //activeHoldings.push(key)
+            //}
         }
         //console.log("Active holdings!",activeHoldings)
         //If we're above the cpu limit, pop a remote off the end
-        if(avCPU > CPU_REMOVE_LIMIT && Game.time % (ADD_REMOVE_INTERVAL*5) == 0){
-            let remove = activeHoldings.pop()
-            Memory.kingdom.holdings[remove].standby = true;
-        }
+        //if(avCPU > CPU_REMOVE_LIMIT && Game.time % (ADD_REMOVE_INTERVAL*5) == 0){
+            //let remove = activeHoldings.pop()
+            //Memory.kingdom.holdings[remove].standby = true;
+        //}
 
         //console.log("HOLDINGS")
         for(const each of holdings){
@@ -83,13 +93,22 @@ var holdingManager = {
         heap.kingdomStatus.totalHoldings = Object.keys(Memory.kingdom.holdings).length
 
         for(const each of activeHoldings){
-            //If we're about to hit CPU limit, just abandon
-            if(Game.cpu.getUsed() > Game.cpu.limit*0.95){
-                //console.log("Abandoning holdings due to CPU",Game.cpu.getUsed())
-                break;
+            //If we're about to hit CPU limit, check bucket and abandon if needed
+            if(Game.cpu.bucket < 7000){
+                if(avCPU > Game.cpu.limit*0.95){
+                    //console.log("Abandoning holdings due to CPU",Game.cpu.getUsed())
+                    break;
+                }
+                //Stricter check if lower bucket
+                else if(Game.cpu.bucket < 4000 && avCPU > Game.cpu.limit*0.8){
+                    break;
+                }
+                
             }
             //Fief spawn utilization check in here somewhere
             let holding = Memory.kingdom.holdings[each]
+            //No home fief, move on
+            if(holding && !holding.homeFief) continue
             //Increment our home fief's spawning impact
             fiefMap[holding.homeFief] = (fiefMap[holding.homeFief] || 0) + 1;
             //console.log("FiefMap: ",holding.homeFief,fiefMap[holding.homeFief])
@@ -106,7 +125,11 @@ var holdingManager = {
             if(totalSpace < 100000) continue;
             kingdomCreeps[holding.homeFief] = kingdomCreeps[holding.homeFief] || []
             let fCreeps = kingdomCreeps[holding.homeFief];
-            if(holding.homeFief && Game.rooms[holding.homeFief]) this.runHolding(each,fCreeps,fiefMap[holding.homeFief]);
+            if(holding.homeFief && Game.rooms[holding.homeFief]){
+                let needSpawns = this.runHolding(each,fCreeps,fiefMap[holding.homeFief]);
+                //If one holding needs spawns, stop processing more
+                if(needSpawns) break;
+            }
         }
     },
     baseWork: function(holdingName) {
@@ -379,6 +402,7 @@ var holdingManager = {
     },
     
     runHolding: function(holdingName,fiefCreeps,spawnPad){
+        let needSpawns = false
         let remote = Game.rooms[holdingName]
         let holding = Memory.kingdom.holdings[holdingName];
         let fief = holding.homeFief;
@@ -390,8 +414,10 @@ var holdingManager = {
         //If owned by an enemy, no actions until we're strong enough to claim
         if(data.ownerType && data.ownerType == 'enemy' && Game.rooms[fief].energyCapacityAvailable < 650){
             //console.log(holdingName,'ENEMY OWNER');
-            return;
+            return needSpawns;
         }
+        //Keep track of how many holdings we're actively processing
+        fiefHeap.holdingDist = (fiefHeap.holdingDist || 0) + (holding.distance || 0)
         //console.log("MAINHOLD",holdingName)
         //console.log("SPAWNPAD",spawnPad)
         //Spawn Time
@@ -424,7 +450,7 @@ var holdingManager = {
                     let sev = 30
                     //console.log("Adding remote harv to spawnQueue")
                     registry.requestCreep({sev:sev-spawnPad,memory:{role:'miner',fief:fief,target:sourceID,holding:holdingName,status:'spawning',preflight:false}})
-                    
+                    needSpawns = true;
                 });
             }
             
@@ -498,6 +524,7 @@ var holdingManager = {
                    // console.log(`For remote: ${remote.name}. Reserver set:${reserverSet},fiefCreep role:${fiefCreeps.claimer},isReserved:${isReserved},spots:${spots}`)
                    if((!(isReserved) || remote.controller.reservation.ticksToEnd <= CONTROLLER_RESERVE_MAX*0.8) && claimers < holding.controllerSpots){
                         registry.requestCreep({sev:30.1-spawnPad,memory:{role:'claimer',job:'reserver',fief:fief,target:{x:remote.controller.pos.x,y:remote.controller.pos.y,id:remote.controller.id},holding:holdingName,status:'spawning',preflight:false}})
+                        needSpawns = true;
                     }
                     if(false && !spots.length){
                         let hasMission = false;
@@ -602,7 +629,7 @@ var holdingManager = {
         }        
         
 
-        return;
+        return needSpawns;
     },
     findPathCenterpoint: function(positions,entryPoint){
         let keySites = [...positions]

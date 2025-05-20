@@ -8,6 +8,8 @@ const painter = {
         let fiefs = Memory.kingdom.fiefs;
         let holdings = Memory.kingdom.holdings;
         if(!visuals) Memory.visuals = {}
+        //Color has to be the first one, as it caches the roomvisual data
+        if(visuals.drawColor) this.drawColor();
         //Loop through fiefs and holdings since some visuals are specific to those
         if(visuals.drawFiefCM || visuals.drawFiefPlan){
             for(let fief in fiefs){
@@ -22,7 +24,6 @@ const painter = {
         if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan)
         if(visuals.drawScores) this.drawScores(architect.config)
         if(visuals.drawAllies) this.drawAllies()
-        if(visuals.drawColor) this.drawColor();
         
     },
     setVisual: function(vis,setting='default'){
@@ -304,45 +305,43 @@ const painter = {
         }
     },
     drawColor(){
-        if(!Memory.colorGroups) Memory.colorGroups = {};
-        let colorRooms = ['E28S8'
-            //...Object.keys(Memory.kingdom.fiefs),
-            //...Object.keys(Memory.kingdom.holdings),
+        if(!heap.colorGroups) heap.colorGroups = {};
+        let colorRooms = [
+            ...Object.keys(Memory.kingdom.fiefs),
         ];
         for(let roomName of colorRooms){
-            if(!Memory.colorGroups[roomName]){
+            if(!heap.colorGroups[roomName]){
                 let rVis = new RoomVisual(roomName);
                 let groups = getWallGroups(roomName);
                 let perimeters = {};
                 let edgeDone = new Set();
-                //edgeDone.add(`${spot.x},${spot.y}`)
                 for(let id of Object.keys(groups)){
                     let group = groups[id]
                     perimeters[id] = findPerimeterTiles(group)
                 }
-                console.log("GROUPS",JSON.stringify(groups))
-                console.log("PERIS",JSON.stringify(perimeters))
                 //Perimeter tiles
                 let perimeterTiles = Object.keys(perimeters);
                 let totalGroups = perimeterTiles.length;
                 for(let perID of perimeterTiles){
-                    let groupTiles = perimeterTiles[perID]
-                    console.log("grouptiles",JSON.stringify(groupTiles))
+                    let groupTiles = perimeters[perID]
                     let hue = (360 / totalGroups) * perimeterTiles.indexOf(perID);
                     for(let spot of groupTiles){
-                        console.log("Adding",spot)
                         edgeDone.add(`${spot.x},${spot.y}`)
                         rVis.circle(spot.x,spot.y,{fill: `hsl(${hue}, 100%, 50%)`});
                     }
                 }
-                for(let groupID of Object.keys(groups)){
+                /*for(let groupID of Object.keys(groups)){
                     let group = groups[groupID]
-                    //console.log(JSON.stringify(wallGroup))
                     for(let spot of group){
-                        if(edgeDone.has(`${spot.x},${spot.y}`))return;
+                        if(edgeDone.has(`${spot.x},${spot.y}`))continue;
                         rVis.circle(spot.x,spot.y,{fill:'black'});
                     };
-                };
+                };*/
+
+                heap.colorGroups[roomName] = rVis.export();
+            }
+            else{
+                let rVis = new RoomVisual(roomName).import(heap.colorGroups[roomName])
             }
         }
         function findPerimeterTiles(wallGroup){

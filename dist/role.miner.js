@@ -9,6 +9,16 @@ var roleMiner = {
         const fief = Memory.kingdom.fiefs[creep.memory.fief]
         const targetSource = Game.getObjectById(creep.memory.target);
         const holding = Memory.kingdom.holdings[creep.memory.holding];
+        if(!holding){
+            //If we've converted to a fief
+            if(Memory.kingdom.fiefs[creep.memory.holding]){
+                creep.memory.role = 'settler';
+                creep.memory.targetRoom = creep.memory.holding
+            }
+            else{
+                return;
+            }
+        }
         const can = holding.sources[targetID].can && Game.getObjectById(holding.sources[targetID].can)
         if(!creep.memory.preflight){
             //Memory.kingdom.holdings[targetRoom].sources[harvestID].miner = creep.name;
@@ -140,7 +150,7 @@ var roleMiner = {
                 if(creep.getActiveBodyparts(WORK) >=5){
                     let cSite = creep.room.lookForAt(LOOK_CONSTRUCTION_SITES,creep.pos)
                     if(!cSite.length){
-                        let canSpot = creep.room.lookForAt(LOOK_STRUCTURES,creep.pos).filter(struct => struct.structureType == STRUCTURE_CONTAINER)
+                        let canSpot = creep.room.lookForAt(LOOK_STRUCTURES,creep.pos)
                         if(canSpot.length){
                             holding.sources[targetID].can = canSpot[0].id
                         }

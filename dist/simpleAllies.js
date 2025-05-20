@@ -1,3 +1,5 @@
+const profiler = require('screeps-profiler');
+
 const allies = [
     'DroidFreak',
     'Kalgen',
@@ -192,3 +194,4 @@ module.exports = {
     EFunnelGoalType: EFunnelGoalType,
     simpleAllies: new SimpleAllies()
 };
+profiler.registerClass(SimpleAllies, 'SimpleAllies');

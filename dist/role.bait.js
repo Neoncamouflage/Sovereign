@@ -16,6 +16,18 @@ var roleBait = {
         let targetRoom = creep.memory.targetRoom
         let target = Game.getObjectById(creep.memory.targetID);
         const DEP_MAX_CD = 45;
+        if(creep.memory.job == 'scoot'){
+            let targetPos = new RoomPosition(25,32,'W25S25');
+            if(creep.room.name == 'E25N15'){
+                targetPos = new RoomPosition(2,40,'E25N15');
+                if(creep.pos.isEqualTo(targetPos)){
+                    creep.memory.role = 'scout';
+                    return;
+                }
+            }
+            creep.travelTo(targetPos);
+            return;
+        }
         if(creep.memory.job == 'harabi'){
             if(creep.room.name == creep.target.room){
                 if(creep.store.getFreeCapacity() > 0){
@@ -23,6 +35,7 @@ var roleBait = {
                     creep.withdraw(creep.room.storage,RESOURCE_ENERGY);
                 }
                 else{
+
                     creep.travelTo(new RoomPosition(25,25,'E29S7'))
                 }
             }

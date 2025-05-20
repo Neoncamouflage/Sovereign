@@ -18,7 +18,8 @@ var roleSettler = {
         if(settlement && settlement.spawns && settlement.spawns.length){
             let spawn = Game.getObjectById(settlement.spawns[0]);
             if(creep.pos.getRangeTo(spawn) == 1){
-                if(!spawn.spawning && spawn.store.getFreeCapacity(RESOURCE_ENERGY) == 0) spawn.recycleCreep(creep)
+                if(!spawn.spawning && creep.store.getUsedCapacity() == 0) spawn.recycleCreep(creep)
+                else creep.transfer(spawn,RESOURCE_ENERGY)
             }
             else{
                 creep.travelTo(spawn)
