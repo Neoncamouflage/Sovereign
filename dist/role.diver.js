@@ -102,6 +102,14 @@ var roleDiver = {
                 if(creep.pos.getRangeTo(targetStruct) <=3)creep.rangedAttack(targetStruct)
             }
         }
+        if(creep.memory.job == 'claimtest'){
+            let target = new RoomPosition(20,17,'E11S24');
+            if(creep.pos.getRangeTo(target) == 1){
+                creep.claimController(creep.room.target)
+            }{
+                creep.travelTo(target);
+            }
+        }
     }
 };
 

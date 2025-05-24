@@ -97,7 +97,8 @@ var roleMiner = {
                         creep.memory.stay = true;
                     }
                     else{
-                        for(let spot of holding.sources[targetID].openSpots){
+                        let openSpots = holding.sources[targetID].openSpots;
+                        for(let spot of openSpots){
                             let crps = creep.room.lookForAt(LOOK_CREEPS,spot.x,spot.y);
                             //console.log("CHECKING SPOT",JSON.stringify(spot),"CRPS",crps.length,JSON.stringify(crps))
                             if(!crps.length){
@@ -110,6 +111,9 @@ var roleMiner = {
                                 return;
                             }
                         }
+                        //If no open spots, just go to range 2 and wait 
+                        creep.travelTo(new RoomPosition(openSpots[0].x,openSpots[0].y,openSpots[0].roomName),{range:2});
+                        return
                     }     
                 }
                 else{

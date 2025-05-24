@@ -85,13 +85,12 @@ var roleUpgrader = {
         let chainOrigin;
         let prevOrigin = creep.memory.prevOrigin;
         //Prefer to chain energy from terminal, else storage, else use the base chaining system.
-        if(fief.controllerSpots.terminal && creep.room.terminal && creep.room.terminal.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 50000)){
+        if(fief.controllerSpots.terminal && creep.room.terminal && creep.room.terminal.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 30000)){
             chain = 'terminal'
             chainOrigin = creep.room.terminal
             creep.memory.prevOrigin = 'terminal'
         }
-        
-        else if(fief.controllerSpots.storage && creep.room.storage && creep.room.storage.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 50000)){
+        else if(fief.controllerSpots.storage && creep.room.storage && creep.room.storage.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 30000)){
             chain = 'storage'
             chainOrigin = creep.room.storage
             creep.memory.prevOrigin = 'storage'
@@ -99,15 +98,16 @@ var roleUpgrader = {
         else {
             chain = 'base'
         }
+        
         //Always take the upgrade action if we can.
         if(range <=3 && creep.store[RESOURCE_ENERGY] > 0){
             creep.upgradeController(creep.room.controller);
         }
         //A valid chain origin means we execute the logic to pull from that source and chain the energy out to other creeps
         if(chainOrigin){
-            creep.memory.stay = true //Tells otehr creeps not to push us out of this spot
+            creep.memory.stay = true //Tells other creeps not to push us out of this spot
             //Always look if we can move closer, and do so if there's a spot.
-            if(creep.pos.getRangeTo(chainOrigin) !=1 || creep.pos.getRangeTo(creep.room.controller) > 3){
+            if(creep.pos.getRangeTo(chainOrigin) != 1 || creep.pos.getRangeTo(creep.room.controller) > 3){
                 rangeLoop:
                 for(i=1;i<4;i++){
                     for(let spot of fief.controllerSpots[chain][i]){

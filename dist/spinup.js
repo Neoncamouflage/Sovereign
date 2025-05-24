@@ -1,17 +1,11 @@
+//Fires after respawning or initial spawn-in
+
 const spinup = {
     run: function(){
-        global.heap = {};
         Memory.globalReset = Game.time;
         Memory.me = 'NeonCamouflage';
-        Memory.diplomacy = {allies:[
-            'DroidFreak',
-            'Kalgen',
-            'Harabi',
-            'HailHydra',
-            'Mirroar',
-            'Player94',
-            'MadDokMike'
-        ], ceasefire:[], outlaws:[],ledger:[]}
+        Memory.diplomacy = {allies:STARTING_ALLIES, ceasefire:[], outlaws:[],ledger:[]}
+        Memory.ledgerRef = {};
         Memory.kingdom = {};
         Memory.kingdom.holdings = {};
         Memory.kingdom.fiefs = {};

@@ -148,7 +148,7 @@ const roleBuilder = {
             let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
             target = creep.pos.findClosestByRange(targets)
             if(target){creep.memory.target = target.id}
-            else if(creep.memory.job != 'remoteBuilder' && creep.room.storage && creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 50000){
+            else if(creep.memory.job != 'remoteBuilder' && creep.room.storage && creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000){
                 creep.memory.status = 'upgrading'
                 upgrader.run(creep);
                 return;
@@ -175,7 +175,7 @@ const roleBuilder = {
                         creep.travelTo(closestTarget)
                         if(closestTarget.room)creep.memory.targetRoom = closestTarget.room.name;
                     }
-                    else{
+                    else if(!creep.memory.originMove){
                         //console.log(creep.name,'t4')
                         let spawns = Memory.kingdom.fiefs[creep.memory.fief].spawns.map(spw => Game.getObjectById(spw))
                         let tSpawn = creep.pos.findClosestByRange(spawns)

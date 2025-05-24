@@ -1,6 +1,9 @@
 const helper = require('functions.helper');
 const granary = require('granary');
 const profiler = require('screeps-profiler');
+//Spawn waits are how many times a priority spawn was skipped due to no energy. Can adjust behavior
+//{roomName:{hauler:12,claimer:3}}
+let spawnWaits = {};
 const registry = {
     //Associates roles to names
     nameRef: {
@@ -56,6 +59,9 @@ const registry = {
         //Loop through the keys and calculate if we can spawn
         for(let i = 0; i < spawnQueue.length; i++){
             let newCreep = spawnQueue[i];
+            //Set up the spawnwait if we haven't yet
+            if(!spawnWaits[room.name])spawnWaits[room.name] = {}
+            if(!spawnWaits[room.name][newCreep.memory.role]) spawnWaits[room.name][newCreep.memory.role] = 0;
             //If there's a body requested, use it. Otherwise, calculate based on creep role.
             let body;
             let cost;
@@ -104,14 +110,20 @@ const registry = {
                         Memory.hardSpawns[room.name] = Memory.hardSpawns[room.name].filter(creepRequest => creepRequest !== newCreep);
                     }
                     energyRemaining -= cost;
+                    //Reset the wait time
+                    spawnWaits[room.name][newCreep.memory.role] = 0;
                 } 
                 if(spawnTry != OK){
                     chronicle.log(`Failed spawn: Error ${spawnTry}`,'registry',1);
                 }
+                
                 //If no mre free spawns, break
+                
             }
             else{
                 //Focusing on priority. If we can't build the top priority creep yet, break and we wait
+                //Increment how many times this creep has waited
+                spawnWaits[room.name][newCreep.memory.role] += 1;
                 break;
             }
             if(!freeSpawns.length) break;
@@ -447,7 +459,9 @@ function getSkirmisher(energyRemaining,room,plan){
 
 //General hauler - Porter
 function getHauler(energyRemaining,room,fiefCreeps){
-    let parts = room.storage && room.storage.my ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
+    //If at least 3 of the holding roads are done, or less if there's not that many remotes, 2c1m is approved
+    let roadsDone = Object.values(Memory.kingdom.fiefs[room.name].roadsDone||{}).reduce((sum,each)=>sum+each,0) >= Math.min(Object.values(Memory.kingdom.fiefs[room.name].roadsDone||{}).length,3);
+    let parts = roadsDone && room.controller.level >=4 ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
     let partsCap = (()=>{
         if(global.cpuAverage > 90) return 36;
         if(parts.length == 2 || room.controller.level == 8) return 20;
@@ -455,7 +469,8 @@ function getHauler(energyRemaining,room,fiefCreeps){
     })()
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let maxCap = global.cpuAverage > 90 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable/2)
-    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3) ? maxCap : energyRemaining;
+    //Spawn immediately if we have less than 3 haulers or have waited 3 rounds (9 ticks) to spawn
+    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3 && (!spawnWaits[room.name]['hauler'] || spawnWaits[room.name]['hauler'] < 10)) ? maxCap : energyRemaining;
     let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];

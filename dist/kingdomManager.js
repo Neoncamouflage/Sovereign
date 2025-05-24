@@ -42,7 +42,6 @@ const kingdomManager = {
         //Assign creeps to their fiefs and sort by role
         kingdomCreeps = setupCreeps();
         if(!heap.kingdomStatus)heap.kingdomStatus = {};
-        heap.kingdomStatus.activeHoldings = []
         heap.stock = { ...heap.kingdomStatus.wares};
         heap.kingdomStatus.wares = {};
         heap.kingdomStatus.fiefs = {};

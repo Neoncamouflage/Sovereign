@@ -233,6 +233,7 @@ global.setScoutData = function(room,data={},force=false){
         //global.heap.scoreCans.push(... room.find(FIND_SCORE_CONTAINERS).map(can => {return {x:can.pos.x,y:can.pos.y,id:can.id}}))
     }
     global.heap.newScoutData = true;
+    if(heap.scoutList && heap.scoutList[room.name]) delete heap.scoutList[room.name];
 
 }
 

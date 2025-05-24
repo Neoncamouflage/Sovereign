@@ -23,7 +23,10 @@ class Traveler {
             Traveler.circle(creep.pos, "aqua", .3);
             return ERR_TIRED;
         }
+
         destination = this.normalizePos(destination);
+        options.optDest = destination
+        options.fief = creep.memory.fief
         // manage case where creep is nearby destination
         let rangeToDestination = creep.pos.getRangeTo(destination);
         // -- If no offroad/ignore road value is set and the creep is a hauler, mark offroad if it's empty
@@ -111,6 +114,8 @@ class Traveler {
                 return ERR_BUSY;
             }
             state.destination = destination;
+            let creepRole = creep.memory.role; //Logging creep role for custom options
+            options.creepRole = creepRole;
             let cpu = Game.cpu.getUsed();
             let ret = this.findTravelPath(creep.pos, destination, options);
             let cpuUsed = Game.cpu.getUsed() - cpu;
@@ -299,7 +304,7 @@ class Traveler {
                     }
                 }
                 else if (describeRoom(room.name) != ROOM_SOURCE_KEEPER && (options.ignoreCreeps || roomName !== originRoomName)) {
-                    matrix = this.getStructureMatrix(room, options.freshMatrix);
+                    matrix = this.getStructureMatrix(room, options);
                 }
                 else {
                     matrix = this.getCreepMatrix(room);
@@ -334,6 +339,18 @@ class Traveler {
                     return outcome;
                 }
             }
+            //Haulers should follow path plans
+            /*if(options.creepRole == 'hauler' && !Memory.kingdom.fiefs[roomName] && Game.rooms[options.fief].controller.level <=4 
+                && Memory.kingdom.holdings[destRoomName] && Memory.kingdom.holdings[destRoomName].sources){
+                matrix = new PathFinder.CostMatrix();
+                for(let source of Object.values(Memory.kingdom.holdings[destRoomName].sources)){
+                    for(let spot of source.path){
+                        if(spot.roomName == roomName){
+                            matrix.set(spot.x,spot.y,1)
+                        }
+                    }
+                }
+            }*/
             
             return matrix;
         };
@@ -381,6 +398,7 @@ class Traveler {
                 highwayBias = options.highwayBias;
             }
         }
+        
         let ret = Game.map.findRoute(origin, destination, {
             routeCallback: (roomName) => {
                 if (options.routeCallback) {
@@ -459,11 +477,12 @@ class Traveler {
      * @param freshMatrix
      * @returns {any}
      */
-    static getStructureMatrix(room, freshMatrix) {
+    static getStructureMatrix(room, options) {
+        let freshMatrix = options.freshMatrix;
         if (!this.structureMatrixCache[room.name] || (freshMatrix && Game.time !== this.structureMatrixTick)) {
             this.structureMatrixTick = Game.time;
             let matrix = new PathFinder.CostMatrix();
-            this.structureMatrixCache[room.name] = Traveler.addStructuresToMatrix(room, matrix, 1);
+            this.structureMatrixCache[room.name] = Traveler.addStructuresToMatrix(room, matrix, 1,options);
         }
         return this.structureMatrixCache[room.name];
     }
@@ -475,7 +494,7 @@ class Traveler {
     static getCreepMatrix(room) {
         if (!this.creepMatrixCache[room.name] || Game.time !== this.creepMatrixTick) {
             this.creepMatrixTick = Game.time;
-            this.creepMatrixCache[room.name] = Traveler.addCreepsToMatrix(room, this.getStructureMatrix(room, true).clone());
+            this.creepMatrixCache[room.name] = Traveler.addCreepsToMatrix(room, this.getStructureMatrix(room, {freshMatrix:true}).clone());
         }
         return this.creepMatrixCache[room.name];
     }
@@ -486,9 +505,24 @@ class Traveler {
      * @param roadCost
      * @returns {CostMatrix}
      */
-    static addStructuresToMatrix(room, matrix, roadCost) {
+    static addStructuresToMatrix(room, matrix, roadCost,options) {
+        let creepRole = options.creepRole;
+        let destination = options.optDest;
         const terrain = new Room.Terrain(room.name);
         let impassibleStructures = [];
+
+        //Haulers always follow the road path even if it isn't built
+        /*if(creepRole == 'hauler' && !Memory.kingdom.fiefs[room.name] && Game.rooms[options.fief].controller.level <=4 
+            && Memory.kingdom.holdings[destination] && Memory.kingdom.holdings[destination].sources){
+            for(let source of Object.values(Memory.kingdom.holdings[destination].sources)){
+                for(let spot of source.path){
+                    if(spot.roomName == room.name & matrix.get(spot.x,spot.y) != 200){
+                        matrix.set(spot.x,spot.y,1)
+                    }
+                }
+            }
+        }*/
+
         for (let structure of room.find(FIND_STRUCTURES)) {
             if (structure instanceof StructureRampart) {
                 if (!structure.my && !structure.isPublic) {
@@ -512,7 +546,7 @@ class Traveler {
         //Don't step on ally sites
         for (let site of room.find(FIND_CONSTRUCTION_SITES)) {
             if (site.structureType === STRUCTURE_CONTAINER || site.structureType === STRUCTURE_ROAD
-                || site.structureType === STRUCTURE_RAMPART || isFriend(site)) {
+                || site.structureType === STRUCTURE_RAMPART || (!isFriend(site) && !isMe(site.owner.username))) {
                 continue;
             }
             matrix.set(site.pos.x, site.pos.y, 0xff);
@@ -521,6 +555,7 @@ class Traveler {
         for (let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
+
         for(let crp of room.find(FIND_MY_CREEPS)){
             if(crp.memory.stay){
                 matrix.set(crp.pos.x,crp.pos.y,200)

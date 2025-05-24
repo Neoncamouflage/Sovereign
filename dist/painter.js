@@ -256,18 +256,20 @@ const painter = {
                 Game.map.visual.text("👁"+(Game.time-data.l), new RoomPosition(0,6,roomName), {color: '#ffa500 ', fontSize: 6, fontFamily: 'Bridgnorth',align:'left'});
             }
         });
-        for([holdingName,holding] of Object.entries(Memory.kingdom.holdings)){
-            if(holding.sources){
+        let activeHoldings = new Set(heap.kingdomStatus.activeHoldings)
+        let holdingCount = 1;
+        for(let holdingName of heap.sortedHoldings){
+            let holding = Memory.kingdom.holdings[holdingName]
+            if(holding && holding.sources){
                 for(source of Object.values(holding.sources)){
                     if(source.path){
                         Game.map.visual.poly(source.path)
-                        Game.map.visual.text(source.path.length, new RoomPosition(source.path[source.path.length-1].x,source.path[source.path.length-1].y,holdingName), {color: '#FFFFF', fontSize: 6});
+                        Game.map.visual.text(source.path.length, new RoomPosition(source.path[source.path.length-1].x,source.path[source.path.length-1].y,holdingName), {color: '#FFFFFF', fontSize: 6});
                     }
                 }
-                if(!holding.standby){
-                    Game.map.visual.text("🌾", new RoomPosition(49,6,holdingName), {color: '#FFFFF', fontSize: 6,align:'right'});
-                }
+                Game.map.visual.text(`${holdingCount}${activeHoldings.has(holdingName) ? "🌾" : ""}`, new RoomPosition(49,6,holdingName), {color: '#FFFFF', fontSize: 6,align:'right'});
             }
+            holdingCount++;
         }
         //Draw military/scout creeps and missions
         let scouts = kingdomCreeps.scouts || [];

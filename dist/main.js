@@ -31,11 +31,9 @@ module.exports.loop = function () {
     }
     //return;
     profiler.wrap(function() {
-    if (hasRespawned() || !Memory.kingdom){
-        spinup.run();
-    }
     if(!global.heap){
         global.heap = {
+            scoutList:{},
             roomStructs:{},
             fiefs:{},
             alarms:{},
@@ -60,13 +58,18 @@ module.exports.loop = function () {
             funnelTarget:null
         }
     }
+    if (hasRespawned() || !Memory.kingdom){
+        console.log("SPINUP");
+        spinup.run();
+        return;
+    }
     //Reset movement
     Traveler.resetMovementIntents();
     //Check for global reset and action accordingly
     if(Game.time != Memory.globalReset){
-        delete global.Memory;
-        global.Memory = lastMemory;
-        RawMemory._parsed = lastMemory;
+        //delete global.Memory;
+        //global.Memory = lastMemory;
+        //RawMemory._parsed = lastMemory;
         if(Memory.trailingCPU){
             let cpuUte = Memory.trailingCPU.reduce((total, perTick) => {
                 return total + perTick.cpu;
@@ -89,8 +92,8 @@ module.exports.loop = function () {
     }
     else{
         //Force parsing for memhack
-        Memory.rooms;
-        lastMemory = RawMemory._parsed;
+        //Memory.rooms;
+        //lastMemory = RawMemory._parsed;
     }
 
     //Check fiefs 

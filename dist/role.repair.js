@@ -23,6 +23,16 @@ const roleRepair = {
             }
             return;
         }
+        else if(creep.hits < creep.hitsMax && Memory.kingdom.holdings[creep.room.name]){
+            let hostiles = creep.room.find(FIND_HOSTILE_CREEPS).filter(crp => (helper.isSoldier(crp) || crp.getActiveBodyparts(CLAIM) > 0) && !isFriend(crp));
+            if(hostiles.length && !global.heap.alarms[creep.room.name] && (!heap.wardens || !heap.wardens[Memory.kingdom.holdings[creep.room.name].homeFief])){
+                setAlarm({roomName:creep.room.name,alarmType:hostiles[0].owner.username == 'Invader' ? 'invader' : 'creep',hostiles:hostiles,origin:'role.repair'})
+            }
+            if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
+                creep.travelTo(Game.rooms[creep.memory.fief].controller);
+            }
+            return;
+        }
 
         //Set default target room if needed
         if(!targetRoom){
@@ -44,9 +54,29 @@ const roleRepair = {
         if(!creep.memory.target){
             //console.log('T1')
             //If there are roads in this room then find the closest
-            let badRoads = creep.room.find(FIND_STRUCTURES).filter(str=>(creep.room.name == creep.memory.fief && str.structureType == STRUCTURE_CONTAINER && str.hits < str.hitsMax * 0.7) || (str.structureType == STRUCTURE_ROAD && str.hits < str.hitsMax * 0.8) || (![STRUCTURE_CONTAINER,STRUCTURE_ROAD,STRUCTURE_WALL,STRUCTURE_RAMPART].includes(str.structureType) && str.hits < str.hitsMax));
+            let badRoads = [];
+            if(Memory.kingdom.fiefs[creep.room.name] || !Memory.kingdom.holdings[creep.room.name]){
+                badRoads = [...creep.room.find(FIND_STRUCTURES).filter(str=>(creep.room.name == creep.memory.fief && str.structureType == STRUCTURE_CONTAINER && str.hits < str.hitsMax * 0.7) || (str.structureType == STRUCTURE_ROAD && str.hits < str.hitsMax * 0.8) || (![STRUCTURE_CONTAINER,STRUCTURE_ROAD,STRUCTURE_WALL,STRUCTURE_RAMPART].includes(str.structureType) && str.hits < str.hitsMax))];
+                //console.log("REP1",Array.isArray(badRoads),badRoads)
+            }
+            else{
+                let holding = Memory.kingdom.holdings[creep.room.name];
+                for(let source of Object.values(holding.sources)){
+                    for(let spot of source.path.filter(spt => ![0,49].includes(spt.x) && ![0,49].includes(spt.y))){
+                        if(Game.rooms[spot.roomName] == creep.room.name){
+                            let spotCheck = Game.rooms[spot.roomName].lookForAt(LOOK_STRUCTURES,spot.x,spot.y).filter(spt => spt.structureType == STRUCTURE_ROAD);
+                            if(spotCheck[0] && spotCheck[0].hits < spotCheck[0].hitsMax * 0.8){
+                                badRoads.push(spotCheck[0]);
+                            }
+                        }
+                    }
+                }
+                //console.log("REP2",Array.isArray(badRoads), badRoads)
+            }
+            
             if(badRoads.length){
                 target = creep.pos.findClosestByRange(badRoads);
+                if(!target) target = [badRoads[0]]
                 creep.memory.target = target.id;
             }
             //Else find a new room and mark this one repaired if needed

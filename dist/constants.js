@@ -1,5 +1,32 @@
 
-const constants = {        
+const constants = {
+    //Starting allies are other members of CAT for official shards
+    STARTING_ALLIES:['shard0','shard1','shard2','shard3'].includes(Game.shard.name) ? ['HailHydra', 'Kerillian', 'Tyrant7', 'NeverCast', 'MAK777', 'DroidFreak',
+        'Goldeneyes', 'Loop_Cat', 'GT500', 'Bezoka', 'Player94',
+        'griffinpup', 'infdev', 'Zalander', 'Byte4Byte', 'Mirroar', 'mocnyFull'] : [],     
+    LANGUAGE:{
+        //Directions
+        1:'𒍝',
+        2:'𒍻',
+        3:'𒀸',
+        4:'𒀹',
+        5:'𒁹',
+        6:'𒃻',
+        7:'𒌋',
+        8:'𒀺',
+        //Actions
+        flee:'𒊹',
+        combo:'𒁁' ,
+        pickup:'𒉒',
+        dropoff:'𒉔',
+        refill:'𒉓',
+        refill2:'𒌋',
+        idle:'𒂟'
+
+
+    },
+    //How many ticks between spawn checks
+    GLOBAL_SPAWN_INTERVAL:3,
     //Memory Segment Assignment
     SEGMENT_SCOUT_DATA:0,       //All compressed scout data - Likely needs to be multiple segments
     SEGMENT_ROOM_PLANS:1,       //All finished room plans

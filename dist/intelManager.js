@@ -5,19 +5,25 @@ const closedRooms = new Set();
 const intelManager = {
     toScout:[],
     run: function(scouts,fiefs){
-        let scoutData = global.heap.scoutData;
+        let scoutList = heap && heap.scoutList || {}//{scoutRoom:requestingFief}
         const SCOUT_MAX = 7;
         if(!scouts || !fiefs) return;
         //If we have no scouts, order one
-        if(Game.time % 3 == 0){
-            //1 scout per fief untl 3
-            let fiefPick = fiefs[Math.floor(Math.random() * fiefs.length)];
-            if(scouts.length < Math.min(fiefs.length*2,SCOUT_MAX)){
+        if(Game.time % GLOBAL_SPAWN_INTERVAL == 0){
+            let fiefpick;
+            let fiefLimit = fiefs.length == 1 && Game.rooms[fiefs[0]].controller.level < 3 && Object.keys(scoutList).length ? 10 : Math.min(fiefs.length*2,SCOUT_MAX)
+            if(scouts.length < fiefLimit){
+                if(Object.keys(scoutList).length){
+                    fiefpick = Object.values(scoutList)[0]
+                }
+                else{
+                    fiefpick = fiefs[Math.floor(Math.random() * fiefs.length)];
+                }
                 let plan = {
-                    sev:(!scouts.length) || Game.rooms[fiefPick].controller.level > 2 ? 40 : 20,
+                    sev:(scouts.length < 4) && Game.rooms[fiefpick].controller.level <= 2 ? 40 : 20,
                     memory:{
                         role:'scout',
-                        fief:fiefPick,
+                        fief:fiefpick,
                     }
                 };
                 registry.requestCreep(plan)
@@ -119,6 +125,30 @@ const intelManager = {
             let exits = Game.map.describeExits(creep.room.name);
             let portalRooms = [];
             //console.log("Viable exits:",JSON.stringify(exits))
+            if(heap.scoutList && Object.keys(heap.scoutList).length){
+                console.log("Scout list found, prioritizing")
+                let closest;
+                let range = 999;
+                for(let each of Object.keys(heap.scoutList)){
+                    if(scouts.filter(sct => sct.memory.exitTarget && sct.memory.exitTarget.target == each).length){
+                        continue;
+                    }
+                    let route = Game.map.findRoute(creep.room.name, each);
+                    if(route == ERR_NO_PATH) continue;
+                    if(route.length < range){
+                        range = route.length;
+                        closest = route;
+                    }
+                }
+                if(closest){
+                    console.log("CLOSEST",JSON.stringify(closest))
+                    let exitPos = creep.pos.findClosestByRange(closest[0].exit)
+                    creep.memory.exitTarget = {x:exitPos.x,y:exitPos.y,roomName:exitPos.roomName,target:closest[0].room}
+                    console.log(closest[0].room,'is closest. Exit pos:',exitPos)
+                    creep.travelTo(exitPos);
+                    return;
+                }
+            }
             let exitRooms = Object.values(exits).filter(roomName => {
                 //If another scout is already doing it, deny
                 if(scouts.filter(sct => sct.memory.exitTarget && sct.memory.exitTarget.target == roomName).length) return false;
