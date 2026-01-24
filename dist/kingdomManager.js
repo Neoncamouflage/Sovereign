@@ -10,6 +10,7 @@ const roleRemotedefender = require('role.remoteDefender');
 const roleGuard = require('role.guard');
 const roleDiver = require('role.diver');
 const roleRaider =  require('role.raider')
+const roleMarauder = require('role.marauder');
 const roleBait = require('role.bait');
 const roleDuo = require('role.duo');
 const roleRepair = require('role.repair');
@@ -25,6 +26,7 @@ const painter = require('painter');
 const marshal = require('marshal');
 const Traveler = require('Traveler');
 const { simpleAllies } = require('simpleAllies');
+
 const kingdomManager = {
     run:function(){
         // - Assignments -
@@ -35,10 +37,10 @@ const kingdomManager = {
         //Troupe - Group of Lances with the same objective but different tasks (melee duo + ranged support, duo + hauler convoy for power banks, etc.)
         //ArmyManager - Strategic logic vs tactical for Lances/Troupes, mission management level. Handles strength calculations, Lance/Troupe requests/assignments, attack/retreat, etc.
         //SiegeManager - Handles room defense in the event of a siege. Takes control of all room elements, including army units.
-        simpleAllies.initRun();
+        //simpleAllies.initRun();
         //console.log(simpleAllies.currentAlly,JSON.stringify(simpleAllies.allySegmentData))
-        if(!heap.simpleAllies)heap.simpleAllies = {}
-        heap.simpleAllies[simpleAllies.currentAlly] = simpleAllies.allySegmentData;
+        //if(!heap.simpleAllies)heap.simpleAllies = {}
+        //heap.simpleAllies[simpleAllies.currentAlly] = simpleAllies.allySegmentData;
         //Assign creeps to their fiefs and sort by role
         kingdomCreeps = setupCreeps();
         if(!heap.kingdomStatus)heap.kingdomStatus = {};
@@ -86,7 +88,7 @@ const kingdomManager = {
 
         //simpleAllies.requestResource()
         //simpleAllies.requestEcon()
-        simpleAllies.endRun()
+        //simpleAllies.endRun()
         /*for(const settle in Memory.kingdom.settlements){
             return;
             //Figure this out for future settlements

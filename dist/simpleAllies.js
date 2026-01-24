@@ -1,5 +1,5 @@
 const profiler = require('screeps-profiler');
-
+const chronicle = require('chronicle')
 const allies = [
     'DroidFreak',
     'Kalgen',
@@ -9,9 +9,6 @@ const allies = [
     'Player94',
     'MadDokMike'
 ]
-// This is the conventional segment used for team communication
-const allySegmentID = 90;
-
 // This isn't in the docs for some reason, so we need to add it
 const maxSegmentsOpen = 10;
 
@@ -58,7 +55,7 @@ class SimpleAllies {
             this.currentAlly = allies[Game.time % allies.length];
             // Make a request to read the data of the next ally in the list, for next tick
             const nextAllyName = allies[(Game.time + 1) % allies.length];
-            RawMemory.setActiveForeignSegment(nextAllyName, allySegmentID);
+            RawMemory.setActiveForeignSegment(nextAllyName, SEGMENT_SIMPLE_ALLIES);
             // Maybe the code didn't run last tick, so we didn't set a new read segment
             if (!RawMemory.foreignSegment){
                 this.allySegmentData = '{}'
@@ -82,15 +79,11 @@ class SimpleAllies {
      * To call after requests have been made, to assign requests to the next ally
      */
     endRun() {
-        // Make sure we don't have too many segments open
-        if (Object.keys(RawMemory.segments).length >= maxSegmentsOpen) {
-            throw Error('Too many segments open: simpleAllies');
-        }
         const newSegmentData = {
             requests: this.myRequests
         };
-        RawMemory.segments[allySegmentID] = JSON.stringify(newSegmentData);
-        RawMemory.setPublicSegments([allySegmentID]);
+        RawMemory.segments[SEGMENT_SIMPLE_ALLIES] = JSON.stringify(newSegmentData);
+        RawMemory.setPublicSegments([SEGMENT_SIMPLE_ALLIES]);
     }
 
     // Request methods
@@ -190,7 +183,7 @@ class SimpleAllies {
 
 module.exports = {
     allies: allies,
-    allySegmentID: allySegmentID,
+    SEGMENT_SIMPLE_ALLIES: SEGMENT_SIMPLE_ALLIES,
     EFunnelGoalType: EFunnelGoalType,
     simpleAllies: new SimpleAllies()
 };

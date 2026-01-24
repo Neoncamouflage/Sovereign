@@ -1,7 +1,5 @@
 const profiler = require('screeps-profiler');
 const ledger = {
-    GRAN_MAX: 12,
-    //Calculates planned and trailing average energy income/expense for a room
     addPlayer: function(player,options={}){
         let entry = {name:player};
         let entryNumber = Math.max(Object.keys(Memory.ledger),0) + 1;

@@ -1,5 +1,10 @@
 
 const constants = {
+    //Default movement priorities based on role/job
+    PRIORITY_REF:{
+        'hauler':8,
+        'fortifier':7
+    },
     //Starting allies are other members of CAT for official shards
     STARTING_ALLIES:['shard0','shard1','shard2','shard3'].includes(Game.shard.name) ? ['HailHydra', 'Kerillian', 'Tyrant7', 'NeverCast', 'MAK777', 'DroidFreak',
         'Goldeneyes', 'Loop_Cat', 'GT500', 'Bezoka', 'Player94',
@@ -14,29 +19,32 @@ const constants = {
         6:'𒃻',
         7:'𒌋',
         8:'𒀺',
-        //Actions
+        attack:'𒀽',
+        newTarget:'𒀿',
         flee:'𒊹',
         combo:'𒁁' ,
         pickup:'𒉒',
         dropoff:'𒉔',
         refill:'𒉓',
         refill2:'𒌋',
-        idle:'𒂟'
-
-
+        idle:'𒂟',
+        testOutput:'𒋝'
     },
     //How many ticks between spawn checks
     GLOBAL_SPAWN_INTERVAL:3,
     //Memory Segment Assignment
-    SEGMENT_SCOUT_DATA:0,       //All compressed scout data - Likely needs to be multiple segments
-    SEGMENT_ROOM_PLANS:1,       //All finished room plans
-    SEGMENT_ROOM_DEFENSE:2,     //Tower maps and similar defensive CM data
-    SEGMENT_PLAN_GENERATIONS:5, //New room planner generation history
-    SEGMENT_MARKET_INFO:6,      //Market data for outside
-    SEGMENT_LOGGING_ERR:7,      //Error results from functions and modules - Logs that indicate a critical/fatal error
-    SEGMENT_LOGGING_WARN:8,     //Warning results from functions and modules - Logs that indicate unwanted or unexpected results
-    SEGMENT_LOGGING_INFO:9,     //Miscellaneous logging results
-    
+    ALL_SEGMENTS:{
+        SEGMENT_SCOUT_DATA:0,       //All compressed scout data - Likely needs to be multiple segments
+        SEGMENT_ROOM_PLANS:1,       //All finished room plans
+        SEGMENT_ROOM_DEFENSE:2,     //Tower maps and similar defensive CM data
+        SEGMENT_ROOM_COSTMATRIX:3,         //Room cost matrixes for pathing
+        SEGMENT_PLAN_GENERATIONS:5, //New room planner generation history
+        SEGMENT_MARKET_INFO:6,      //Market data for outside
+        SEGMENT_LOGGING_ERR:7,      //Error results from functions and modules - Logs that indicate a critical/fatal error
+        SEGMENT_LOGGING_WARN:8,     //Warning results from functions and modules - Logs that indicate unwanted or unexpected results
+        SEGMENT_LOGGING_INFO:9,     //Miscellaneous logging results
+        SEGMENT_SIMPLE_ALLIES:90,   //Simple allies segment
+    },
     //Room Definitions
     ROOM_STANDARD :      'room',
     ROOM_SOURCE_KEEPER : 'source_keeper',
@@ -103,3 +111,7 @@ for(let firstIngredient in REACTIONS){
 
 //Add all constants to global
 Object.assign(global, constants);
+//Add segments individually to global
+for(let segName of Object.keys(constants.ALL_SEGMENTS)){
+    global[segName] = constants.ALL_SEGMENTS[segName];
+}

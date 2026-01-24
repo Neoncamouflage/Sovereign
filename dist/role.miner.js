@@ -156,7 +156,10 @@ var roleMiner = {
                     if(!cSite.length){
                         let canSpot = creep.room.lookForAt(LOOK_STRUCTURES,creep.pos)
                         if(canSpot.length){
-                            holding.sources[targetID].can = canSpot[0].id
+                            for(let struct of canSpot){
+                                if(struct.structureType == STRUCTURE_CONTAINER) holding.sources[targetID].can = struct.id
+                            }
+                            
                         }
                         else{
                             creep.room.createConstructionSite(creep.pos,STRUCTURE_CONTAINER) 
@@ -170,8 +173,13 @@ var roleMiner = {
             }
         }
         if(creep.repping){
-            if(can && can.store[RESOURCE_ENERGY] > 0){
+            if(can && can.store && can.store[RESOURCE_ENERGY] > 0){
                 creep.withdraw(can,RESOURCE_ENERGY)
+            }
+            else if(can && !can.store){
+                if(can.structureType && can.structureType != STRUCTURE_CONTAINER){
+                    delete holding.sources[targetID].can
+                }
             }
             else{
                 let resSpot = creep.room.lookForAt(LOOK_RESOURCES,creep.pos).filter(res => res.resourceType == RESOURCE_ENERGY);

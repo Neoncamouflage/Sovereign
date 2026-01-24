@@ -11,7 +11,7 @@ const intelManager = {
         //If we have no scouts, order one
         if(Game.time % GLOBAL_SPAWN_INTERVAL == 0){
             let fiefpick;
-            let fiefLimit = fiefs.length == 1 && Game.rooms[fiefs[0]].controller.level < 3 && Object.keys(scoutList).length ? 10 : Math.min(fiefs.length*2,SCOUT_MAX)
+            let fiefLimit = fiefs.length == 1 && Game.rooms[fiefs[0]].controller.level < 3 && Object.keys(scoutList).length ? 6 : Math.min(fiefs.length*2,SCOUT_MAX)
             if(scouts.length < fiefLimit){
                 if(Object.keys(scoutList).length){
                     fiefpick = Object.values(scoutList)[0]
@@ -19,8 +19,9 @@ const intelManager = {
                 else{
                     fiefpick = fiefs[Math.floor(Math.random() * fiefs.length)];
                 }
+                if(!Game.rooms[fiefpick])return;
                 let plan = {
-                    sev:(scouts.length < 4) && Game.rooms[fiefpick].controller.level <= 2 ? 40 : 20,
+                    sev:40,//(scouts.length < 4) && Game.rooms[fiefpick].controller.level <= 2 ? 40 : 20,
                     memory:{
                         role:'scout',
                         fief:fiefpick,
@@ -79,7 +80,8 @@ const intelManager = {
                 //Else if we already know we need to sign the controller, do so
                 else{
                     if(creep.pos.getRangeTo(creep.room.controller) > 1){
-                        creep.travelTo(creep.room.controller,{maxRooms:1});
+                        let retData = creep.travelTo(creep.room.controller,{maxRooms:1});
+                        console.log(JSON.stringify(retData))
                     }
                     else{
                         creep.signController(creep.room.controller,creep.memory.signMessage)

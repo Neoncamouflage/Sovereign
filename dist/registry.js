@@ -32,7 +32,8 @@ const registry = {
         'man-at-arms': 'Man-at-Arms',
         'declaimer'  : 'Duke',
         'guard' : 'Guardsman',
-        'repair' : 'Paver'
+        'repair' : 'Paver',
+        'marauder' : 'Marauder'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -50,9 +51,9 @@ const registry = {
         if(!spawnQueue.length) return;
         let qprint = '';
         for(let each of spawnQueue){
-            qprint+=`${each.memory.role} - ${each.sev}\n`
+            qprint+=`${each.memory.job || each.memory.role} - ${each.sev}\n`
         }
-        console.log(qprint)
+        //console.log(qprint)
         //Sort the queue's keys based on severity
         spawnQueue.sort((a, b) => b.sev - a.sev);
         
@@ -89,7 +90,7 @@ const registry = {
             
             
             //Check if spawn has energy
-            console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
+            //console.log(`Checking if ${room.energyAvailable} is enough for ${cost} to build ${newCreep.body}`)
             if(energyRemaining >= cost){
                 let nextSpawn = freeSpawns.shift();
                 //If spawning, continue
@@ -110,15 +111,23 @@ const registry = {
                         Memory.hardSpawns[room.name] = Memory.hardSpawns[room.name].filter(creepRequest => creepRequest !== newCreep);
                     }
                     energyRemaining -= cost;
-                    //Reset the wait time
-                    spawnWaits[room.name][newCreep.memory.role] = 0;
+                    //Reset the wait times
+                    for(let val of Object.keys(spawnWaits[room.name])){
+                        spawnWaits[room.name][val] = 0;
+                    }
+                    
                 } 
                 if(spawnTry != OK){
-                    chronicle.log(`Failed spawn: Error ${spawnTry}`,'registry',1);
+                    chronicle.log(`Failed spawn: Error ${spawnTry}. Creep:${JSON.stringify(newCreep)}`,'registry',1);
                 }
                 
-                //If no mre free spawns, break
+                //If no more free spawns, break
                 
+            }
+            //If we're trying to spawn something too big for the room capacity, continue to the next one
+            else if(room.energyCapacityAvailable < cost){
+                chronicle.log(`${room.name} - Registry trying to spawn a creep too large for the room.`,'registry',1);
+                continue;
             }
             else{
                 //Focusing on priority. If we can't build the top priority creep yet, break and we wait
@@ -200,47 +209,30 @@ function getBody(energyRemaining,role,room,job='default',fiefCreeps,plan){
                 case 'energyHarvester':
                     return getEHarvester(energyRemaining,room,fiefCreeps)
             }
-            break;
         case 'claimer':
             return getReserver(energyRemaining,room,fiefCreeps);  
-            break;
         case 'miner':
             return getMiner(energyRemaining,plan)
-            break;
         case 'hauler':
             return getHauler(energyRemaining,room,fiefCreeps);
-            break;
         case 'upgrader':
             return getUpgrader(energyRemaining,room,fiefCreeps,job);
-            break;
         case 'sapper':
             return getSapper(energyRemaining,room);
-            break;
         case 'skHarvester':
             return getMHarvester(energyRemaining,room);
-            break;
         case 'archer':
             return getArcher(energyRemaining,room,plan);
-            break;
         case 'skirmisher':
             return getSkirmisher(energyRemaining,room,plan);
-            break;
         case 'pikeman':
             return getPikeman(energyRemaining,room,plan);
-            break;
         case 'settler':
             return getSettler(energyRemaining,room);
         case 'builder':
-            switch(job){
-                case 'fortifier':
-                    return getFortifier(energyRemaining,room,fiefCreeps);
-                default:
-                    return getFortifier(energyRemaining,room,fiefCreeps);
-            }
-            break;
+            return getBuilder(energyRemaining,room,fiefCreeps);
         case 'man-at-arms':
             return getManAtArms(room,plan);
-            break;
     }
     //console.log("GETBODY FAIL FOR",role,room,job,fiefCreeps,JSON.stringify(plan))
     return [[],-1]
@@ -463,14 +455,14 @@ function getHauler(energyRemaining,room,fiefCreeps){
     let roadsDone = Object.values(Memory.kingdom.fiefs[room.name].roadsDone||{}).reduce((sum,each)=>sum+each,0) >= Math.min(Object.values(Memory.kingdom.fiefs[room.name].roadsDone||{}).length,3);
     let parts = roadsDone && room.controller.level >=4 ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
     let partsCap = (()=>{
-        if(global.cpuAverage > 90) return 36;
+        if(global.cpuAverage/Game.cpu.limit > 90) return 36;
         if(parts.length == 2 || room.controller.level == 8) return 20;
         return 18;
     })()
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
     let maxCap = global.cpuAverage > 90 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable/2)
     //Spawn immediately if we have less than 3 haulers or have waited 3 rounds (9 ticks) to spawn
-    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3 && (!spawnWaits[room.name]['hauler'] || spawnWaits[room.name]['hauler'] < 10)) ? maxCap : energyRemaining;
+    let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3 && (!spawnWaits[room.name]['hauler'] || spawnWaits[room.name]['hauler'] < 20)) ? maxCap : energyRemaining;
     let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
     let maxParts = Math.floor(cap / setCost);
     let newBody = [];
@@ -570,9 +562,9 @@ function getReserver(energyRemaining,room,fiefCreeps){
     //return[[],-1]
 }
 
-//Fortifier - Mason
-function getFortifier(energyRemaining,room,fiefCreeps){
-    let parts = [MOVE,CARRY,WORK];
+//Builders - Fortifier/Mason
+function getBuilder(energyRemaining,room,fiefCreeps){
+    let parts = [MOVE,CARRY,CARRY,WORK];
     let partsCost = 0;
     for(each of parts){
         partsCost += BODYPART_COST[each];
@@ -585,41 +577,6 @@ function getFortifier(energyRemaining,room,fiefCreeps){
     newBod.forEach(b => {
         totalCost += BODYPART_COST[b];
     });
-    return [newBod,totalCost]
-}
-
-//Builder - Carpenter
-function getBuilder(energyRemaining,room,fiefCreeps){
-    let nonWork = [MOVE,CARRY]
-    let fullSet = [MOVE,CARRY,WORK,WORK];
-    let fullCost = fullSet.reduce((acc, part) => acc + BODYPART_COST[part], 0);
-    let totalCost = 0;
-    let engAvail = room.energyCapacityAvailable;
-    //First see if we have enough to do even a single full set
-    if(engAvail < fullCost){
-        //If not then we build what we can
-        let newBod = nonWork;
-        let engLeft = engAvail-newBod.reduce((acc, part) => acc + BODYPART_COST[part], 0);
-        let workParts = Math.floor(engLeft/BODYPART_COST[WORK])
-        newBod = newBod.concat(Array(workParts))
-        totalCost = (engAvail-engLeft)+(workParts*BODYPART_COST[WORK])
-        return [newBod,totalCost]
-    }
-    //Get max sets we can afford, capping at the creep body limit
-    let maxSets = Math.min(Math.floor(engAvail/fullCost),Math.floor(MAX_CREEP_SIZE/fullSet.length));
-    //Build the body
-    let newBod = [];
-    for(let i=0;i<maxSets;i++){
-        newBod = newBod.concat(fullSet)
-        totalCost += fullCost
-    }
-    //See if we have space to fill with work parts and energy to do so
-    if(engAvail-totalCost >= BODYPART_COST[WORK] && newBod.length < MAX_CREEP_SIZE){
-        let extraWorks = Math.floor((engAvail-totalCost)/BODYPART_COST[WORK]);
-        newBod = newBod.concat(Array(extraWorks).fill(WORK));
-        totalCost += extraWorks*BODYPART_COST[WORK];
-    }
-    
     return [newBod,totalCost]
 }
 //#endregion

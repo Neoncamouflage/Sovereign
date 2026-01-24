@@ -3,6 +3,7 @@
 const spinup = {
     run: function(){
         Memory.globalReset = Game.time;
+        Memory.spawnTick = Game.time;
         Memory.me = 'NeonCamouflage';
         Memory.diplomacy = {allies:STARTING_ALLIES, ceasefire:[], outlaws:[],ledger:[]}
         Memory.ledgerRef = {};
@@ -12,6 +13,11 @@ const spinup = {
         Memory.kingdom;
         Memory.hardSpawns;
         Memory.test = {};
+        Memory.visuals = {
+            drawStatus:true,
+            drawColor:true,
+            drawIntel:true
+        }
         Memory.kingdom.army = {troupes:[],missions:{},reserve:[]};
         for(const room in Game.rooms){
             let myRoom = Game.rooms[room];
@@ -19,6 +25,7 @@ const spinup = {
                 Memory.kingdom.fiefs[myRoom.name] = {};
             }
         }
+
 
         Memory.scoreWeights = {
             rampTileWeight:2,

@@ -24,6 +24,8 @@ class Traveler {
             return ERR_TIRED;
         }
 
+        options.creepRole = options.creepRole || creep.memory.role;
+        options.creepState = options.creepState || creep.memory.state;
         destination = this.normalizePos(destination);
         options.optDest = destination
         options.fief = creep.memory.fief
@@ -54,6 +56,7 @@ class Traveler {
                 }
                 // -- Likely want to move this to the end, where we resolve intents. No need to call move() if we don't know
                 // -- Make sure nothing we use depends on the move() return value, since that won't be returned
+                creep.status = 'moving';
                 return creep.move(direction);
             }
             return OK;
@@ -114,8 +117,6 @@ class Traveler {
                 return ERR_BUSY;
             }
             state.destination = destination;
-            let creepRole = creep.memory.role; //Logging creep role for custom options
-            options.creepRole = creepRole;
             let cpu = Game.cpu.getUsed();
             let ret = this.findTravelPath(creep.pos, destination, options);
             let cpuUsed = Game.cpu.getUsed() - cpu;
@@ -164,8 +165,10 @@ class Traveler {
             y: creep.pos.y,
             roomName: creep.room.name,
             direction:nextDirection,
-            priority:options.priority||0
+            priority:options.priority||0,
+            role:creep.memory.role
         }
+        creep.status = 'moving';
         return creep.move(nextDirection);
     }
     /**
@@ -303,11 +306,11 @@ class Traveler {
                         Traveler.addCreepsToMatrix(room, matrix);
                     }
                 }
-                else if (describeRoom(room.name) != ROOM_SOURCE_KEEPER && (options.ignoreCreeps || roomName !== originRoomName)) {
+                else if (options.ignoreCreeps || roomName !== originRoomName) {
                     matrix = this.getStructureMatrix(room, options);
                 }
                 else {
-                    matrix = this.getCreepMatrix(room);
+                    matrix = this.getCreepMatrix(room,options);
                 }
                 if (options.obstacles) {
                     matrix = matrix.clone();
@@ -357,8 +360,8 @@ class Traveler {
         let ret = PathFinder.search(origin, { pos: destination, range: options.range }, {
             maxOps: options.maxOps,
             maxRooms: options.maxRooms,
-            plainCost: options.offRoad ? 1 : options.ignoreRoads ? 1 : 2,
-            swampCost: options.offRoad ? 1 : options.ignoreRoads ? 5 : 10,
+            plainCost: options.offRoad ? 1 : options.ignoreRoads ? 1 : (options.creepRole == 'hauler' && options.creepState != 'refill') ? 5 : 2,
+            swampCost: options.offRoad ? 1 : options.ignoreRoads ? 5 : (options.creepRole == 'hauler' && options.creepState != 'refill') ? 25 : 10,
             roomCallback: callback,
         });
         if (ret.incomplete && options.ensurePath) {
@@ -481,7 +484,21 @@ class Traveler {
         let freshMatrix = options.freshMatrix;
         if (!this.structureMatrixCache[room.name] || (freshMatrix && Game.time !== this.structureMatrixTick)) {
             this.structureMatrixTick = Game.time;
-            let matrix = new PathFinder.CostMatrix();
+            let matrix;
+            if(options.creepRole == 'hauler' && options.creepState != 'refill'){
+                if(heap.travelMatrixes && heap.travelMatrixes[room.name]){
+                    matrix = heap.travelMatrixes[room.name].clone()
+                }
+                else if(heap.matrixes && heap.matrixes[room.name]){
+                    matrix = heap.matrixes[room.name].clone()
+                }
+                else{
+                    matrix = new PathFinder.CostMatrix();
+                }
+            }
+            else{
+                matrix = new PathFinder.CostMatrix();
+            }
             this.structureMatrixCache[room.name] = Traveler.addStructuresToMatrix(room, matrix, 1,options);
         }
         return this.structureMatrixCache[room.name];
@@ -491,10 +508,11 @@ class Traveler {
      * @param room
      * @returns {any}
      */
-    static getCreepMatrix(room) {
+    static getCreepMatrix(room,options) {
         if (!this.creepMatrixCache[room.name] || Game.time !== this.creepMatrixTick) {
             this.creepMatrixTick = Game.time;
-            this.creepMatrixCache[room.name] = Traveler.addCreepsToMatrix(room, this.getStructureMatrix(room, {freshMatrix:true}).clone());
+            options.freshMatrix = true;
+            this.creepMatrixCache[room.name] = Traveler.addCreepsToMatrix(room, this.getStructureMatrix(room, options).clone());
         }
         return this.creepMatrixCache[room.name];
     }
@@ -507,6 +525,7 @@ class Traveler {
      */
     static addStructuresToMatrix(room, matrix, roadCost,options) {
         let creepRole = options.creepRole;
+        let creepState = options.creepState;
         let destination = options.optDest;
         const terrain = new Room.Terrain(room.name);
         let impassibleStructures = [];
@@ -586,13 +605,13 @@ class Traveler {
         return matrix;
     }
     /**
-     * return the movement intent object for a creep, containing destination x/y, direction, and roomName
+     * reset movement intents for relaying
      * @param creep
      * @returns {any}
      */
     static resetMovementIntents(){
         this.movementIntents = {};
-        if(global.heap)global.heap.relays = [];
+        if(global.heap)global.heap.relays = {};
     }
     /**
      * add creep movement intents to be executed after conflict resolution
@@ -627,14 +646,15 @@ class Traveler {
                 
             }
             //Empty haulers without a task or picking up
-            if((!each.memory.task || each.memory.state == 'pickup') && each.store.getUsedCapacity() == 0){
+            if(each.store.getUsedCapacity() == 0){
                 emptyHaulers.push(each);
                 emptyPos[`${each.pos.x},${each.pos.y}`] = each.id;
             }
         }
         //For each mission creep, check if there's an adjacent empty on the way with same size carry. If so, swap missions and cargo.
         for(let each of missionHaulers){
-            if(!global.heap.relays || global.heap.relays.includes(each.id) || !each.memory._trav || !each.memory._trav.path) continue;
+            
+            if(!global.heap.relays || (each.id in heap.relays) || !each.memory._trav || !each.memory._trav.path) continue;
             let path = each.memory._trav.path.substr(1);
             let nextDirection = parseInt(path[0], 10);
             let selfStore = each.store.getUsedCapacity();
@@ -656,16 +676,19 @@ class Traveler {
             const ax = [0, 0, 1, 1, 1, 0, -1, -1, -1];
             const ay = [0, -1, -1, 0, 1, 1, 1, 0, -1];
             let nextKey = `${each.pos.x + ax[nextDirection]},${each.pos.y + ay[nextDirection]}`;
-
+            
             if(!emptyPos[nextKey]) continue;
             let targetCreep = Game.getObjectById(emptyPos[nextKey]);
-            if(targetCreep.store.getFreeCapacity() != selfStore) continue;
-            if(global.heap.relays.includes(targetCreep.id)) continue;
+            let otherStore = targetCreep.store.getUsedCapacity();
+            let eachState = each.memory.state;
+            let otherState = targetCreep.memory.state;
+            if(targetCreep.store.getFreeCapacity() < selfStore || targetCreep.store.getCapacity() != each.store.getCapacity()) continue;
+            if(targetCreep.id in heap.relays) continue;
             let fullMission = heap.shipping[each.memory.fief].requests[each.memory.task];
             if(!fullMission) continue
             let target = Game.getObjectById(fullMission.targetID);
             if(!target) continue;
-            if(getTileDistance(each.pos,target.pos) <= 3) continue;
+            if(getTileDistance(each.pos,target.pos) <= 2) continue;
             let emptyMission = targetCreep.memory.task ? global.heap.shipping[targetCreep.memory.fief].requests[targetCreep.memory.task] : null;
             /*console.log("SWAPPING")
             console.log("Full:",JSON.stringify(fullMission))
@@ -680,12 +703,10 @@ class Traveler {
                 emptyMission.assignedHaulers[each.id] = emptyMission.assignedHaulers[targetCreep.id]
                 //Remove old creep
                 delete emptyMission.assignedHaulers[targetCreep.id]
-                each.memory.state = 'pickup'
             }
             //If no empty mission, just clear our task
             else{
                 delete each.memory.task;
-                each.memory.state = 'idle'
             }
 
             //Give our mission to the empty
@@ -693,14 +714,15 @@ class Traveler {
             //Copy assignment to the empty and remove us
             fullMission.assignedHaulers[targetCreep.id] = fullMission.assignedHaulers[each.id];
             delete fullMission.assignedHaulers[each.id]
-            targetCreep.memory.state = 'dropoff'
-            
+            targetCreep.memory.state = eachState;
+            each.memory.state = otherState;
 
             //Swap store
             each.transfer(targetCreep,fullMission.resourceType);
             //Set relay so the rest of the code knows they've already done it
-            global.heap.relays.push(each.id);
-            global.heap.relays.push(targetCreep.id);
+            //Assign values to tell them what their new store amount is
+            global.heap.relays[each.id] = otherStore;
+            global.heap.relays[targetCreep.id] = selfStore;
             /*console.log("END SWAP")
             console.log("Full:",JSON.stringify(fullMission))
             console.log("Empty:",JSON.stringify(emptyMission))
@@ -716,6 +738,98 @@ class Traveler {
      * @returns {any}
      */
     static resolveMovement(){
+        let creeps = Object.keys(this.movementIntents).map(creepName => Game.creeps[creepName])
+        //Sort creeps descending based on priority
+        creeps.sort((a, b) => (b.memory.priority || PRIORITY_REF[b.memory.role] || 0) - (a.memory.priority || PRIORITY_REF[a.memory.role] || 0))
+
+        //Go through the creeps from highest priority to lowest
+        let conflictTargets = {};
+        for(let creep of creeps){
+            //If this creep was already shoved, skip it
+            if(creep.shoved)continue;
+            let creepData = this.movementIntents[creep.name];
+            const dx = [0, 0, 1, 1, 1, 0, -1, -1, -1];
+            const dy = [0, -1, -1, 0, 1, 1, 1, 0, -1];
+            let nextX = creepData.x + dx[creepData.direction];
+            let nextY = creepData.y + dy[creepData.direction];
+            let roomName = creepData.roomName;
+            //Return if dealing with a room edge
+            if(nextX > 49 || nextY > 49 || nextX < 0 || nextY < 0) continue;
+
+
+            //Check if there's a creep at its target position
+            //console.log(roomName)
+            let blocker
+            try{blocker = Game.rooms[roomName].lookForAt(LOOK_CREEPS,nextX,nextY)[0];}
+            catch(e){
+                console.log('Traveler error',e,roomName);
+                console.log(JSON.stringify(creepData))
+                console.log(creep)
+                continue;
+            }
+            //If there is a non-moving blocker, and it isn't fatigued, request to shove
+            if(blocker && blocker.my && !this.movementIntents[blocker.name] && blocker.fatigue == 0 && !blocker.shoved){
+                //console.log("SHOVIN")
+                let shoveResult = creep.shove(blocker);
+                //console.log("SHOVE RESULT",shoveResult)
+                if(shoveResult){
+                    creep.say(LANGUAGE.testOutput)
+                    //If shove was successful, add the resulting creep (at the end of the shove chain) to the conflict check
+                    conflictTargets[`${roomName},${nextX},${nextY}`] = conflictTargets[`${roomName},${nextX},${nextY}`] || [];
+                    conflictTargets[`${roomName},${nextX},${nextY}`].push(shoveResult)
+                }
+                //If not, we cancel this move order
+                else{
+                    creep.cancelOrder('move');
+                    delete this.movementIntents[creep.name];
+                }
+
+            }
+            //If no blocker, check if it's a hauler. If so, add its move to the conflict check
+            else if(!blocker && creep.memory.role == 'hauler'){
+                conflictTargets[`${roomName},${nextX},${nextY}`] = conflictTargets[`${roomName},${nextX},${nextY}`] || [];
+                conflictTargets[`${roomName},${nextX},${nextY}`].push(creep)
+            }
+        };
+
+        //Check all conflicts to set priority. Shoves > Energy Haulers > Other Haulers > All Others
+        for(let spot of Object.keys(conflictTargets)){
+            let creepList = conflictTargets[spot];
+            if(creepList.length > 1){
+                //If the creep has the .shoved property, it has priority
+                let shovedCreep = creepList.find(creep => creep.shoved);
+                if(shovedCreep){
+                    creepList.forEach(creep => {
+                        if(!creep.shoved) creep.cancelOrder('move');
+                    });
+                    continue;
+                }
+                //Otherwise sort by priority: energy > other resources > empty
+                let sortedCreeps = creepList.slice().sort((a, b) => {
+                    let aEnergy = a.store.getUsedCapacity(RESOURCE_ENERGY);
+                    let bEnergy = b.store.getUsedCapacity(RESOURCE_ENERGY);
+                    let aTotal = a.store.getUsedCapacity();
+                    let bTotal = b.store.getUsedCapacity();
+                    
+                    //Energy haulers first
+                    if(aEnergy > 0 && bEnergy === 0) return -1;
+                    if(bEnergy > 0 && aEnergy === 0) return 1;
+                    
+                    //Then other filled haulers
+                    if(aTotal > 0 && bTotal === 0) return -1;
+                    if(bTotal > 0 && aTotal === 0) return 1;
+                    
+                    //If same category, doesn't matter
+                    return 0;
+                });
+                //Keep the highest priority creep, cancel the rest
+                for(let i = 1; i < sortedCreeps.length; i++){
+                    sortedCreeps[i].cancelOrder('move');
+                }
+            }
+        }
+    }
+    static resolveMovementOld(){
         /*
         x: destination.x,
         y: destination.y,
@@ -724,6 +838,7 @@ class Traveler {
         */
 
         //For every creep that wants to move this tick
+        let conflictTargets = {};
         Object.keys(this.movementIntents).forEach(creep=>{
             let creepData = this.movementIntents[creep];
             const dx = [0, 0, 1, 1, 1, 0, -1, -1, -1];
@@ -752,8 +867,26 @@ class Traveler {
                     let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
                 }
             }
+            //If no blocker, check if it's a hauler. If so, add its move.
+            else if(Game.creeps[creep].memory.role == 'hauler'){
+                conflictTargets[`${roomName},${nextX},${nextY}`] = conflictTargets[`${roomName},${nextX},${nextY}`] || [];
+                conflictTargets[`${roomName},${nextX},${nextY}`].push(Game.creeps[creep])
+            }
             //Second check for if it is going to move, but will generate fatigue. So that slow creeps will swap with fast creeps
         });
+        //Check all hauler conflicts to let energy get priority
+        for(let spot of Object.keys(conflictTargets)){
+            let creepList = conflictTargets[spot];
+            if(creepList.length == 2){
+                //If one is empty and one is not, stop the empty from moving
+                if(creepList[0].store.getUsedCapacity()>0 && creepList[1].store.getUsedCapacity()==0){
+                    creepList[1].cancelOrder('move')
+                }
+                else if(creepList[1].store.getUsedCapacity()>0 && creepList[0].store.getUsedCapacity()==0){
+                    creepList[0].cancelOrder('move')
+                }
+            }
+        }
     }
     /**
      * serialize a path, traveler style. Returns a string of directions. 
@@ -864,7 +997,7 @@ profiler.registerClass(Traveler, 'Traveler');
 // need to repath to often or they aren't finding valid paths, it can sometimes point to problems elsewhere in your code
 const REPORT_CPU_THRESHOLD = 1000;
 const DEFAULT_MAXOPS = 20000;
-const DEFAULT_STUCK_VALUE = 2;
+const DEFAULT_STUCK_VALUE = 5;
 const STATE_PREV_X = 0;
 const STATE_PREV_Y = 1;
 const STATE_STUCK = 2;

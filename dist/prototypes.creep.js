@@ -1,5 +1,6 @@
 const granary = require('granary');
 const registry = require('registry');
+const Traveler = require('Traveler')
 /*
 Prototype ToDO
 take - Withdraws a resource from a structure, defaults to all
@@ -211,7 +212,7 @@ Creep.prototype.emptyStore = function () {
     let storage = this.room.storage;
     let terminal = this.room.terminal;
     let fief = Game.rooms[this.memory.fief];
-    if(Memory.kingdom.fiefs[this.room.name] && this.store.getUsedCapacity(RESOURCE_ENERGY) > 0){
+    /*if(Memory.kingdom.fiefs[this.room.name] && this.store.getUsedCapacity(RESOURCE_ENERGY) > 0){
         let fills = this.room.find(FIND_MY_STRUCTURES,{filter: 
             (structure) => [STRUCTURE_SPAWN,STRUCTURE_EXTENSION].includes(structure.structureType) && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
         });
@@ -225,8 +226,10 @@ Creep.prototype.emptyStore = function () {
             }
             return;
         }
-    }
+    }*/
+
     if(!Memory.kingdom.fiefs[this.room.name] && (fief.storage || fief.terminal)){
+
         if(fief.storage){
             this.travelTo(fief.storage)
         }
@@ -238,7 +241,7 @@ Creep.prototype.emptyStore = function () {
     else if(this.room.name != this.memory.fief){
         this.travelTo(new RoomPosition(25,25,this.memory.fief))
     }
-    else if([RESOURCE_MIST,RESOURCE_METAL,RESOURCE_BIOMASS,RESOURCE_SILICON,...MINERALS].includes(Object.keys(this.store)[0])){
+    else if(Object.keys(this.store)[0] != RESOURCE_ENERGY){
         if(terminal && terminal.store.getFreeCapacity() > 0){
             if(this.pos.getRangeTo(terminal) > 1){
                 this.travelTo(terminal);
@@ -260,6 +263,9 @@ Creep.prototype.emptyStore = function () {
                     break;
                 }
             }
+        }
+        else{
+            this.drop(Object.keys(this.store)[0])
         }
     }
     else if(storage || terminal){
@@ -313,9 +319,165 @@ Creep.prototype.dumpAndGet = function (target,resourceType) {
     }
 };
 
+//Attempts to shove the target creep. Returns creep at the end of the shove chain
+Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
+    depth++
+    console.log("Pushing",targetCreep,"Origin",originSpace,"Depth",depth,"JSON",JSON.stringify(targetCreep))
+    if(depth > 10){
+        console.log("SHOVE ERROR, DEPTH EXCEEDED")
+        return false;
+    }
+    let secondPos;
+    let secondCheck;
+    //Reference for how far/close creeps want to be from their target
+    rangeRef = {
+        'builder':3,
+        'upgrader':3,
+        'repair':3,
+        'miner':1,
+        'harvester':1,
+        'claimer':1,
+        'diver':3
+    }
+    //Check for travel data to avoid just shoving along the path it wants to go next
+    let travelData = this.memory._trav
+    if (!originSpace && travelData && travelData.path && travelData.path.length > 1) {
+        secondPos = Traveler.positionAtDirection(targetCreep.pos,travelData.path[1]);
+    }
+
+    //If no origin space, this is the first shove, so we set it
+    if(!originSpace)originSpace = this.pos
+    //Priority spots we try first, the other of the rest
+    let priorityCreepSpots = []
+    let otherSpots = []
+    let otherCreepSpots = []
+    if(!targetCreep){
+        console.log("BAD PUSH, NO CREEP",this.name,this.pos,depth);
+        return false;
+    }
+    //Creeps that want to stay in a specific area have a target in memory.
+    let otherTarget = targetCreep.memory && Game.getObjectById(targetCreep.memory.target);
+    let preferredRange = rangeRef[targetCreep.memory.role] || 3
+
+    //Fill arrays with every available space around the target creep
+    for(let x=-1;x<=1;x++){
+        tileLoop:
+        for(let y=-1;y<=1;y++){
+            if((x==0 && y==0))continue;
+            let newX = targetCreep.pos.x+x;
+            let newY = targetCreep.pos.y+y;
+            console.log(x,newX,y,newY,this.room.name)
+            let newPos = new RoomPosition(newX,newY,this.room.name)
+            
+            //No moving to room edges
+            if(newX < 1 || newY < 1 || newX > 48 || newY > 48)continue;
+            let tileStuff = this.room.lookAt(newX,newY);
+            let tileCreep;
+            for(let each of tileStuff){
+                //Skip walls
+                if(each.type == 'terrain' && each.terrain == 'wall')continue tileLoop;
+                //If it's a non-origin space creep and it was already shoved, we can't move there, so skip
+                if(each.type == 'creep' && !newPos.isEqualTo(originSpace) && each.creep.shoved)continue tileLoop;
+                //If it's a fatigued creep, we can't move there, so we skip
+                if(each.type == 'creep' && each.creep.fatigue != 0)continue tileLoop;
+                //If it's a structure we can't walk on, skip
+                if(each.type == 'structure' && (![STRUCTURE_ROAD,STRUCTURE_CONTAINER].includes(each.structure.structureType) 
+                    || (each.structure.structureType == STRUCTURE_RAMPART && !each.structure.my && !each.structure.isPublic)))continue tileLoop;
+                //If it's a non-origin space creep and it was not shoved, assign the creep if it'sm ine
+                if(each.type == 'creep' && each.creep.my && !newPos.isEqualTo(originSpace)) tileCreep = each.creep;
+            }
+            //If it's the next step in the shover's path, avoid for now
+            if(secondPos && newPos.isEqualTo(secondPos)){
+                secondCheck = tileCreep || 'empty';
+                continue;
+            }
+            
+            //Add to arrays based on range and creep presence. Creep arrays get an object so we can sort by tileCreep priority
+            if(otherTarget && newPos.getRangeTo(otherTarget) > preferredRange){
+                if(tileCreep && !Traveler.getMovementIntent(tileCreep.name)){
+                    otherCreepSpots.push(tileCreep)
+                }
+                else{
+                    otherSpots.push(newPos)
+                }
+            }
+            else{
+                //If we find a priority spot with no creep or the creep intends to move, we just move to it.
+                //Otherwise we add it to the list
+                if(tileCreep && !Traveler.getMovementIntent(tileCreep.name)){
+                    priorityCreepSpots.push(tileCreep)
+                }
+                else{
+                    //console.log("Priority spot found, moving to it",newPos,targetCreep)
+                    //Update shoved status, move this creep and the target, and return the shoved creep
+                    this.move(this.pos.getDirectionTo(targetCreep.pos))
+                    targetCreep.move(targetCreep.pos.getDirectionTo(newPos));
+                    targetCreep.shoved = true;
+                    return targetCreep;
+                }
+            }
+        }
+    }
+    //Sort the creep arrays by priority in ascending order
+    priorityCreepSpots.sort((a, b) => (a.memory.priority || PRIORITY_REF[a.memory.role] || 0) - (b.memory.priority || PRIORITY_REF[b.memory.role] || 0))
+    otherCreepSpots.sort((a, b) => (a.memory.priority || PRIORITY_REF[a.memory.role] || 0) - (b.memory.priority || PRIORITY_REF[b.memory.role] || 0))
+    //Try to shove the priority creeps
+    for(let priorityCreep of priorityCreepSpots){
+        let shoveResult = targetCreep.shove(priorityCreep,originSpace,depth);
+        //If we got a result, the targetCreep shoved and moved. We update the target's shove status and move this creep
+        if(shoveResult){
+            this.move(this.pos.getDirectionTo(targetCreep.pos))
+            targetCreep.shoved = true;
+            return shoveResult;
+        }
+    }
+    //If all failed, we check for other open spots to move to
+    //If available, just pick the first one
+    if(otherSpots.length){
+        //console.log("Other open spot found, moving to it",targetCreep.pos,targetCreep)
+        targetCreep.move(otherSpots[0])
+        this.move(this.pos.getDirectionTo(targetCreep.pos))
+        targetCreep.shoved = true;
+        return targetCreep;
+    }
+    //Finally, we check for other creeps to shove
+    for(let otherCreep of otherCreepSpots){
+        //console.log("Shove found",otherCreep,targetCreep)
+        let shoveResult = targetCreep.shove(otherCreep,originSpace,depth);
+        //If we got a result, the targetCreep shoved and moved. We update the target's shove status and move this creep
+        if(shoveResult){
+            this.move(this.pos.getDirectionTo(targetCreep.pos))
+            targetCreep.shoved = true;
+            return shoveResult;
+        }
+    }
+    //Failed to shove anywhere
+    //Final check to see if we can go to the next in the path, if that was a delayed option
+    if(secondCheck){
+        //console.log("Next in path open spot found, moving to it",secondPos,targetCreep)
+        if(secondCheck == 'empty'){
+            targetCreep.move(targetCreep.pos.getDirectionTo(secondPos))
+            targetCreep.shoved = true;
+            return targetCreep;
+        }
+        else{
+            //console.log("Next in path shove found",secondCheck,targetCreep)
+            let shoveResult = targetCreep.shove(secondCheck,originSpace,depth);
+            //If we got a result, the targetCreep shoved and moved. We update the target's shove status and move this creep
+            if(shoveResult){
+                this.move(this.pos.getDirectionTo(targetCreep.pos))
+                targetCreep.shoved = true;
+                return shoveResult;
+            }
+        }
+    }
+    return false
+}
+
 //Tows another creep to a target location
 Creep.prototype.tow = function (targetCreep,targetLocation) {
     let isObject = targetLocation instanceof RoomObject;
+    let RoomPosition = targetLocation instanceof RoomPosition;
     if(this.pos.getRangeTo(targetCreep)==1){
         //If it's an object, then we just want to be in range 1 of it:
         if(isObject){
@@ -340,6 +502,8 @@ Creep.prototype.tow = function (targetCreep,targetLocation) {
                 this.travelTo(targetLocation,{ignoreCreeps:false,range:0})
             }
         }
+        targetCreep.move(this);
+        this.pull(targetCreep);
     }
     //If not in range, go to the target creep
     else{

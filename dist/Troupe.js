@@ -494,7 +494,7 @@ function settleLogic(troupe){
             if(claimer)claimer.suicide();
 
             //Clean out enemy structures that might be here except for roads, and terminals/storage that have resources.
-            let killStructs = room.find(FIND_STRUCTURES).filter(str => (![STRUCTURE_CONTROLLER,STRUCTURE_STORAGE,STRUCTURE_TERMINAL,STRUCTURE_ROAD].includes(str.structureType) || (str.store && str.store.getUsedCapacity() ==0)));
+            let killStructs = room.find(FIND_STRUCTURES).filter(str => !str.my && ((![STRUCTURE_CONTROLLER,STRUCTURE_STORAGE,STRUCTURE_TERMINAL,STRUCTURE_ROAD].includes(str.structureType) || (str.store && str.store.getUsedCapacity() ==0))));
             for(let each of killStructs){
                 each.destroy();
             }

@@ -112,6 +112,7 @@ var roleBait = {
             return;
         }
         if(creep.memory.job == 'deposit'){
+            if(!creep.memory.workParts)creep.memory.workParts = creep.getActiveBodyparts(WORK);
             if(creep.room.name != targetRoom){
                 creep.travelTo(new RoomPosition(27,28,targetRoom),{range:1});
                 return;
@@ -129,7 +130,7 @@ var roleBait = {
                 if(creep.pos.getRangeTo(target) > 1){
                     creep.travelTo(target,{range:1})
                 }
-                else if(!target.cooldown && creep.store.getFreeCapacity() > 0){
+                else if(!target.cooldown && creep.store.getFreeCapacity() > creep.memory.workParts){
                     creep.harvest(target);
                     creep.memory.stay = true;
                 }

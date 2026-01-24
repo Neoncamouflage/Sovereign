@@ -66,7 +66,21 @@ global.setDiplomacy = function(type,username){
 }
 
 global.isMe = function(target){
-    return target.toLowerCase() == Memory.me.toLowerCase()
+    if(!target){
+        chronicle.log(`Failed isMe check as target is falsy: ${target}`,isMe,1);
+        return false;
+    }
+    if(target instanceof String){
+        return target.toLowerCase() == Memory.me.toLowerCase()
+    }
+    else if(target.username){
+        return target.username.toLowerCase() == Memory.me.toLowerCase()
+    }
+    else if(target.owner && target.owner.username){
+        return target.owner.username.toLowerCase() == Memory.me.toLowerCase()
+    }
+    
+    
 }
 
 global.getDiplomacy = function(username){
@@ -171,70 +185,75 @@ global.getScoutData = function(roomName=false){
         };
     }
 }
-global.setScoutData = function(room,data={},force=false){
-    //console.log("Setting data for",room,JSON.stringify(data))
-    let scoutData = global.heap.scoutData;
-    //If first tick and no scout data, return
-    if(!scoutData) return;
-    //If room is a room name, add custom data directly.
-    if(typeof room === 'string'){
-        scoutData[room] = data;
-        return;
-    }
-    if(!(room instanceof Room)){
-        console.log("Room name or object must be provided for scout data");
-        return;
-    }
-    //Get type of room to see if it's SK. If so, check for strongholds and add to the avoid list if needed.
-    let parsedType = describeRoom(room.name);
-    if(parsedType == ROOM_SOURCE_KEEPER && !Memory.travelAvoid[room.name]){
-        let structs = room.find(FIND_HOSTILE_STRUCTURES).filter(str => str.structureType == STRUCTURE_INVADER_CORE);
-        if(structs.length){
-            let core = structs[0];
-            let total = core.ticksToDeploy || 0;
-            if(core.effects.length){
-                let coll = core.effects.filter(eff => eff.effect == EFFECT_COLLAPSE_TIMER);
-                if(coll.length) total += coll[0].ticksRemaining;
-                Memory.travelAvoid[room.name] = {expiry:Game.time+total,type:'stronghold'}
+global.setScoutData = function(room, data = {}, force = false) {
+    try {
+        if (!global.heap || !global.heap.scoutData) return;
+        let scoutData = global.heap.scoutData;
+
+        if (typeof room === 'string') {
+            scoutData[room] = data;
+            return;
+        }
+
+        if (!(room instanceof Room)) {
+            console.log("Room name or object must be provided for scout data");
+            return;
+        }
+
+        let parsedType = describeRoom(room.name);
+        if (parsedType == ROOM_SOURCE_KEEPER) {
+
+            if (!Memory.travelAvoid) {
+                Memory.travelAvoid = {};
+            }
+            if (!Memory.travelAvoid[room.name]) {
+                let core = room.find(FIND_HOSTILE_STRUCTURES, { filter: s => s.structureType == STRUCTURE_INVADER_CORE })[0];
+                if (core) {
+                    let total = core.ticksToDeploy || 0;
+
+                    if (core.effects && core.effects.length) {
+                        let collapseEffect = core.effects.find(e => e.effect == EFFECT_COLLAPSE_TIMER);
+                        if (collapseEffect) {
+                            total += collapseEffect.ticksRemaining;
+                        }
+                    }
+                    Memory.travelAvoid[room.name] = { expiry: Game.time + total, type: 'stronghold' };
+                }
             }
         }
-    }
-    let [roomType,ownerType,owner] = helper.getRoomType(room);
-    let sources = room.find(FIND_SOURCES).map(src => {return {x:src.pos.x,y:src.pos.y,id:src.id}})
-    let mineral = room.find(FIND_MINERALS)[0];
-    let towerPositions = room.find(FIND_HOSTILE_STRUCTURES,{filter:{structureType:STRUCTURE_TOWER}}).map(tow => {return {x:tow.pos.x,y:tow.pos.y}});
-    /**
-     * roomName: r
-     * lastRecord: l
-     * roomType: t
-     * ownerType: o
-     * owner: w
-     * controller: c
-     * controllerLevel: u
-     * towers: y
-     * sources: s
-     * mineral: m
-     * exits: e
-     */
-    global.heap.scoutData[room.name] = {
-        r : room.name || '',
-        l : Game.time || '',
-        t: roomType || '',
-        ...(ownerType && { o: ownerType }),
-        ...(ownerType && owner && { w: owner }),
-        ...(room.controller && { c: room.controller.pos }),
-        ...(roomType === 'fief' && room.controller.level && { u: room.controller.level }),
-        ...(towerPositions.length && { y: towerPositions }),
-        ...(sources && { s: sources }),
-        m: mineral ? {x:mineral.pos.x,y:mineral.pos.y,type:mineral.mineralType} : ''
-    }
-    if(Game.shard.name == 'shardSeason'){
-        //global.heap.scoutData[room.name].scoreCollector = room.find(FIND_SCORE_COLLECTORS).map(coll => {return {x:coll.pos.x,y:coll.pos.y,id:coll.id}})
-        //global.heap.scoreCans.push(... room.find(FIND_SCORE_CONTAINERS).map(can => {return {x:can.pos.x,y:can.pos.y,id:can.id}}))
-    }
-    global.heap.newScoutData = true;
-    if(heap.scoutList && heap.scoutList[room.name]) delete heap.scoutList[room.name];
 
+
+        let [roomType, ownerType, owner] = helper.getRoomType(room);
+        let sources = room.find(FIND_SOURCES).map(src => ({ x: src.pos.x, y: src.pos.y, id: src.id }));
+        let mineral = room.find(FIND_MINERALS)[0];
+        let towerPositions = room.find(FIND_HOSTILE_STRUCTURES, { filter: { structureType: STRUCTURE_TOWER } }).map(tow => ({ x: tow.pos.x, y: tow.pos.y }));
+
+        global.heap.scoutData[room.name] = {
+            r: room.name,
+            l: Game.time,
+            t: roomType,
+            ...(ownerType && { o: ownerType }),
+            ...(ownerType && owner && { w: owner }),
+            ...(room.controller && { c: room.controller.pos }),
+
+            ...(roomType === 'fief' && room.controller && room.controller.level && { u: room.controller.level }),
+            ...(towerPositions.length && { y: towerPositions }),
+            ...(sources.length && { s: sources }),
+
+            m: mineral ? { x: mineral.pos.x, y: mineral.pos.y, type: mineral.mineralType } : null
+        };
+
+        global.heap.newScoutData = true;
+
+        if (global.heap && global.heap.scoutList && global.heap.scoutList[room.name]) {
+            delete global.heap.scoutList[room.name];
+        }
+
+    } catch (e) {
+
+        const roomName = (typeof room === 'string') ? room : (room && room.name);
+        console.log(`Error in setScoutData for room ${roomName}: ${e.stack}`);
+    }
 }
 
 //Get calculated tile distance across rooms
@@ -627,6 +646,20 @@ global.damageMap = function(hostiles,stats,towerMap){
     }
     Memory.test.testBigCM = damageCM.serialize();
     JSON.stringify(damageCM)
+}
+//Accepts a room plan change in the format of a single array of xy coordinates
+global.changeRoomPlan = function(roomName,rcl,structure,update){
+    if(!Memory.kingdom.fiefs[roomName])return "Room invalid"
+    let plan = Memory.kingdom.fiefs[roomName].roomPlan
+    let section = plan[rcl] && plan[rcl][structure]
+    if(!section)return "RCL or structure invalid"
+    if(section.length != update.length/2)return `Plan length of ${section.length} different than update length of ${update.length/2}`
+    let newSection = []
+    for(let index = 0;index<section.length;index+=2){
+        newSection.push({x:update[index],y:update[index+1]})
+    }
+    
+    Memory.kingdom.fiefs[roomName].roomPlan[rcl][structure] = newSection;
 }
 
 /*global.marketCalcTest = function(){

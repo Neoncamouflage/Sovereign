@@ -219,30 +219,41 @@ const helper = {
         }
         return false;
     },
-    getRoomType: function(room){
-        if(!room.controller) return ['neutral',null,null];
-        if(room.controller.owner){
-            if(Memory.diplomacy.allies.includes(room.controller.owner.username)){
-                return ['fief','ally',room.controller.owner.username]
+    getRoomType: function(room) {
+        try {
+            if (!room) return ['neutral', null, null];
+            if (!room.controller) return ['neutral', null, null];
+
+            const allies = (Memory.diplomacy && Memory.diplomacy.allies) || [];
+
+            if (room.controller.owner) {
+                const owner = room.controller.owner.username;
+                if (allies.includes(owner)) {
+                    return ['fief', 'ally', owner];
+                } else if (isMe(owner)) {
+                    return ['fief', 'me', owner];
+                } else {
+                    return ['fief', 'enemy', owner];
+                }
             }
-            else if(isMe(room.controller.owner.username)){
-                return ['fief','me',room.controller.owner.username]
+
+            if (room.controller.reservation) {
+                const reservist = room.controller.reservation.username;
+                if (allies.includes(reservist)) {
+                    return ['holding', 'ally', reservist];
+                } else if (isMe(reservist)) {
+                    return ['holding', 'me', reservist];
+                } else {
+                    return ['holding', 'enemy', reservist];
+                }
             }
-            else{
-                return ['fief','enemy',room.controller.owner.username]
-            }
+
+            return ['neutral', null, null];
+
+        } catch (e) {
+            console.log(`Error in getRoomType for room ${room ? room.name : 'undefined'}: ${e.stack}`);
+            return ['neutral', null, null];
         }
-        if(room.controller.reservation){
-            if(Memory.diplomacy.allies.includes(room.controller.reservation.username)){
-                return ['holding','ally',room.controller.reservation.username]
-            }
-            else if(isMe(room.controller.reservation.username)){
-                return ['holding','me',room.controller.reservation.username]
-            }else{
-                return ['holding','enemy',room.controller.reservation.username]
-            }
-        }
-        return ['neutral',null,null];
     },
     simpleFloodFill: function(basePlanCM, origins, action) {
         // Initialize a queue with the starting tiles

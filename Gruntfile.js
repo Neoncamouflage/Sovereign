@@ -33,11 +33,11 @@ module.exports = function(grunt) {
             server: 'season'
         },
         panda:{
-            email: config.pandaEmail,
+            email: config.localEmail,
             password: config.password,
             branch: 'default',
-            server: {host: 'server.pandascreeps.com',
-                    port:21025,
+            server: {host: 'td2.pandascreeps.com',
+                    port:22025,
                     http:true}
         }
     }

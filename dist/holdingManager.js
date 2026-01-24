@@ -110,7 +110,7 @@ var holdingManager = {
 
         //Update kingdomStatus with holdings
         heap.kingdomStatus.totalHoldings = activeHoldings.length
-
+        let spawnSkip = []
         for(const each of activeHoldings){
             if(Game.time % GLOBAL_SPAWN_INTERVAL != 0) break
             //If we're about to hit CPU limit, check bucket and abandon if needed
@@ -127,13 +127,14 @@ var holdingManager = {
             }
             //Fief spawn utilization check in here somewhere
             let holding = Memory.kingdom.holdings[each]
+            if(spawnSkip.includes(holding.homeFief))continue;
             //No home fief, move on
             if(!holding || !holding.homeFief) continue
             //Increment our home fief's spawning impact
             fiefMap[holding.homeFief] = (fiefMap[holding.homeFief] || 0) + 1;
             //console.log("FiefMap: ",holding.homeFief,fiefMap[holding.homeFief])
             //If combined spawn use (plus some pad for already run holdings) is too high then we skip (90 for now plus 5 per holding run)
-            let skipCheck = 95//93-(fiefMap[holding.homeFief]*2);
+            let skipCheck = 105-(fiefMap[holding.homeFief]*2);
             if(Memory.kingdom.fiefs[holding.homeFief].combinedSpawnUse > skipCheck){
                 //console.log("Holding",each,"failed skipcheck.",Memory.kingdom.fiefs[holding.homeFief].combinedSpawnUse,"spawn use is more than",skipCheck)
                 continue;
@@ -150,7 +151,7 @@ var holdingManager = {
                 let needSpawns = this.runHolding(each,fCreeps,fiefMap[holding.homeFief]);
                 heap.kingdomStatus.activeHoldings.push(each)
                 //If one holding needs spawns, stop processing more
-                if(needSpawns) break;
+                if(needSpawns) spawnSkip.push(holding.homeFief)
             }
         }
     },
@@ -218,7 +219,8 @@ var holdingManager = {
 
         //If no CM/road plan, get them if our fief has a room plan
         if(!holding.costMatrix){
-            let newCM = new PathFinder.CostMatrix;
+            //Fetch an existing costmatrix from heap or make a new one if needed
+            let newCM = heap.matrixes[holdingName] ? heap.matrixes[holdingName] : new PathFinder.CostMatrix;
             //Add 1 tile buffers around controller/sources
             let bufferSpots = Object.values(holding.sources);
             bufferSpots.push(holding.controller)
@@ -229,6 +231,8 @@ var holdingManager = {
                 }
             }
             holding.costMatrix = newCM.serialize();
+            heap.matrixes[holdingName] = newCM
+            heap.matrixUpdate = true;
         }
 
         //Cost matrix is calculated after the fief gets its room plan, make sure it's there
@@ -287,8 +291,7 @@ var holdingManager = {
             let otherRoom;
             let otherRoomType;
             let fiefPlan;
-        if(remoteRoute){
-
+            if(remoteRoute){
                 //holding.remoteRoute = remoteRoute;
                 totalRoute.forEach(spot =>{
                     if(spot.roomName == holdingName){
@@ -312,6 +315,8 @@ var holdingManager = {
                         //First, submit the other room's CM if need be
                         if(otherRoom){
                             Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
+                            heap.matrixes[otherRoom] = otherCM
+                            heap.matrixUpdate = true;
                         }
                         //Set our tracking for the other room
                         otherRoom = spot.roomName
@@ -328,6 +333,8 @@ var holdingManager = {
                     else if(Memory.kingdom.fiefs[spot.roomName]){
                         if(otherRoom){
                             Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
+                            heap.matrixes[otherRoom] = otherCM
+                            heap.matrixUpdate = true;
                         }
                         otherRoom = spot.roomName
                         otherRoomType = 'fiefs'
@@ -343,8 +350,12 @@ var holdingManager = {
                 })
                 //Submit CM for our holding and for the other room if we have one
                 holding.costMatrix = thisCM.serialize();
+                heap.matrixes[holdingName] = thisCM
+                heap.matrixUpdate = true;
                 if(otherCM){
                     Memory.kingdom[otherRoomType][otherRoom].costMatrix =  otherCM.serialize();
+                    heap.matrixes[otherRoom] = otherCM
+                    heap.matrixUpdate = true;
                 }
             }
 
@@ -405,8 +416,8 @@ var holdingManager = {
             });
             let cans = []
             for(let source of Object.values(holding.sources)){
+                if(source.can && (!Game.getObjectById(source.can) || Game.getObjectById(source.can).structureType != STRUCTURE_CONTAINER) ) delete source.can
                 if(source.can && Game.getObjectById(source.can) && Game.getObjectById(source.can).store.getUsedCapacity() > 100) cans.push(source.can)
-                if(source.can && !Game.getObjectById(source.can) ) delete source.can
             }
             for(let canID of cans){
                 let can = Game.getObjectById(canID)
@@ -446,7 +457,7 @@ var holdingManager = {
             //console.log(holdingName,'ENEMY OWNER');
             return needSpawns;
         }
-
+        if(!holding.remoteRoute) return;
         //Keep track of how many holdings we're actively processing
         fiefHeap.holdingDist = (fiefHeap.holdingDist || 0) + (holding.distance || 0)
         //console.log("MAINHOLD",holdingName)
@@ -462,7 +473,7 @@ var holdingManager = {
                     return obj;
                 },{});
                 if(!fiefCreeps.miner) fiefCreeps.miner = [];
-                let fiefMiners = fiefCreeps.miner.filter(creep => creep.memory.holding == holdingName && (creep.spawning ||creep.ticksToLive > ((creep.body.length * CREEP_SPAWN_TIME) + holding.sources[creep.memory.target].path.length)+50 ))
+                let fiefMiners = fiefCreeps.miner.filter(creep => creep.memory.holding == holdingName && (creep.spawning ||creep.ticksToLive > ((creep.body.length * CREEP_SPAWN_TIME) + (holding.sources[creep.memory.target].path || []).length)+50 ))
                 //console.log("TARGET SOURCES",JSON.stringify(targetSources))
                 if(fiefMiners){
                     fiefMiners.forEach(creep =>{
@@ -606,6 +617,9 @@ var holdingManager = {
                     let roadRep = false;
                     roadLoop:
                     for(let source of Object.values(holding.sources)){
+                        if(!source.path){
+                            console.log("No path to source!",holdingName,source.id)
+                        }
                         for(let spot of source.path){
                             let road = remote.lookForAt(LOOK_STRUCTURES,spot.x,spot.y).filter(str=>str.structureType == STRUCTURE_ROAD && str.hits < str.hitsMax * 0.7)[0]
                             if(road){
@@ -615,7 +629,7 @@ var holdingManager = {
                         }
                     }
                     Memory.kingdom.holdings[holdingName].roadRep = roadRep;
-                    Memory.kingdom.fiefs[holding.homeFief].repRequest = true;
+                    if(roadRep) Memory.kingdom.fiefs[holding.homeFief].repRequest = true;
                 }
                 
             }
@@ -626,7 +640,7 @@ var holdingManager = {
         if(remote){//Game.rooms[fief].storage && Game.rooms[fief].storage.my && Game.rooms[fief].storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000
             let timeCheck = Game.rooms[holding.homeFief].controller.level >=5 ? 200 : 30
             //Only build over swamps til RCL5 to speed up room development
-            let swampsOnly = Game.rooms[holding.homeFief].controller.level <=5;
+            let swampsOnly = Game.rooms[holding.homeFief].controller.level <4;
             //If we're RCL4 or less and this is a later remote, we need much more frequent construction checks 
             if(Game.rooms[holding.homeFief].controller.level <=4 && heap.sortedHoldings && heap.sortedHoldings.indexOf(holdingName) > 1) timeCheck = 1;
             if(Game.time % (GLOBAL_SPAWN_INTERVAL*timeCheck) == 0 && Game.rooms[holding.homeFief].controller.level >=3 && Object.keys(Game.constructionSites).length < 40){

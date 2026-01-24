@@ -1,6 +1,13 @@
 const helper = require('functions.helper');
 const minCut = require('minCut');
 const profiler = require('screeps-profiler');
+
+//Large fast filler template - 5x7
+const BIG_FF = []
+//Small fast filler template - 5x4
+const SMALL_FF = []
+
+
 const fiefPlanner = {
     //Generates a distance transform for a room and sets it to test memory
     distanceTransform: function(terrain){

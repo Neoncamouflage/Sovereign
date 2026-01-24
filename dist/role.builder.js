@@ -96,7 +96,9 @@ const roleBuilder = {
             //If we have vision in the room, go to a site
             //console.log(creep.name,'t1')
             if(tRoom){
-                let target = tRoom.find(FIND_MY_CONSTRUCTION_SITES)[0];
+                let targets = tRoom.find(FIND_MY_CONSTRUCTION_SITES).filter(site=>site.structureType == STRUCTURE_ROAD);
+                let target;
+                if(targets.length) target = targets[0]
                 if(target){
                     creep.travelTo(target);
                     return;
@@ -145,7 +147,7 @@ const roleBuilder = {
         if(creep.memory.target) target = Game.getObjectById(creep.memory.target)
         if(!target){
             //console.log(creep.name,'t2')
-            let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+            let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES)
             target = creep.pos.findClosestByRange(targets)
             if(target){creep.memory.target = target.id}
             else if(creep.memory.job != 'remoteBuilder' && creep.room.storage && creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000){
@@ -162,6 +164,8 @@ const roleBuilder = {
                     //If not, find another site to help with
                     let closestRange = Infinity;
                     let closestTarget;
+                    //Clear this room's remote build if still there
+                    if(creep.room.name == Memory.kingdom.fiefs[creep.memory.fief].remoteBuild)delete Memory.kingdom.fiefs[creep.memory.fief].remoteBuild
                     for(let each of Object.values(Game.constructionSites)){
                         let newRange = getTileDistance(creep.pos,each.pos)
                         if(newRange < closestRange){
@@ -171,7 +175,6 @@ const roleBuilder = {
                     }
                     //console.log()
                     if(closestTarget){
-
                         creep.travelTo(closestTarget)
                         if(closestTarget.room)creep.memory.targetRoom = closestTarget.room.name;
                     }
@@ -316,7 +319,7 @@ const roleBuilder = {
                 //console.log()
                 if(target instanceof Structure){
                     //console.log(`Ramp hits: ${target.hits} Ramptarget: ${fief.rampTarget + (fief.rampTarget*0.15)}`)
-                    if(target.hits > fief.rampTarget + Math.min(100000,fief.rampTarget*0.15) || target.hits == RAMPART_HITS_MAX[room.controller.level]){
+                    if(target.hits > fief.rampTarget + Math.min(10000,fief.rampTarget*0.15) || target.hits == RAMPART_HITS_MAX[room.controller.level]){
                         delete creep.memory.targetID;
                         continue;
                     }

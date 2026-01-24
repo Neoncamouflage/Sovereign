@@ -52,11 +52,12 @@ var roleUpgrader = {
         if(creep.memory.job == 'starterUpgrader' && cSites.length && creep.room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[creep.room.controller.level]/2 && !creep.memory.scribeFirst){
             let target;
             if(creep.memory.target) target = Game.getObjectById(creep.memory.target)
-            if(!target){
+            if(!target || target instanceof Structure){
                 let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
                 target = creep.pos.findClosestByRange(targets)
                 if(target){creep.memory.target = target.id}
             }
+            creep.memory.stay = false;
             if(target && creep.store.getUsedCapacity() > 0) {
                 if(creep.pos.getRangeTo(target) > 3){
                     creep.travelTo(target);
@@ -67,13 +68,15 @@ var roleUpgrader = {
             }
 
             //Submit order if not close to storage
-            if(creep.store.getUsedCapacity() < creep.store.getCapacity()){
+            if(target && creep.pos.getRangeTo(target) <= 6 && creep.store.getUsedCapacity() < creep.store.getCapacity()){
                 if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2) supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
             }
             return;
         }
         else if(creep.memory.job == 'starterUpgrader' && !cSites.length && creep.ticksToLive >= 1450) creep.memory.scribeFirst = true
-        //If the creep is spawned in a different room, or somehow accidentally leaves, it should go to its home fief before doing anything else from this point
+        if(creep.memory.job == 'starterUpgrader' && (!creep.room.controller.sign || creep.room.controller.sign !='🏰') && creep.pos.getRangeTo(creep.room.controller) == 1) creep.signController(creep.room.controller,'🏰')
+        creep.memory.target = creep.room.controller.id;
+            //If the creep is spawned in a different room, or somehow accidentally leaves, it should go to its home fief before doing anything else from this point
         if(creep.room.name != creep.memory.fief){
             let targetPos;
             if(Game.rooms[creep.memory.fief]) targetPos = Game.rooms.controller
@@ -85,12 +88,12 @@ var roleUpgrader = {
         let chainOrigin;
         let prevOrigin = creep.memory.prevOrigin;
         //Prefer to chain energy from terminal, else storage, else use the base chaining system.
-        if(fief.controllerSpots.terminal && creep.room.terminal && creep.room.terminal.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 30000)){
+        if(fief.controllerSpots.terminal && creep.room.terminal && creep.room.terminal.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 5000 : 10000)){
             chain = 'terminal'
             chainOrigin = creep.room.terminal
             creep.memory.prevOrigin = 'terminal'
         }
-        else if(fief.controllerSpots.storage && creep.room.storage && creep.room.storage.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 10000 : 30000)){
+        else if(fief.controllerSpots.storage && creep.room.storage && creep.room.storage.store[RESOURCE_ENERGY] > (!prevOrigin || chain == prevOrigin ? 5000 : 10000)){
             chain = 'storage'
             chainOrigin = creep.room.storage
             creep.memory.prevOrigin = 'storage'
@@ -105,7 +108,7 @@ var roleUpgrader = {
         }
         //A valid chain origin means we execute the logic to pull from that source and chain the energy out to other creeps
         if(chainOrigin){
-            creep.memory.stay = true //Tells other creeps not to push us out of this spot
+            //creep.memory.stay = true //Tells other creeps not to push us out of this spot
             //Always look if we can move closer, and do so if there's a spot.
             if(creep.pos.getRangeTo(chainOrigin) != 1 || creep.pos.getRangeTo(creep.room.controller) > 3){
                 rangeLoop:
@@ -160,7 +163,7 @@ var roleUpgrader = {
                 }
             }
             if(gotTransfer) return;
-            if(!isPacked && creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
+            if(range < 6 && !isPacked && creep.room.energyAvailable > creep.room.energyCapacityAvailable/2)supplyDemand.addRequest(creep.room,{targetID:creep.id,amount:creep.store.getCapacity(),resourceType:RESOURCE_ENERGY,type:'dropoff'})
         }
         //Storage/terminal logic for chaining energy outward
         else {

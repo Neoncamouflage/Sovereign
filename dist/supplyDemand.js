@@ -3,7 +3,6 @@ const registry = require('registry');
 const profiler = require('screeps-profiler');
 const supplyDemand = {
     prepShipping: function(roomName){
-        if (!global.heap) global.heap = {};
         if (!global.heap.shipping) global.heap.shipping = {};
         if (!global.heap.shipping[roomName]){
             global.heap.shipping[roomName] = {};
@@ -86,7 +85,7 @@ const supplyDemand = {
                     //Extensions and spawns get dropoff if there's no storage/terminal
                     case STRUCTURE_EXTENSION:
                     case STRUCTURE_SPAWN:
-                        if((struct.name && (struct.name == 'Origin Keep' || struct.name == 'Spawn1')) || ((!room.storage || room.storage.store.getUsedCapacity(RESOURCE_ENERGY) == 0) && (!room.terminal || room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) == 0))){
+                        if((struct.name && (struct.name == 'Origin Keep' || struct.name == 'Spawn1')) || ((!room.storage || room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 10000) && (!room.terminal || room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) < 10000))){
                             this.addRequest(room,{
                                 type:'dropoff',
                                 targetID:struct.id,
@@ -119,11 +118,15 @@ const supplyDemand = {
             });
 
         };
+        let unassignedTotal = 0;
         //Handle in-room haulers, get idle count in return
         if(poolHaulers && poolHaulers.length){
-            this.assignTasks(poolHaulers,room)
+            unassignedTotal = this.assignTasks(poolHaulers,room)
             let [idleCount,totalCount,postIdles] = this.runHaulers(room,poolHaulers,fiefCreeps);
-            this.assignTasks(postIdles,room)
+            let newUnassigned = this.assignTasks(postIdles,room)
+            //If we return -1 then we assigned nothing new. 
+            if(newUnassigned > -1) unassignedTotal = newUnassigned;
+            //console.log("Received total",unassignedTotal)
             
             //console.log("Idle count",idleCount)
             global.heap.shipping[roomName].utilization.unshift(idleCount/totalCount)
@@ -141,14 +144,30 @@ const supplyDemand = {
             let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length
             //Utilization minimum gets increased based on active remote demand vs hauler carry
             let totalCarry = poolHaulers.reduce((sum,current) => sum+current.store.getCapacity(),0)
-            let roomMultiple = 20//[ROOM_SOURCE_KEEPER,ROOM_CENTER].includes(describeRoom(roomName)) ? 27 : 20;
-            utilization = Math.min(utilization,totalCarry/Math.max(((heap.fiefs[roomName].holdingDist || 0)*roomMultiple),1))
-            //console.log("TC",totalCarry)
+            let roomMultiple = 20
+            let unassignedUtilization = totalCarry/Math.max(unassignedTotal,1);
+            let holdingUtilization = totalCarry/Math.max(((heap.fiefs[roomName].holdingDist || 0)*roomMultiple),1);
+            utilization = Math.min(utilization,unassignedUtilization,holdingUtilization)
             //console.log("HD",heap.fiefs[roomName].holdingDist || 0)
-            //console.log('\nMAX_IDLE:',MAX_IDLE,'\nholdingDist:',heap.fiefs[roomName].holdingDist,'\nCalculated idle from history:',global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length,'\nLast tick idle',global.heap.shipping[roomName].utilization[0],'\nMinimum idle from holdings:',totalCarry/((heap.fiefs[roomName].holdingDist || 0)*20),'\nResult:',utilization)
+            /*console.log('\nUnassigned Total:',unassignedTotal,
+                '\nMAX_IDLE:',MAX_IDLE,
+                '\nholdingDist:',heap.fiefs[roomName].holdingDist,
+                '\nCalculated idle from history:',global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length,
+                '\nLast tick idle',global.heap.shipping[roomName].utilization[0],
+                '\nMinimum idle from holdings:',totalCarry/((heap.fiefs[roomName].holdingDist || 0)*roomMultiple),
+                '\nIdle from unassigned task amounts:',totalCarry/unassignedTotal,
+                '\nResult:',utilization)*/
             //Extra check, no spawning if half or more haulers are currently idle
+            //console.log("Haulcheck",MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5)
             if(MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5){
-                registry.requestCreep({sev:poolHaulers.length > 2 ? 35 : room.storage && room.storage.store[RESOURCE_ENERGY] > 100 ? 100 :  fiefCreeps.length > 2 ? 50 : 60,memory:{role:'hauler',fief:roomName,preflight:false,state:'idle'}})
+                //console.log("Yes1")
+                //console.log(unassignedUtilization)
+                //Extra check to make sure we have task assignments
+                if(poolHaulers.length <2 || unassignedUtilization < 0.9){
+                    //console.log("Yes2")
+                    registry.requestCreep({sev:poolHaulers.length > 2 ? 36 : room.storage && room.storage.store[RESOURCE_ENERGY] > 100 ? 100 :  fiefCreeps.length > 2 ? 50 : 60,memory:{role:'hauler',fief:roomName,preflight:false,state:'idle'}})
+                }
+                
             }
             //console.log(`${roomName} hauler utilization: ${utilization}`)
         }
@@ -254,7 +273,7 @@ const supplyDemand = {
             }
         }
         allHaulers = allHaulers.filter(crp => crp.memory.state != 'refill')*/
-
+        let unassignedTotal = 0;
         let shippingTasks = heap.shipping[room.name].requests;
         //Every 5 ticks, check assigned haulers to see if we need to clear them out.
         if(Game.time % 5 == 0){
@@ -268,13 +287,13 @@ const supplyDemand = {
         }
         
         let unassignedTasks = Object.values(shippingTasks).filter(task => task.unassignedAmount() > 0);
-
+        let assignedEnergy = [];
         //Categorize haulers
         //Split off specifically the idle haulers for now
         let idleHaulers = allHaulers.filter(h => h.memory.state == "idle");
 
         //If no unassigned tasks or free haulers, return
-        if(!Object.keys(unassignedTasks).length || !idleHaulers.length) return;
+        if(!Object.keys(unassignedTasks).length || !idleHaulers.length) return -1;
 
         let emptyHaulers = [];
         let haulersByResource = {};
@@ -283,7 +302,7 @@ const supplyDemand = {
         let storagePos = storage ? storage.pos : Memory.kingdom.fiefs[room.name].roomPlan ? new RoomPosition(Memory.kingdom.fiefs[room.name].roomPlan[4][STRUCTURE_STORAGE][0].x,Memory.kingdom.fiefs[room.name].roomPlan[4][STRUCTURE_STORAGE][0].y,room.name) : new RoomPosition(25,25,room.name)
         
         //If no idle haulers then return
-        if(!idleHaulers.length) return;
+        if(!idleHaulers.length) return -1;
         //Split up empty and non-empty haulers
         for (let hauler of idleHaulers) {
             let usedCapacity = hauler.store.getUsedCapacity();
@@ -348,7 +367,16 @@ const supplyDemand = {
                 if(thisvar[0] && thisvar[0] == true) assigned=true;
                 if(thisvar[1] && thisvar[1] instanceof Creep) emptyHaulers = emptyHaulers.filter(h => h.id !== thisvar[1].id);
             }
+
+            //If still unassigned, add the amount to the total
+            if(!assigned){
+                //console.log("Not assigned:",task.unassignedAmount())
+                unassignedTotal += task.unassignedAmount();
+                
+            }
         }
+        //console.log("Return total:",unassignedTotal)
+        return unassignedTotal;
 
         function assignRefill(task, haulersByResource, emptyHaulers,allHaulers) {
             let current = Object.keys(task.assignedHaulers).length;
@@ -448,7 +476,12 @@ const supplyDemand = {
                 else{
                     return [false,null]
                 }
-            } else {
+            }
+            //If it's not energy and we have no storage/terminal
+            else if(task.resourceType != RESOURCE_ENERGY && !room.storage && !room.terminal){
+                return [false,null]
+            }
+            else {
                 //Standard pickup
                  {
                     task.assignTo(nearestHauler);
@@ -470,6 +503,7 @@ const supplyDemand = {
         const REFILL = 'refill';
         const STATES = [IDLE,PICKUP,DROPOFF,RENEW,TOW,REFILL];
         let shippingTasks = global.heap.shipping[room.name].requests;
+        
         let isIdle = 0;
         let totalCarry = 0;
         let combos = [];
@@ -490,6 +524,7 @@ const supplyDemand = {
         //Track IDs of fills so we can clear their tasks
         let fillTransfers = []
         for(let haul of energyHauls){
+            if(haul.id in heap.relays)continue;
             //if(link && haul.store.getFreeCapacity()>0){
                 //haul.withdraw(link,RESOURCE_ENERGY)
             //}
@@ -560,14 +595,13 @@ const supplyDemand = {
         for(let every of fillTasks){
             every.remove(room.name)
         }
-
         //Hauler action loop
         haulers.forEach(creep => {
             let postFlag = true;
             let carryParts = creep.getActiveBodyparts(CARRY);
             //Add carry parts so we can track idle time
             totalCarry += carryParts;
-            
+            //if(heap.relays.includes(creep.id))console.log(creep.id,'relayed. State:',creep.memory.state,'Task:',creep.memory.task)
             if(global.heap.alarms[creep.room.name]){
                 let baddies = creep.room.find(FIND_HOSTILE_CREEPS).filter(c=>helper.isSoldier(c) && !isFriend(c))
                 let bad = creep.pos.findClosestByRange(baddies)
@@ -592,7 +626,7 @@ const supplyDemand = {
                 let utilization = global.heap.shipping[room.name].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[room.name].utilization.length
                 
                 //Check utilization to make sure we aren't respawning when not needed
-                if(utilization < 0.15){
+                if(utilization < 0.15 && global.heap.shipping[room.name].utilization[0] < 0.5){
                     registry.requestCreep({sev:35,memory:{role:'hauler',fief:room.name,preflight:false},respawn:creep.id})
                 }
             }
@@ -611,10 +645,15 @@ const supplyDemand = {
                 if(!checkTask){
                     delete creep.memory.task
                 }
-                else if(checkTask.type != 'refill' && checkTask.assignedHaulers[creep.id] <= 0 || checkTask.assignedHaulers[creep.id] == null){
+                else if(checkTask.type != REFILL && checkTask.assignedHaulers[creep.id] <= 0 || checkTask.assignedHaulers[creep.id] == null){
                     //console.log(Game.time)
                    // console.log("Task ID",creep.memory.task,"in room",creep.memory.fief,"unassigning due to assigned inventory:",checkTask.assignedHaulers[creep.id],"in task",JSON.stringify(checkTask))
                     checkTask.unassign(creep,checkTask.assignedHaulers[creep.id] <= 0 ? "Assigned amount is <=0." : "No result for this creep in assigned haulers") 
+                }
+                //Set the state if needed, seems to be causing issues
+                else if(checkTask.type == REFILL && (state != REFILL || creep.memory.state != REFILL)){
+                    state = REFILL;
+                    creep.memory.state = REFILL;
                 }
             }
             //If no state, or no task but a non-idle state, assign idle
@@ -640,7 +679,7 @@ const supplyDemand = {
                     //If demand task
                     if(newTask.type == 'dropoff'){
                         //Are we carrying enough of what we need
-                        if(creep.store.getUsedCapacity(resourceType) >= newTask.assignedHaulers[creep.id]){
+                        if(!creep.store.getUsedCapacity(resourceType) >= newTask.assignedHaulers[creep.id]){
                             //If so, set state to dropoff
                             creep.memory.state = DROPOFF;
                             state = DROPOFF;
@@ -709,7 +748,7 @@ const supplyDemand = {
                                 let targetPos = new RoomPosition(x, y, room.name);
                                 //console.log(creep,"refilling",targetPos,'total refills',sourceMap.has(creep.memory.refillTarget) ? sourceMap.get(creep.memory.refillTarget).size : otherMap.has(creep.memory.refillTarget) ? otherMap.get(creep.memory.refillTarget).size : 'No map has target')
                                 if(creep.pos.getRangeTo(targetPos) > 0){
-                                    creep.travelTo(targetPos);
+                                    creep.travelTo(targetPos,{creepState:'refill'});
                                 }
                                 else{
                                     let refillExt;
@@ -744,6 +783,8 @@ const supplyDemand = {
                 creep.say(LANGUAGE.refill)
                 let refillTask = getTaskByID(creep.memory.fief,creep.memory.task);
                 //console.log(creep,room.name,'ENERGY EVEN',room.energyAvailable == room.energyCapacityAvailable)
+                //Always try to get energy
+                if(room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 0 && creep.pos.getRangeTo(room.storage)==1)creep.withdraw(room.storage,RESOURCE_ENERGY)
                 if(room.energyAvailable == room.energyCapacityAvailable || ((!room.storage || room.storage.store.getUsedCapacity(RESOURCE_ENERGY) == 0) && (!room.terminal || room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) == 0))){
                     refillTask.remove(creep.memory.fief)
                     creep.memory.state = IDLE;
@@ -849,7 +890,9 @@ const supplyDemand = {
                         task.remove(creep.memory.fief)
                         creep.memory.state = IDLE;
                     }
-                    
+                    else if(!(creep.id in heap.relays) && creep.store.getFreeCapacity() < task.assignedHaulers[creep.id]){
+                        task.unassign(creep, 'No room')
+                    }
                     else if(creep.pos.getRangeTo(pickTarget) > 1){
                         creep.travelTo(pickTarget)
                     }
@@ -881,7 +924,7 @@ const supplyDemand = {
                     let resourceType = task.resourceType;
                     //Quick check to see if we're on the right track
                     //If we're picking up for a demand task, see if we have enough
-                    if(creep.store[task.resourceType] >= task.assignedHaulers[creep.id]){
+                    if((creep.store[task.resourceType] >= task.assignedHaulers[creep.id]) || (heap.relays[creep.id] && heap.relays[creep.id] > task.assignedHaulers[creep.id])){
                         //If so, set dropoff
                         creep.memory.state = DROPOFF
                     }
@@ -924,7 +967,7 @@ const supplyDemand = {
                         //If no storage or terminal, throw alert and kill task. Move to idle.
                         else{
                            // console.log(creep.name,"unable to complete task!",JSON.stringify(task)," No pickup location. Hauler has",creep.store[task.resourceType]);
-                           console.log("C7")
+                            console.log("C7")
                             task.remove(creep.memory.fief)
                             creep.memory.state = IDLE;
                             return;
@@ -942,7 +985,7 @@ const supplyDemand = {
                 //Are we on a dropoff task? If so, go to target and transfer
                 if(task.type == 'dropoff'){
                     //Make sure we didn't dump all our inventory. If so, pickup
-                    if(creep.store.getUsedCapacity() == 0 && (!global.heap.relays || !global.heap.relays.includes(creep.id))){
+                    if(creep.store.getUsedCapacity() == 0 && (!global.heap.relays || !(creep.id in heap.relays))){
                         task.unassign(creep,"Used capacity is zero");
                         return;
                     }
@@ -993,7 +1036,6 @@ const supplyDemand = {
             //If state is idle, all idle
             if(state==IDLE){
                 //See if we can be usefulby renewing
-                isIdle += carryParts
                 //No postflag means we didn't do anything, no need to rerun
                 if(postFlag) postIdles.push(creep)
                 
@@ -1003,6 +1045,7 @@ const supplyDemand = {
                 }
                 //Recycle if we have lots of haulers and we're low on life
                 else if(creep.memory.fief == creep.room.name && creep.store.getUsedCapacity(RESOURCE_ENERGY) == 0){
+                    isIdle += carryParts
                     if(heap.shipping[creep.memory.fief].utilization[0] > 0.5 && creep.ticksToLive < 200){
                         let spawns = Memory.kingdom.fiefs[creep.memory.fief].spawns.map(spw => Game.getObjectById(spw)).filter(spw => !spw.spawning)
                         if(spawns.length){
@@ -1016,8 +1059,12 @@ const supplyDemand = {
                         }
                     }
                 }
+                else if(creep.memory.fief == creep.room.name){
+                    isIdle += carryParts
+                }
 
-            } else{
+            }
+            else{
                 //Check if we're empty, if so we need to use the assigned amount to calculate
                 if(usedStore == 0){
                     let myTask = getTaskByID(creep.memory.fief,creep.memory.task);

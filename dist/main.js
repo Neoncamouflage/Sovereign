@@ -19,45 +19,54 @@ const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner')
 const architect = require('architect')
 let lastMemory;
-profiler.enable();
+//profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
-RawMemory.setActiveSegments([0,1,2,5,6,7,8,9,90])
+RawMemory.setActiveSegments(Object.values(ALL_SEGMENTS))    //Once we pass 10 segments and build a handler, this needs to change
 Memory.lastReset = 0
 Memory.globalReset = Game.time;
-
+global.heap = {
+    scoutList:{},
+    roomStructs:{},
+    matrixes:{},
+    travelMatrixes:{},
+    fiefs:{},
+    alarms:{},
+    stock:{},
+    kingdomStatus:{
+        fiefs:{},
+        activeHoldings:[],
+        totalHoldings:0,
+        lastReset:Game.time,
+        wares:{}
+    },
+    granary:{},
+    registry:{},
+    missions:{},
+    army:{
+        troupes:[],
+        lances:{},
+        reserve:[]
+    },
+    duos:[],
+    quads:[],
+    funnelTarget:null
+}
 module.exports.loop = function () {
     if(['shard1','shard2','shard3'].includes(Game.shard.name)){
         return;
     }
+    if(!Memory || !RawMemory) {
+        console.log("MEMORY")
+        console.log("MEMORY")
+        console.log("MEMORY")
+        console.log("MEMORY")
+        RawMemory._parsed = {};Memory = {}; Memory.rooms = {}
+    }
     //return;
     profiler.wrap(function() {
-    if(!global.heap){
-        global.heap = {
-            scoutList:{},
-            roomStructs:{},
-            fiefs:{},
-            alarms:{},
-            stock:{},
-            kingdomStatus:{
-                fiefs:{},
-                activeHoldings:[],
-                totalHoldings:0,
-                lastReset:Game.time,
-                wares:{}
-            },
-            granary:{},
-            registry:{},
-            missions:{},
-            army:{
-                troupes:[],
-                lances:{},
-                reserve:[]
-            },
-            duos:[],
-            quads:[],
-            funnelTarget:null
-        }
-    }
+    //if(!global.heap){
+        
+    //}
     if (hasRespawned() || !Memory.kingdom){
         console.log("SPINUP");
         spinup.run();
@@ -76,6 +85,9 @@ module.exports.loop = function () {
             }, 0);
             global.cpuAverage = Math.round(cpuUte/Memory.trailingCPU.length)
         }
+
+    }
+    else{
         let defenseData = RawMemory.segments[SEGMENT_ROOM_DEFENSE]
         if(defenseData == "")  RawMemory.segments[SEGMENT_ROOM_DEFENSE] = "{}"
         let roomData = RawMemory.segments[SEGMENT_ROOM_PLANS]
@@ -89,8 +101,17 @@ module.exports.loop = function () {
                 heap.scoutData = JSON.parse(scoutData)
             }
         }
-    }
-    else{
+        heap.matrixes = {};
+        let matrixData = RawMemory.segments[SEGMENT_ROOM_COSTMATRIX]
+        if(matrixData == ""){
+            RawMemory.segments[SEGMENT_ROOM_COSTMATRIX] = "{}";
+            matrixData = '{}'
+        }
+        //matrixData is an object of serialized costmatrixes with room names as keys
+        let matrixDump = JSON.parse(matrixData);
+        for(let roomName of Object.keys(matrixDump)){
+            heap.matrixes[roomName] = PathFinder.CostMatrix.deserialize(matrixDump[roomName]);
+        }
         //Force parsing for memhack
         //Memory.rooms;
         //lastMemory = RawMemory._parsed;
@@ -108,12 +129,38 @@ module.exports.loop = function () {
             if(!global.heap.fiefs[myRoom.name]){
                 global.heap.fiefs[myRoom.name] = {};
             }
+            //If not in matrixes, add
+            if(heap.matrixes && !heap.matrixes[myRoom.name] && Memory.kingdom.fiefs[myRoom.name].costMatrix){
+                heap.matrixes[myRoom.name] = PathFinder.CostMatrix.deserialize(Memory.kingdom.fiefs[myRoom.name].costMatrix);
+                heap.matrixUpdate = true;
+            }
+
+        }
+        else if(Memory.kingdom.holdings[myRoom.name] && heap.matrixes && !heap.matrixes[myRoom.name] && Memory.kingdom.holdings[myRoom.name].costMatrix){
+            heap.matrixes[myRoom.name] = PathFinder.CostMatrix.deserialize(Memory.kingdom.holdings[myRoom.name].costMatrix);
+            heap.matrixUpdate = true;
         }
 
         //Record hostile actions
     }
 
     //Garbage collection and routine tasks
+    //Always update matrixes immediately
+    if(heap.matrixUpdate){
+        try{
+            chronicle.log(`Updating matrix segment. Current matrix segment size: ${RawMemory.segments[SEGMENT_ROOM_COSTMATRIX].length}. Matrix heap size: ${JSON.stringify(heap.matrixes).length}`,'main',3)
+            let matrixSet = {}
+            for(let each of Object.keys(heap.matrixes)){
+                let matrix = heap.matrixes[each]
+                matrixSet[each] = matrix.serialize();
+            }
+            RawMemory.segments[SEGMENT_ROOM_COSTMATRIX] = JSON.stringify(matrixSet)
+            heap.matrixUpdate = false;
+        }
+        catch(error){
+            chronicle.log(`Unable to update scout data: ${error}`,'main',1)
+        }
+    }
     if(Game.time % 100 === 0){
         //Every 100 ticks clear creep memory
         for(var name in Memory.creeps) {

@@ -21,9 +21,10 @@ const painter = {
         if(visuals.drawMilitary) this.drawMilitary(kingdomCreeps);
         if(visuals.drawIntel) this.drawIntel(kingdomCreeps);
         if(visuals.drawTest) this.drawTest();
-        if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan)
-        if(visuals.drawScores) this.drawScores(architect.config)
-        if(visuals.drawAllies) this.drawAllies()
+        if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan);
+        if(visuals.drawScores) this.drawScores(architect.config);
+        if(visuals.drawAllies) this.drawAllies();
+        if(visuals.drawStartup) this.drawStartup();
         
     },
     setVisual: function(vis,setting='default'){
@@ -37,6 +38,24 @@ const painter = {
             //Default to true if no setting given
             Memory.visuals[vis] = typeof setting == 'boolean' ? setting : true;
         }
+    },
+    //Debugging visuals for colony startup
+    drawStartup(){
+        let roomVis =  new RoomVisual();
+        let fiefs = Object.keys(Memory.kingdom.fiefs)
+        if(!fiefs.length)return;
+        let fief = Memory.kingdom.fiefs[fiefs[0]];
+        let room = Game.rooms[fiefs[0]];
+        let stats = [];
+
+        stats.push(`Scouting list: ${JSON.stringify(heap.scoutList)}`);
+        let count = 0;
+        for(let each of stats){
+            roomVis.text(each,35,25+count, {color:'#ffa500',font:'1 Bridgnorth'});
+            count++;
+        }
+
+
     },
     drawAllies(){
         let reports = []
@@ -96,6 +115,9 @@ const painter = {
         let heapPlan = heap.roomPlans && heap.roomPlans[roomName]
         let plan
         let ramps
+        if(heap.fiefPlanner && heap.fiefPlanner.roomName == roomName && heap.fiefPlann.stage != 0){
+            heapPlan
+        }
         if(heapPlan){
             [plan, ramps] = heapPlan;
         }
@@ -258,19 +280,22 @@ const painter = {
         });
         let activeHoldings = new Set(heap.kingdomStatus.activeHoldings)
         let holdingCount = 1;
-        for(let holdingName of heap.sortedHoldings){
-            let holding = Memory.kingdom.holdings[holdingName]
-            if(holding && holding.sources){
-                for(source of Object.values(holding.sources)){
-                    if(source.path){
-                        Game.map.visual.poly(source.path)
-                        Game.map.visual.text(source.path.length, new RoomPosition(source.path[source.path.length-1].x,source.path[source.path.length-1].y,holdingName), {color: '#FFFFFF', fontSize: 6});
+        if(heap.sortedHoldings && heap.sortedHoldings.length){
+            for(let holdingName of heap.sortedHoldings){
+                let holding = Memory.kingdom.holdings[holdingName]
+                if(holding && holding.sources){
+                    for(source of Object.values(holding.sources)){
+                        if(source.path){
+                            Game.map.visual.poly(source.path)
+                            Game.map.visual.text(source.path.length, new RoomPosition(source.path[source.path.length-1].x,source.path[source.path.length-1].y,holdingName), {color: '#FFFFFF', fontSize: 6});
+                        }
                     }
+                    Game.map.visual.text(`${holdingCount}${activeHoldings.has(holdingName) ? "🌾" : ""}`, new RoomPosition(49,6,holdingName), {color: '#FFFFF', fontSize: 6,align:'right'});
                 }
-                Game.map.visual.text(`${holdingCount}${activeHoldings.has(holdingName) ? "🌾" : ""}`, new RoomPosition(49,6,holdingName), {color: '#FFFFF', fontSize: 6,align:'right'});
+                holdingCount++;
             }
-            holdingCount++;
         }
+
         //Draw military/scout creeps and missions
         let scouts = kingdomCreeps.scouts || [];
         let missions = Object.keys(heap.missions) || [];
@@ -312,26 +337,15 @@ const painter = {
             ...Object.keys(Memory.kingdom.fiefs),
         ];
         for(let roomName of colorRooms){
+            let perimeters = {};
+            let rVis = new RoomVisual(roomName);
             if(!heap.colorGroups[roomName]){
-                let rVis = new RoomVisual(roomName);
                 let groups = getWallGroups(roomName);
-                let perimeters = {};
-                let edgeDone = new Set();
                 for(let id of Object.keys(groups)){
                     let group = groups[id]
                     perimeters[id] = findPerimeterTiles(group)
                 }
                 //Perimeter tiles
-                let perimeterTiles = Object.keys(perimeters);
-                let totalGroups = perimeterTiles.length;
-                for(let perID of perimeterTiles){
-                    let groupTiles = perimeters[perID]
-                    let hue = (360 / totalGroups) * perimeterTiles.indexOf(perID);
-                    for(let spot of groupTiles){
-                        edgeDone.add(`${spot.x},${spot.y}`)
-                        rVis.circle(spot.x,spot.y,{fill: `hsl(${hue}, 100%, 50%)`});
-                    }
-                }
                 /*for(let groupID of Object.keys(groups)){
                     let group = groups[groupID]
                     for(let spot of group){
@@ -340,10 +354,19 @@ const painter = {
                     };
                 };*/
 
-                heap.colorGroups[roomName] = rVis.export();
+                heap.colorGroups[roomName] = perimeters;
             }
             else{
-                let rVis = new RoomVisual(roomName).import(heap.colorGroups[roomName])
+                perimeters = heap.colorGroups[roomName];
+            }
+            let perimeterTiles = Object.keys(perimeters);
+            let totalGroups = perimeterTiles.length;
+            for(let perID of perimeterTiles){
+                let groupTiles = perimeters[perID]
+                let hue = (360 / totalGroups) * perimeterTiles.indexOf(perID);
+                for(let spot of groupTiles){
+                    rVis.circle(spot.x,spot.y,{fill: `hsl(${hue}, 100%, 50%)`});
+                }
             }
         }
         function findPerimeterTiles(wallGroup){
