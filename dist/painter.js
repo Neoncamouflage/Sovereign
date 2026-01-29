@@ -435,8 +435,23 @@ const painter = {
             for (let x = 0; x <= 49; x += 1) {
                 for (let y = 0; y <= 49; y += 1) {
                     let weight = testCM.get(x,y);
-                    //if(weight == 0) continue;
-                    new RoomVisual().text(weight,x,y+0.25);
+                    if(weight==0) continue;
+                    if(weight!=255){
+                        const hue = (weight * 137.508) % 360; // golden-angle spacing
+                        new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
+                        fill: `hsl(${hue}, 100%, 60%)`,
+                        opacity: 0.4,
+                        });
+                        new RoomVisual().text(weight,x,y+0.25);
+                    }
+                    else{
+                        new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
+                            fill: `hsl(0, 0%, 100%)`,
+                            opacity: 0.4,
+                        })
+                    }
+
+                    
                 }
             }
         }

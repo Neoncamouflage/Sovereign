@@ -19,8 +19,9 @@ const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner')
 const architect = require('architect')
 let lastMemory;
+
 //profiler.enable();
-console.logUnsafe("<font color='yellow'>", Game.shard.name, ": global reset</font>");
+console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 RawMemory.setActiveSegments(Object.values(ALL_SEGMENTS))    //Once we pass 10 segments and build a handler, this needs to change
 Memory.lastReset = 0
 Memory.globalReset = Game.time;
@@ -52,6 +53,7 @@ global.heap = {
     funnelTarget:null
 }
 module.exports.loop = function () {
+    console.log = console.logUnsafe;
     if(['shard1','shard2','shard3'].includes(Game.shard.name)){
         //return;
     }
@@ -433,7 +435,7 @@ module.exports.loop = function () {
 
         if (Game.cpu.bucket == 10000 && ['shard0','shard1','shard2','shard3'].includes(Game.shard.name)) {
             Game.cpu.generatePixel()
-            console.logUnsafe("<font color='green'>", Game.shard.name, "generated pixel.</font>")
+            console.log("<font color='green'>", Game.shard.name, "generated pixel.</font>")
         }
     });
     chronicle.run();

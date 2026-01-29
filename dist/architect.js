@@ -2,6 +2,7 @@ const helper = require('functions.helper');
 const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner');
 const architectPlanner = require('architect.planner')
+const architectMatrixes = require('architect.matrixes')
 
 //
 /**
@@ -50,49 +51,56 @@ const scoreWeights = {
 //NICHE     -     A fitness-based subgroup formed based on score categories.
 
 //Genes are separated into blocks based on their area of influence. A higher value is a greater preference.
-//Species genes act as switches to express significantly different behavior. Breeding is restricted across different species.
+//Species genes act as switches to express significantly different behavior if active, and will never mutate. Cross-species breeding is limited.
 //Mode genes are also switches but do not have enough impact to restrict breeding.
-const GENE_LIMITS = [
-    // ----Species Genes---- //
-    [0,1],          //SPEC - Watershed or Blob, above 0.5 uses watershed regions and ignores structure blob genes
-    [0,1],          //SPEC - Mineral roads, above 0.5 core RCL3 roads will include the mineral
-    [0,1],          //SPEC - Mincut CM, 0.5 and below ignores Core, Exit, and Distance genes, using only the standard distance transform CM
-    // ----Mode Genes---- //
-    [0,1],          //MODE - Mincut controller, above 0.5 will require mincut to rampart the controller
-    // ----Watershed Genes---- // (ACTIVATED BY SPEC1)
-    [0.1,10.0],     //WATR - Region size, prefer larger watershed region
-    [0.1,10.0],     //WATR - Controller range, prefer the controller be in or near the region
-    [0.1,10.0],     //WATR - Source range, prefer sources be in or near the region
-    [0.1,10.0],     //WATR - Exit range, prefer regions away from exits
-    // ----Core Placement Genes---- //
-    [0.1,10.0],     //CORE - Exit range, prefer to stay away from exits
-    [0.1,10.0],     //CORE - Controller range, prefer closeness to controller
-    [0.1,10.0],     //CORE - Source range, prefer to minimize average range to sources
-    [0.1,10.0],     //CORE - Distance transform, prefer distance from walls
-    // ----Structure Blob Genes---- // (ACTIVATED BY SPEC1)
-    [0.1,10.0],     //BLOB - Blob size, prefer larger tile counts
-    [0.1,10.0],     //BLOB - Distance transform, prefer to expand the blob away from walls
-    [0.1,10.0],     //BLOB - Exit range, prefer to expand the blob away from exits
-    [0.1,10.0],     //BLOB - Source range, prefer to expand the blob towards sources
-    // ----Road Layout Genes---- //
-    [0.1,10.0],     //ROAD - Road exploration, prefer road expansion that maximizes new adjacent tiles
-    [0.1,10.0],     //ROAD - Diagonal bias, prefer roads to expand diagonally
-    [0.1,10.0],     //ROAD - Core range, prefer roads close to the core
-    [0.1,10.0],     //ROAD - Exit range, prefer roads away from exits
-    // ----Structure Assignment Genes---- //
-    [0.1,10.0],     //ASSN - Fastfiller use, prefer placing fastfiller stamps
-    [0.1,10.0],     //ASSN - Spawn range, prefer spawns to be placed next to the core
-    [0.1,10.0],     //ASSN - Spawn distance, prefer spawns to be placed away from each other
-    [0.1,10.0],     //ASSN - Lab range, prefere labs to be close to the core
-    [0.1,10.0],     //ASSN - Tower range, prefer towers to be close to the core
-    [0.1,10.0],     //ASSN - Tower distance, prefer towers to be placed away from each other
-    [0.1,10.0],     //ASSN - Terminal range, prefer terminal to be close to the controller
-    // ----Mincut Rampart Genes---- // (ACTIVATED BY SPEC3)
-    [0.1,10.0],     //MINC - Core range, prefer ramparts close to the core
-    [0.1,10.0],     //MINC - Exit range, prefer ramparts farther from exits
-    [0.1,10.0],     //MINC - Distance transform, prefer ramparts on tiles close to walls, encouraging chokepoints
-    
-];
+const GENE_LIMITS = {
+    species:[
+        // ----Species Genes---- //
+        [0,1],          //SPEC - Watershed, use watershed regions instead of structure blob for buildable area
+        [0,1],          //SPEC - FastFill, place fastfiller stamps before filling out extensions normally
+        [0,1],          //SPEC - Custom Mincut, use the MINC genes to modify the standard mincut CM
+    ],
+    mode:[
+        // ----Mode Genes---- //
+        [0,1],          //MODE - Mincut controller, require mincut to rampart the controller
+        [0,1],          //MODE - Mineral roads, include the mineral in core RCL3 roads
+        [0,1],          //MODE - Remote roads, include remotes in core RCL3 roads
+    ],
+    gene:[
+        // ----Watershed Genes---- // (ONLY IF SPEC1 IS ACTIVE)
+        [0.1,10.0],     //WATR - Region size, prefer larger watershed region
+        [0.1,10.0],     //WATR - Controller range, prefer the controller be in or near the region
+        [0.1,10.0],     //WATR - Source range, prefer sources be in or near the region
+        [0.1,10.0],     //WATR - Exit range, prefer regions away from exits
+        // ----Core Placement Genes---- //
+        [0.1,10.0],     //CORE - Exit range, prefer to stay away from exits
+        [0.1,10.0],     //CORE - Controller range, prefer closeness to controller
+        [0.1,10.0],     //CORE - Source range, prefer to minimize average range to sources
+        [0.1,10.0],     //CORE - Distance transform, prefer distance from walls
+        // ----Structure Blob Genes---- // (ONLY IF SPEC1 IS INACTIVE)
+        [0.1,10.0],     //BLOB - Blob size, prefer larger tile counts
+        [0.1,10.0],     //BLOB - Distance transform, prefer to expand the blob away from walls
+        [0.1,10.0],     //BLOB - Exit range, prefer to expand the blob away from exits
+        [0.1,10.0],     //BLOB - Source range, prefer to expand the blob towards sources
+        // ----Road Expansion Genes---- //
+        [0.1,10.0],     //ROAD - Road exploration, prefer roads that maximize new adjacent tiles
+        [0.1,10.0],     //ROAD - Diagonal bias, prefer roads to expand diagonally
+        [0.1,10.0],     //ROAD - Core range, prefer roads close to the core
+        [0.1,10.0],     //ROAD - Exit range, prefer roads away from exits
+        // ----Structure Assignment Genes---- //
+        [0.1,10.0],     //ASSN - Remote extensions, prefer extensions to be placed on remote roads
+        [0.1,10.0],     //ASSN - Spawn range, prefer spawns to be placed next to the core
+        [0.1,10.0],     //ASSN - Spawn distance, prefer spawns to be placed away from each other
+        [0.1,10.0],     //ASSN - Lab range, prefere labs to be close to the core
+        [0.1,10.0],     //ASSN - Tower range, prefer towers to be close to the core
+        [0.1,10.0],     //ASSN - Tower distance, prefer towers to be placed away from each other
+        [0.1,10.0],     //ASSN - Terminal range, prefer terminal to be close to the controller
+        // ----Mincut Rampart Genes---- // (ONLY IF SPEC3 IS ACTIVE)
+        [0.1,10.0],     //MINC - Core range, prefer ramparts close to the core
+        [0.1,10.0],     //MINC - Exit range, prefer ramparts farther from exits
+        [0.1,10.0],     //MINC - Distance transform, prefer ramparts on tiles close to walls, encouraging chokepoints
+    ]    
+};
 
 function minMaxNormalize(value, max, min) {
     if (max - min == 0){
@@ -580,21 +588,48 @@ function towerFF(newPlanCM,storePos,terrain){
 }
 
 function generatePopulation(totalPop){
-    let pop = [];
+    let species = speciesCombos();
+    //Shuffle species semi-randomly to be fair in long-term performance
+    species = species.sort(() => Math.random() - 0.5);
+    //Organize population by species
+    let pop = {}
     for(let i = 0;i<totalPop;i++){
-        let chromosome = [];
-        for(let j = 0; j < GENE_LIMITS.length; j++){
+        //Start genome off with species genes, using mod to loop through the options
+        let speciesGenes = species[i % species.length]
+        console.log("SPECIESGENES",speciesGenes.toString())
+        let genome = [...speciesGenes];
+        //Mode genes
+        for(let j = 0; j < GENE_LIMITS.mode.length; j++){
+            let max = GENE_LIMITS.mode[j][1];
+            //Mode genes are always integers. Generate a random int up to the max gene limit
+            gene = randomInt(max);
+            genome.push(gene);
+        }
+        //General genes
+        for(let j = 0; j < GENE_LIMITS.gene.length; j++){
             // Generate a random value between the min and max for each gene
-            let min = GENE_LIMITS[j][0];
-            let max = GENE_LIMITS[j][1];
+            let min = GENE_LIMITS.gene[j][0];
+            let max = GENE_LIMITS.gene[j][1];
             //Rounding to ensure no more than 2 decimals
             let gene = Math.round((Math.random() * (max - min) + min) * 100) / 100;
-            chromosome.push(gene);
+            genome.push(gene);
         }
-        pop.push(chromosome);
+        if(!pop[speciesGenes.toString()]) pop[speciesGenes.toString()] = [genome]
+        else{pop[speciesGenes.toString()].push(genome)};
     }
     //chronicle.log(`Chromosomes generated for population. ${pop}`,'architect',4)
     return pop;
+
+    function speciesCombos() {
+        const n = GENE_LIMITS.species.length;
+
+        return Array.from({ length: 1 << n }, (_, i) =>
+            Array.from({ length: n }, (_, b) =>
+                (i >> (n - b - 1)) & 1
+            )
+        );
+    }
+
 }
 
 function finalizePlan(config){
@@ -829,16 +864,16 @@ function updateGeneration(config){
 
 //Room Plan Function
 //Calls functions from architect.planner to build the room plan
-function generateRoomPlan(){
+function generateRoomPlan(config,data,subject){
     //Things we need to return for elsewhere, if generated in the room plan
     //Structure CM for placement of all structures
     //Distance CM for the room based on storage location
     //Source lab locations
     
-    //generateInitialPopulation() - Require minimum 5-10 members of each species, depending on max population limit, randomize the rest. Randomize all non-species genes.
-    //if watershed - architectPlanner.
+    //generateInitialPopulation() - Minimum population of 64, 8 per species. Randomize all non-species genes.
+    //if watershed - architectPlanner.runWatershed()
     //architectPlanner.getCoreOptions()
-    //architectPlanner.getStructureBlob()  //CM of the valid build area. Region tiles if using watershed, otherwise ~250 tile blob. Choice between, and blob size, determined by genes
+    //if blob - architectPlanner.getStructureBlob()  //CM of the valid build area. Region tiles if using watershed, otherwise ~250 tile blob. Choice between, and blob size, determined by genes
     //architectPlanner.buildCoreRoads()    //Source and controller roads, mineral road optional based on genes
 
 
@@ -861,15 +896,18 @@ const architect = {
      */
     //When visualizing, can use the resource icons instead of names for easier reference and tracking.
     //Even already comes with separate colors
+    //Rename creeps to a format something like the below, based on which house won the room planning:
+    //Serf 𒊶𒃒 of E44N18, House Ghodium
+    //Serf 𒊶𒃒 of House Utrium, Fief E44N18
     SPECIES_NAMES : {
-        "000": { name: "HYDROGEN" },
-        "010": { name: "OXYGEN" },
-        "100": { name: "UTRIUM" },
-        "110": { name: "LEMERGIUM" },
-        "001": { name: "KEANIUM" },
-        "011": { name: "ZYNTHIUM" },
-        "101": { name: "CATALYST" },
-        "111": { name: "GHODIUM" }
+        "0,0,0": "HYDROGEN",
+        "0,1,0":"OXYGEN",
+        "1,0,0":"UTRIUM",
+        "1,1,0":"LEMERGIUM",
+        "0,0,1":"KEANIUM",
+        "0,1,1":"ZYNTHIUM",
+        "1,0,1":"CATALYST",
+        "1,1,1":"GHODIUM"
     },
     //Data for the room being planned
     data: {},
@@ -882,7 +920,9 @@ const architect = {
             chronicle.log(`No room data available for ${roomName}.`,'architect',4);
             return false;
         }
-        let watershedCM = getWatershed()  //Generate this once the first time it's needed, then cache for every other use
+        let terrain = new Room.Terrain(roomName);
+        let distanceCM = architectMatrixes.getDistanceMap(terrain)
+        let watershedCM = architectMatrixes.getWatershed(distanceCM,terrain)  //Generate this once the first time it's needed, then cache for every other use
         //Set a fresh planner object
         this.config = {
             roomName:roomName,
@@ -998,7 +1038,16 @@ global.testFiefPlan = function testFiefPlan(roomName,{totalPop=2, maxIterations=
     architect.run(roomName,{totalPop:totalPop,maxIterations:maxIterations,mutationRate:mutationRate,maxMutationMagnitude:maxMutationMagnitude});
     chronicle.log(`Test Complete`,'architect',4)
 }
-
+global.tempTest = function tempTest(tPop=10){
+    let pop = generatePopulation(tPop)
+    console.log(JSON.stringify(pop))
+    for(let species of Object.keys(pop)){
+        console.log(species, architect.SPECIES_NAMES[species])
+        for(let subject of pop[species]){
+            console.log(subject)
+        }
+    }
+}
 /**
  * global.testFiefPlan = function testFiefPlan(roomName){
     let chromosome = JSON.parse(JSON.stringify(DEFAULT_GENES))

@@ -107,7 +107,7 @@ const chronicle = {
                 report.push(`[${LEVEL_STRINGS[log.l]}] (${log.s}) - ${log.m}`)
             }
         }
-        if(report.length)console.logUnsafe(report.join('\n'))
+        if(report.length)console.log(report.join('\n'))
         TICKLOGS = [];
     }
 }
