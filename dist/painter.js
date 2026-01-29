@@ -435,7 +435,7 @@ const painter = {
             for (let x = 0; x <= 49; x += 1) {
                 for (let y = 0; y <= 49; y += 1) {
                     let weight = testCM.get(x,y);
-                    if(weight == 0) continue;
+                    //if(weight == 0) continue;
                     new RoomVisual().text(weight,x,y+0.25);
                 }
             }
@@ -445,7 +445,7 @@ const painter = {
             for (let x = 0; x <= 49; x += 1) {
                 for (let y = 0; y <= 49; y += 1) {
                     let weight = testCM.get(x,y);
-                    if(weight == 0) continue;
+                    //if(weight == 0) continue;
                     new RoomVisual().text(weight,x,y+0.25,{font:'0.3'});
                 }
             }

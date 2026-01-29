@@ -1,4 +1,3 @@
-const helper = require('functions.helper');
 const minCut = require('minCut');
 const profiler = require('screeps-profiler');
 
@@ -436,7 +435,7 @@ const fiefPlanner = {
         //If no room data, we're likely in spinup or no scout
         if(!roomData){
             chronicle.log(`No room data for planner.`,'fiefPlanner',4)
-                return false;
+            return false;
         }
         let sources = roomData.sources;
         let mineral = roomData.mineral;
@@ -1936,6 +1935,9 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
         let terrain = Game.map.getRoomTerrain(global.heap.fiefPlanner.roomName);
         //Saves the current best room plan from the planner algorithm
         //Process the base plan object for saving
+        if(!basePlan){
+            chronicle.log(`No base plan for RCL planner`,'fiefPlanner',1)
+        }
         let queue = [basePlan.storage];
         let visited = new Set();
 

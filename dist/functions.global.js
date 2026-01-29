@@ -11,6 +11,10 @@ global.randomChoice = function(array) {
     return array[Math.floor(Math.random() * array.length)];
 };
 
+global.clamp = function(number, min, max) {
+  return Math.max(min, Math.min(number, max));
+}
+
 //Update diplomacy
 global.setDiplomacy = function(type,username){
     //Memory.diplomacy = {allies:[], ceasefire:[], outlaws:[],ledger:[]}
@@ -371,13 +375,17 @@ global.describeRoom = function(name){
 	}
 }
 
-global.convertStructure = function convertStructure(structure){
-    //console.log("Converting",structure,'LEN',structure.length)
-    if(structure.length == 1){
+global.convertStructure = function convertStructure(structure) {
+
+    if (typeof structure === "number") {
         return Memory.structureFromNumReference[structure];
     }
-    return Memory.structureToNumReference[structure]
-}
+
+    if (typeof structure === "string") {
+        return Memory.structureToNumReference[structure];
+    }
+    chronicle.log(`Invalid structure: ${structure}`,'global.convertStructure',1)
+};
 
 global.BigCostMatrix = function() {
     this._bits = new Uint16Array(2500);

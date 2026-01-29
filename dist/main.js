@@ -20,7 +20,7 @@ const fiefPlanner = require('fiefPlanner')
 const architect = require('architect')
 let lastMemory;
 //profiler.enable();
-console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
+console.logUnsafe("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 RawMemory.setActiveSegments(Object.values(ALL_SEGMENTS))    //Once we pass 10 segments and build a handler, this needs to change
 Memory.lastReset = 0
 Memory.globalReset = Game.time;
@@ -53,7 +53,7 @@ global.heap = {
 }
 module.exports.loop = function () {
     if(['shard1','shard2','shard3'].includes(Game.shard.name)){
-        return;
+        //return;
     }
     if(!Memory || !RawMemory) {
         console.log("MEMORY")
@@ -70,7 +70,6 @@ module.exports.loop = function () {
     if (hasRespawned() || !Memory.kingdom){
         console.log("SPINUP");
         spinup.run();
-        return;
     }
     //Reset movement
     Traveler.resetMovementIntents();
@@ -88,33 +87,7 @@ module.exports.loop = function () {
 
     }
     else{
-        let defenseData = RawMemory.segments[SEGMENT_ROOM_DEFENSE]
-        if(defenseData == "")  RawMemory.segments[SEGMENT_ROOM_DEFENSE] = "{}"
-        let roomData = RawMemory.segments[SEGMENT_ROOM_PLANS]
-        if(roomData == "")  RawMemory.segments[SEGMENT_ROOM_PLANS] = "{}"
-        if(!heap.scoutData){
-            let scoutData = RawMemory.segments[SEGMENT_SCOUT_DATA];
-            if(scoutData == "" || !scoutData){
-                heap.scoutData = {}
-            }
-            else{
-                heap.scoutData = JSON.parse(scoutData)
-            }
-        }
-        heap.matrixes = {};
-        let matrixData = RawMemory.segments[SEGMENT_ROOM_COSTMATRIX]
-        if(matrixData == ""){
-            RawMemory.segments[SEGMENT_ROOM_COSTMATRIX] = "{}";
-            matrixData = '{}'
-        }
-        //matrixData is an object of serialized costmatrixes with room names as keys
-        let matrixDump = JSON.parse(matrixData);
-        for(let roomName of Object.keys(matrixDump)){
-            heap.matrixes[roomName] = PathFinder.CostMatrix.deserialize(matrixDump[roomName]);
-        }
-        //Force parsing for memhack
-        //Memory.rooms;
-        //lastMemory = RawMemory._parsed;
+        spinup.reset();
     }
 
     //Check fiefs 
@@ -460,7 +433,7 @@ module.exports.loop = function () {
 
         if (Game.cpu.bucket == 10000 && ['shard0','shard1','shard2','shard3'].includes(Game.shard.name)) {
             Game.cpu.generatePixel()
-            console.log("<font color='green'>", Game.shard.name, "generated pixel.</font>")
+            console.logUnsafe("<font color='green'>", Game.shard.name, "generated pixel.</font>")
         }
     });
     chronicle.run();

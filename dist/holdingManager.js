@@ -127,7 +127,7 @@ var holdingManager = {
             }
             //Fief spawn utilization check in here somewhere
             let holding = Memory.kingdom.holdings[each]
-            if(spawnSkip.includes(holding.homeFief))continue;
+            if(holding && spawnSkip.includes(holding.homeFief))continue;
             //No home fief, move on
             if(!holding || !holding.homeFief) continue
             //Increment our home fief's spawning impact

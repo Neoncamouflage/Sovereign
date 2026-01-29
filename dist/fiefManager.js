@@ -37,7 +37,7 @@ const fiefManager = {
             if(roomLevel == 7 && room.name == heap.funnelTarget) heap.funnelTarget = null;
         }
         if(!fief.rclTimes['storage'] && room.storage) fief.rclTimes['storage'] = Game.time - fief.rclTimes.tick
-        if(!fief.rampTarget) fief.rampTarget = 50000;
+        if(!fief.rampTarget) fief.rampTarget = 15000;
         
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let mySpawns = room.find(FIND_MY_SPAWNS).map(spawn => spawn.id);
@@ -50,17 +50,11 @@ const fiefManager = {
             8:800000
         }
         let extractor = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_EXTRACTOR).length;
-        let noBuild = [STRUCTURE_NUKER]
-        if(fief.noBuild){
-            if(Array.isArray(fief.noBuild)){
-                for(let each of fief.noBuild){
-                    noBuild.push(each)
-                }
-            }
-            else{
-                noBuild.push(fief.noBuild)
-            }
-        }
+        //Hardcoded nobuild array, plus pull from fief
+        const noBuild = [STRUCTURE_NUKER].concat(
+            fief.noBuild ? (Array.isArray(fief.noBuild) ? fief.noBuild : [fief.noBuild]) : []
+        );
+
         fief.spawns = mySpawns;
         let spawns = fief.spawns;
         let [plannedNet,averageNet] = granary.getIncome(room.name);
@@ -68,7 +62,6 @@ const fiefManager = {
         //console.log(room.name,"income",plannedNet,averageNet)
 
         if(!fief.roomPlan || fief.roomPlan == 'null'){
-            //restartFlag = true;
             let roomPlans = JSON.parse(RawMemory.segments[SEGMENT_ROOM_PLANS] ? RawMemory.segments[SEGMENT_ROOM_PLANS] : '{}'); //Fix this at some point to make sure it exists on tick 1
             if(roomPlans[room.name]){
                 [fief.roomPlan, fief.rampartPlan] = roomPlans[room.name]
@@ -87,7 +80,6 @@ const fiefManager = {
 
         if(!fief.sources || !Object.keys(fief.sources).length){
             //console.log("NO SOURCES")
-            restartFlag = true;
             fief.sources = {};
             let sources = room.find(FIND_SOURCES);
             sources.forEach(source => {
@@ -188,7 +180,7 @@ const fiefManager = {
         if(Object.keys(buildQueue).length && !cSites.length){
             let toBuild;
             //Spawns > Storage > Towers > Extensions > Roads > Labs
-            let structOrder = [STRUCTURE_SPAWN,,STRUCTURE_EXTENSION,STRUCTURE_STORAGE,STRUCTURE_TOWER,STRUCTURE_ROAD,STRUCTURE_LAB,STRUCTURE_CONTAINER,STRUCTURE_LINK,STRUCTURE_EXTRACTOR,STRUCTURE_OBSERVER,STRUCTURE_TERMINAL,STRUCTURE_FACTORY,STRUCTURE_POWER_SPAWN,STRUCTURE_NUKER]
+            let structOrder = [STRUCTURE_SPAWN,STRUCTURE_EXTENSION,STRUCTURE_STORAGE,STRUCTURE_TOWER,STRUCTURE_ROAD,STRUCTURE_LAB,STRUCTURE_CONTAINER,STRUCTURE_LINK,STRUCTURE_EXTRACTOR,STRUCTURE_OBSERVER,STRUCTURE_TERMINAL,STRUCTURE_FACTORY,STRUCTURE_POWER_SPAWN,STRUCTURE_NUKER]
             for(let each of structOrder){
                 //console.log("Checking to build:",each)
                 if(buildQueue[each]){
@@ -589,6 +581,7 @@ const fiefManager = {
             //-- Harvester --
             //Check each source for open space and harvester need
             let noHarvs = false;
+            let creepSource;
             let targetSources = Object.keys(fief.sources).reduce((obj,key) =>{
                 obj[key] = {harvs:0,power:0,ttlFlag:false};
                 return obj;
@@ -599,9 +592,13 @@ const fiefManager = {
                     creepSource = creep.memory.target;
                     targetSources[creepSource].harvs++;
                     targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
-                    if(storagePos && creep.ticksToLive < storagePos.getRangeTo(Game.getObjectById(creepSource)) + (CREEP_SPAWN_TIME*creep.body.length) && !creep.memory.respawn){
-                        targetSources[creepSource].ttlFlag = creep.id;
-
+                    let srcObj = Game.getObjectById(creepSource);
+                    if(storagePos && srcObj){
+                        let srcObjRange = storagePos.getRangeTo(srcObj) 
+                        let creepSpawnLead = CREEP_SPAWN_TIME*creep.body.length
+                        if (creep.ticksToLive < srcObjRange + creepSpawnLead && !creep.memory.respawn){
+                            targetSources[creepSource].ttlFlag = creep.id;
+                        }
                     };
                 })
             }
@@ -775,6 +772,7 @@ const fiefManager = {
                 
                 //If no upgraders(who are also builders at this stage), and we're below a default cap
                 if(!fiefCreeps.upgrader){
+                    if(upMax == 0) return;
                     //Make sure we're good on energy
                     if(plannedNet<=0 || averageNet<=0) return;
                     //If we passed all, request an upgrader
@@ -1029,7 +1027,7 @@ const fiefManager = {
                     for(let resource of Object.keys(termNeeds)){
                         let amount = termNeeds[resource];
                         if(room.terminal.store[resource] < amount){
-                            supplyDemand.addRequest(room,{type:'dropoff',amount:50000-room.terminal.store[RESOURCE_ENERGY],targetID:room.terminal.id});
+                            supplyDemand.addRequest(room,{type:'dropoff',amount:50000-room.terminal.store[resource],targetID:room.terminal.id});
                         }
                     }  
                 }
@@ -1048,14 +1046,7 @@ const fiefManager = {
                         room.terminal.send(RESOURCE_ENERGY,room.terminal.store[RESOURCE_ENERGY]-fee,heap.funnelTarget)
                     }
                 }
-                //If we are the funnel target
-                else{
-                    //if(room.terminal.store[RESOURCE_ENERGY] > 200000 && room.storage.store.getFreeCapacity() > 100000){
-                        //supplyDemand.addRequest(room,{type:'pickup',resourceType:'energy',amount:room.terminal.store[RESOURCE_ENERGY],targetID:room.terminal.id,international:false,priority:6})
-                    //}
-                }
             }
-           
         }
 
         
@@ -1150,7 +1141,7 @@ const fiefManager = {
                 supplyDemand.addRequest(room,{resourceType:RESOURCE_ENERGY,amount:coreLink.store[RESOURCE_ENERGY],type:'pickup',targetID:fief.links.coreLink,priority:6});
             }
             else{
-                coreTransfer = false;
+                let coreTransfer = false;
                 for(let link of sourceLinks){
                     if(link &&link.store[RESOURCE_ENERGY] == 800 && !link.cooldown){
                         link.transferEnergy(coreLink)
@@ -1282,37 +1273,30 @@ const fiefManager = {
         }
 
 
-        towers = room.find(FIND_MY_STRUCTURES, {
-            filter: { structureType: STRUCTURE_TOWER }
-        });
-    let damageRamps = ramps.filter(str => str.structureType == STRUCTURE_RAMPART && str.hits <= 1000)
+    let towers = room.find(FIND_MY_STRUCTURES, {
+        filter: { structureType: STRUCTURE_TOWER }
+    });
+    let damageRamps = ramps.filter(r => r.hits <= 1000);
     for(let tower of towers) {
 
         var damagedCreeps = tower.room.find(FIND_MY_CREEPS, {
             filter: (creep) => (creep.hits < creep.hitsMax)
-        });
+        }).sort((a, b) => a.hits - b.hits);
+
+        if (damagedCreeps.length > 0 && tower.energy > 400){
+            tower.heal(damagedCreeps[0]);
+            continue
+        }
         
-        damagedCreeps.sort((a, b) => a.hits - b.hits);
-        //console.log(room.name)
-            if (damagedCreeps.length > 0 && tower.energy > 400){
-                tower.heal(damagedCreeps[0])
-            }
         
-        
-        var hostiles = roomBaddies.filter(bad=>(bad.body.length <25) || bad.owner.username == 'Invader');
+        const hostiles = roomBaddies.filter(bad=>(bad.body.length <25) || bad.owner.username == 'Invader');
         
         let closestHostile = randomChoice(hostiles)
         if(damageRamps.length){
             tower.repair(randomChoice(damageRamps))
         }
         else if (closestHostile != null && closestHostile != undefined) {
-                //console.log(closestHostile)
-                tower.attack(closestHostile);
-        }
-        else if(tower.energy > 100){
-            if (damagedCreeps.length > 0 && tower.energy > 400){
-                tower.heal(damagedCreeps[0])
-            }
+            tower.attack(closestHostile);
         }
     }
         
@@ -1330,7 +1314,12 @@ const fiefManager = {
             storageLevel = room.storage.store.getUsedCapacity();
         }
         let totalCreeps = 0;
-        if(fiefCreeps && fiefCreeps.length) totalCreeps = fiefCreeps.length;
+        if (fiefCreeps) {
+            for (const list of Object.values(fiefCreeps)){
+                if(!list) continue
+                totalCreeps += list.length;
+            }
+        }
         return {
             roomLevel:roomLevel,
             wares: totalWares(room,fief),
@@ -1343,7 +1332,7 @@ const fiefManager = {
             currentlySpawning: Object.values(Game.spawns).filter(spawn => spawn.spawning && spawn.room.name == room.name).map(spawn => Game.creeps[spawn.spawning.name].memory.role),
             storageLevel: storageLevel,
             energyUse: Math.round(averageNet),
-            roomStatus:room.controller.safemode ? 'SAFEMODE' : roomBaddies.length ? "ATTACK" : "OK",
+            roomStatus:room.controller.safeMode ? 'SAFEMODE' : roomBaddies.length ? "ATTACK" : "OK",
             shippingOrders: heap.shipping[room.name].requests && Object.keys(heap.shipping[room.name].requests).length || 0,
             shippingUse:    heap.shipping[room.name].utilization ? 100-(Math.round(((heap.shipping[room.name].utilization.reduce((acc, num) => acc + num, 0)/heap.shipping[room.name].utilization.length)*100))) : 0
         };

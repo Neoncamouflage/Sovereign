@@ -19,7 +19,14 @@ var roleMiner = {
                 return;
             }
         }
-        const can = holding.sources[targetID].can && Game.getObjectById(holding.sources[targetID].can)
+        let can;
+        try{
+             can = holding.sources[targetID].can && Game.getObjectById(holding.sources[targetID].can)
+        }
+        catch(error){
+            chronicle.log(`Unable to get can: ${error}`,'role.miner',1)
+            return;
+        }
         if(!creep.memory.preflight){
             //Memory.kingdom.holdings[targetRoom].sources[harvestID].miner = creep.name;
             creep.memory.preflight = true;

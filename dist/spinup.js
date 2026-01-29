@@ -136,6 +136,32 @@ const spinup = {
             [STRUCTURE_CONTAINER]:2,
             [STRUCTURE_ROAD]:1,
         }
+    },
+    reset: function(){
+        let defenseData = RawMemory.segments[SEGMENT_ROOM_DEFENSE]
+        if(defenseData == "")  RawMemory.segments[SEGMENT_ROOM_DEFENSE] = "{}"
+        let roomData = RawMemory.segments[SEGMENT_ROOM_PLANS]
+        if(roomData == "")  RawMemory.segments[SEGMENT_ROOM_PLANS] = "{}"
+        if(!heap.scoutData){
+            let scoutData = RawMemory.segments[SEGMENT_SCOUT_DATA];
+            if(scoutData == "" || !scoutData){
+                heap.scoutData = {}
+            }
+            else{
+                heap.scoutData = JSON.parse(scoutData)
+            }
+        }
+        heap.matrixes = {};
+        let matrixData = RawMemory.segments[SEGMENT_ROOM_COSTMATRIX]
+        if(matrixData == ""){
+            RawMemory.segments[SEGMENT_ROOM_COSTMATRIX] = "{}";
+            matrixData = '{}'
+        }
+        //matrixData is an object of serialized costmatrixes with room names as keys
+        let matrixDump = JSON.parse(matrixData);
+        for(let roomName of Object.keys(matrixDump)){
+            heap.matrixes[roomName] = PathFinder.CostMatrix.deserialize(matrixDump[roomName]);
+        }
     }
 }
 

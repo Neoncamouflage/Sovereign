@@ -1,9 +1,8 @@
 const helper = require('functions.helper');
-const minCut = require('minCut');
 const profiler = require('screeps-profiler');
 const fiefPlanner = require('fiefPlanner');
-//Get base location
-//Fill out structure area if we're using that
+const architectPlanner = require('architect.planner')
+
 //
 /**
 100:STRUCTURE_RAMPART,
@@ -22,7 +21,9 @@ const fiefPlanner = require('fiefPlanner');
 3:STRUCTURE_SPAWN,
 2:STRUCTURE_CONTAINER,
 1:STRUCTURE_ROAD,
- */
+*/
+
+
 
 
 
@@ -44,40 +45,54 @@ const scoreWeights = {
     sourceFound:25,
     structureFound:500
 }
+//SPECIES   -     Subjects that all share the same SPEC genes and primarily breed within that group.
+//PHENOTYPE -     The physical layout generated from a genome by the planner.
+//NICHE     -     A fitness-based subgroup formed based on score categories.
 
+//Genes are separated into blocks based on their area of influence. A higher value is a greater preference.
+//Species genes act as switches to express significantly different behavior. Breeding is restricted across different species.
+//Mode genes are also switches but do not have enough impact to restrict breeding.
 const GENE_LIMITS = [
-    [0.1,10.0],     //Core - Exit range weight
-    [0.1,10.0],     //Core - Controller range weight
-    [0.1,10.0],     //Core - Source range weight
-    [0.1,10.0],     //Core - Distance transform weight
-    [0.1,10.0],     //Blob - Tile density weight
-    [0.1,10.0],     //Blob - Core range weight
-    [0.1,10.0],     //Blob - Exit range weight
-    [0.1,10.0],     //Assn - Exit range weight
-    [0.1,10.0],     //Assn - Core range weight
-    [0.1,10.0],     //MinC - Core range weight
-    [0.1,10.0],     //MinC - Exit range weight
-    [0.1,10.0],     //MinC - Distance transform weight
-    [0.1,10.0],     //MinC - Include Controller
-    [0.1,10.0],     //MinC - Flat Weight
+    // ----Species Genes---- //
+    [0,1],          //SPEC - Watershed or Blob, above 0.5 uses watershed regions and ignores structure blob genes
+    [0,1],          //SPEC - Mineral roads, above 0.5 core RCL3 roads will include the mineral
+    [0,1],          //SPEC - Mincut CM, 0.5 and below ignores Core, Exit, and Distance genes, using only the standard distance transform CM
+    // ----Mode Genes---- //
+    [0,1],          //MODE - Mincut controller, above 0.5 will require mincut to rampart the controller
+    // ----Watershed Genes---- // (ACTIVATED BY SPEC1)
+    [0.1,10.0],     //WATR - Region size, prefer larger watershed region
+    [0.1,10.0],     //WATR - Controller range, prefer the controller be in or near the region
+    [0.1,10.0],     //WATR - Source range, prefer sources be in or near the region
+    [0.1,10.0],     //WATR - Exit range, prefer regions away from exits
+    // ----Core Placement Genes---- //
+    [0.1,10.0],     //CORE - Exit range, prefer to stay away from exits
+    [0.1,10.0],     //CORE - Controller range, prefer closeness to controller
+    [0.1,10.0],     //CORE - Source range, prefer to minimize average range to sources
+    [0.1,10.0],     //CORE - Distance transform, prefer distance from walls
+    // ----Structure Blob Genes---- // (ACTIVATED BY SPEC1)
+    [0.1,10.0],     //BLOB - Blob size, prefer larger tile counts
+    [0.1,10.0],     //BLOB - Distance transform, prefer to expand the blob away from walls
+    [0.1,10.0],     //BLOB - Exit range, prefer to expand the blob away from exits
+    [0.1,10.0],     //BLOB - Source range, prefer to expand the blob towards sources
+    // ----Road Layout Genes---- //
+    [0.1,10.0],     //ROAD - Road exploration, prefer road expansion that maximizes new adjacent tiles
+    [0.1,10.0],     //ROAD - Diagonal bias, prefer roads to expand diagonally
+    [0.1,10.0],     //ROAD - Core range, prefer roads close to the core
+    [0.1,10.0],     //ROAD - Exit range, prefer roads away from exits
+    // ----Structure Assignment Genes---- //
+    [0.1,10.0],     //ASSN - Fastfiller use, prefer placing fastfiller stamps
+    [0.1,10.0],     //ASSN - Spawn range, prefer spawns to be placed next to the core
+    [0.1,10.0],     //ASSN - Spawn distance, prefer spawns to be placed away from each other
+    [0.1,10.0],     //ASSN - Lab range, prefere labs to be close to the core
+    [0.1,10.0],     //ASSN - Tower range, prefer towers to be close to the core
+    [0.1,10.0],     //ASSN - Tower distance, prefer towers to be placed away from each other
+    [0.1,10.0],     //ASSN - Terminal range, prefer terminal to be close to the controller
+    // ----Mincut Rampart Genes---- // (ACTIVATED BY SPEC3)
+    [0.1,10.0],     //MINC - Core range, prefer ramparts close to the core
+    [0.1,10.0],     //MINC - Exit range, prefer ramparts farther from exits
+    [0.1,10.0],     //MINC - Distance transform, prefer ramparts on tiles close to walls, encouraging chokepoints
+    
 ];
-
-const DEFAULT_GENES = {
-    eWeight:1,
-    cWeight:2,
-    sWeight:0.5,
-    dWeight:1.2,
-    blobTWeight:1,
-    blobCWeight:1,
-    blobEWeight:1,
-    assnEWeight:1,
-    assnCWeight:1,
-    minCCWeight:1,
-    minCEWeight:1,
-    minCDWeight:1,
-    minCIWeight:1,
-    minCFWeight:1
-};
 
 function minMaxNormalize(value, max, min) {
     if (max - min == 0){
@@ -87,30 +102,173 @@ function minMaxNormalize(value, max, min) {
     return (value - min) / (max - min);
 }
 
-function getRCLPlan(plan){
+
+
+function getRCLPlan(basePlan,newPlanCM,extensionDistances){
+    Memory.test.testBasePlan = basePlan
     //{rcl:{building:[spot,spot,spot]}}
     let roomDetails = {sourceLabs:[]};
-    let roomPlan = {
+    //plannedRoads tracks roads already placed
+    let plannedRoads = new Set();
+    let rclTrack={}; // Tracks the structure type and how many we've placed so we can gauge RCL
+    let visited = new Set();
+    extensionSet = new Set();
+    let queue = [basePlan.storage];
+    //Set up the room plan object along with single instance structures
+    let rclPlan = {
         1:{},
         2:{},
         3:{},
         4:{[convertStructure(STRUCTURE_STORAGE)]:[{x:basePlan.x,y:basePlan.y}]},
         5:{},
-        6:{[convertStructure(STRUCTURE_EXTRACTOR)]:[{x:plan.extractor.x,y:plan.extractor.y}],[convertStructure(STRUCTURE_LAB)]:[]},
+        6:{[convertStructure(STRUCTURE_EXTRACTOR)]:[{x:basePlan.extractor.x,y:basePlan.extractor.y}],[convertStructure(STRUCTURE_LAB)]:[]},
         7:{},
-        8:{}
+        8:{[convertStructure(STRUCTURE_OBSERVER)]:[{x:basePlan.observer.x,y:basePlan.observer.y}],[convertStructure(STRUCTURE_POWER_SPAWN)]:[{x:basePlan.powerSpawn.x,y:basePlan.powerSpawn.y}],
+            [convertStructure(STRUCTURE_NUKER)]:[{x:basePlan.nuker.x,y:basePlan.nuker.y}]}
     };
+    //Fill in source labs because they need built first no matter what
+    //Also add them to room details so we can tell the fief which labs are sources
     for(let each of Object.values(basePlan.sourceLabs)){
-        roomPlan[6][STRUCTURE_LAB].push(each);
+        rclPlan[6][convertStructure(STRUCTURE_LAB)].push(each);
         roomDetails.sourceLabs.push(each)
+    }
+    //Get all primary roads that will be built at RCL 3
+    //These are core,controller, and source roads
+    rclPlan[3][STRUCTURE_ROAD] = []
+    for(let road of basePlan.roads.core){
+        let key = `${road.x},${road.y}`;
+        if(!plannedRoads.has(key)){
+            plannedRoads.add(key);
+            rclPlan[3][convertStructure(STRUCTURE_ROAD)].push({x:road.x,y:road.y})
+        }
+    }
+    for(let road of basePlan.roads.controller){
+        let key = `${road.x},${road.y}`;
+        if(!plannedRoads.has(key)){
+            plannedRoads.add(key);
+            rclPlan[3][convertStructure(STRUCTURE_ROAD)].push({x:road.x,y:road.y})
+        }
+    }
+    for(let source in basePlan.roads.sources){
+        for(let road of basePlan.roads.sources[source]){
+            let key = `${road.x},${road.y}`;
+            if(!plannedRoads.has(key)){
+                plannedRoads.add(key);
+                rclPlan[3][convertStructure(STRUCTURE_ROAD)].push({x:road.x,y:road.y})
+            }
+        }
+    }
+    //Walk the planCM and add structures to the RCL plan as they're encountered
+    while (queue.length > 0) {
+        //Set up for the next tile
+        let {x, y} = queue.shift();
+        let key = `${x},${y}`;
+        if (visited.has(key)) continue;
+        visited.add(key);
+
+        //If it's a structure except a rampart, add to the RCL plan. Ramparts aren't tied to RCL
+        if(Memory.roomPlanReference[newPlanCM.get(x,y)] && newPlanCM.get(x,y) != 100){
+            addToRCL(Memory.roomPlanReference[newPlanCM.get(x,y)],rclTrack,rclPlan,{x,y},extensionSet);
+        }
+
+        //If the current tile is a non-road structure, we continue, as we want to follow the roads. Also exempt storage since we start there.
+        if(Memory.roomPlanReference[newPlanCM.get(x,y)] && ![99,98].includes(newPlanCM.get(x,y))) continue;
+
+        [[1, 0], [1, 1], [-1, -1], [-1, 1], [1, -1], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => {
+        let newX = x + dx, newY = y + dy;
+        
+        // Ensure the new tile is within bounds, not already visited, and not a wall
+        if (newX >= 0 && newX < 50 && newY >= 0 && newY < 50 && !visited.has(`${newX},${newY}`) && terrain.get(newX,newY) != TERRAIN_MASK_WALL) {
+            
+            queue.push({x: newX, y: newY});
+        }
+        });
+    }
+
+    return rclPlan;
+
+
+    //Adds building to RCL plan
+    function addToRCL(structure,tracker,plan,spot,extensionSet){
+        //If this is the first one, add it to the tracker object
+        if(!tracker[structure]) tracker[structure] = 0;
+        //Loop through RCLs
+        for(let rcl = 1;rcl <= 8;rcl++){
+            //If the number allowed at this RCL is greater than how many we have so far, increment the tracker and add it
+            if(structure != STRUCTURE_ROAD && CONTROLLER_STRUCTURES[structure][rcl] > tracker[structure]){
+                tracker[structure]++;
+                //Add the location to the structure
+                if(!plan[rcl][structure]) plan[rcl][structure] = [];
+                plan[rcl][structure].push(spot)
+                return;
+            }
+            else if(structure == STRUCTURE_ROAD && CONTROLLER_STRUCTURES[STRUCTURE_EXTENSION][rcl] > tracker[STRUCTURE_EXTENSION]){
+                //Check key
+                let key = `${spot.x},${spot.y}`;
+                if(!extensionSet.has(key)){
+                    continue;
+                }
+                //Add the location to the structure
+                if(!plan[rcl][structure]) plan[rcl][structure] = [];
+                plan[rcl][structure].push(spot)
+                return;
+            }
+        }
+    }    
+    //Now we fill out RCL 4 roads, which are rampart routes
+    rclPlan[4][STRUCTURE_ROAD] = []
+    for(let road of basePlan.roads.rampart){
+        let key = `${road.x},${road.y}`;
+        if(!roadSet.has(key)){
+            roadSet.add(key);
+            rclPlan[4][convertStructure(STRUCTURE_ROAD)].push({x:road.x,y:road.y})
+        }
+    }
+    //Finally, we fill in RCL 6 roads to the mineral
+    rclPlan[6][STRUCTURE_ROAD] = []
+    for(let road of basePlan.roads.mineral){
+        let key = `${road.x},${road.y}`;
+        if(!roadSet.has(key)){
+            roadSet.add(key);
+            rclPlan[6][convertStructure(STRUCTURE_ROAD)].push({x:road.x,y:road.y})
+        }
     }
 }
 
-function scorePlan(roomName,newPlanCM,newPlan){
+
+//UPDATE TO NORMALIZE SCORING WITHIN SPECIES
+//One species may naturally score lower than another, even before evolution
+//Normalize scoring so they have a chance to compete
+//Select elites for niches based on their within-species normalized traits
+//Otherwise a niche will become dominated by a single species
+//Phase 1: In early-mid generations we normalize species separately and enforce minimum populations per species
+//Phase 2: In later generations we reduce normalization and allow the inferior species to die out 
+/**
+Imagine both modes are equally capable in principle of satisfying your design goals, but their mechanics differ:
+
+Watershed produces long perimeter walls → more ramparts.
+
+Blob produces compact shapes → fewer ramparts.
+
+If your objective says:
+
+“Minimize total ramparts”
+
+then watershed is intrinsically worse at that objective unless it compensates elsewhere.
+
+If the real design intent is actually:
+
+“Use ramparts efficiently while covering entrances and protecting assets,”
+
+then “total ramparts” is only a proxy—and a proxy that happens to penalize watershed more than blob.
+
+In that case, raw scores are encoding algorithmic style, not quality.
+ */
+function scorePlan(roomName,newPlanCM,newPlan,config){
     let roomData = getScoutData(roomName)
-    console.log(JSON.stringify(Object.keys(newPlan)))
-    console.log(JSON.stringify(newPlan.ramparts))
-    console.log(JSON.stringify(newPlan.roads))
+    //console.log(JSON.stringify(Object.keys(newPlan)))
+    //console.log(JSON.stringify(newPlan.ramparts))
+    //console.log(JSON.stringify(newPlan.roads))
     //With pareto fronts we score on multiple objectives. Due to the number, sub objectives will combine into a total category score
     /**
      * -----Score Objectives-----
@@ -135,7 +293,7 @@ function scorePlan(roomName,newPlanCM,newPlan){
      *  -Minimum damage to rampart adjacent tiles
      *  -Average damage to rampart adjacent tiles
      * 
-     * Misc
+     * Access
      *  -Is controller outside of rampart tiles
      *  -Are sources outside of rampart tiles (penalty for each in-room source if so)
      */
@@ -144,28 +302,20 @@ function scorePlan(roomName,newPlanCM,newPlan){
         ramparts:0,
         storage:0,
         towers:0,
-        misc:0
+        access:0
     }
     if(!newPlan.storage){
         chronicle.log(`No storage location to score. Scoring plan data:${JSON.stringify(newPlan)}.`,'architect',1)
         return false;
     }
+    //{x:21, y:21, dist:6}
+    let extensionDistances = {}
     let storePos = new RoomPosition(newPlan.storage.x,newPlan.storage.y,roomName);
-    let walkCM = newPlanCM.clone();
+    //let walkCM = newPlanCM.clone();
     let terrain = Game.map.getRoomTerrain(roomName);
-    //Set buildings to impassable and ramparts to roads
-    for(let y = 0; y < 50; y++) {
-        for(let x = 0; x < 50; x++) {
-            let tile = walkCM.get(x,y);
-            if([99,100].includes(tile)){
-                walkCM.set(x,y,1);
-                continue;
-            }
-            if(![0,12,25,26,255].includes(tile)){
-                walkCM.set(x,y,255)
-            }
-        }
-    }
+    //Get a distance map based on walkable distance from storage
+    let distMap = getDistanceMap(newPlanCM,storePos,terrain)
+    Memory.test.testCM = distMap.serialize()
     // -----Extension Scoring-----
     let extAdjacent = 0;
     let extMax = 0;
@@ -178,23 +328,17 @@ function scorePlan(roomName,newPlanCM,newPlan){
             remoteRoads.add(`${spot.x},${spot.y}`);
         }
     }
+
+    
     for(let extension of newPlan.extension){
-        let targetExt = new RoomPosition(extension.x,extension.y,roomName)
         //Distance scoring
-        let srch = PathFinder.search(storePos,{pos:targetExt,range:1},{
-            plainCost: 10,
-            swampCost: 11,
-            maxRooms:1,
-            roomCallback: function() {
-              return walkCM;
-            }
-        });
-        //Check for no path
-        if(srch.incomplete){
-            console.log("INCOMPLETE")
+        let extDistance = distMap.get(extension.x,extension.y)
+        //If 255 then the BFS walk never made it there
+        if(extDistance == 255){
+            console.log("INCOMPLETE EXT")
         }
-        if(srch.path.length > extMax) extMax = srch.path.length;
-        totalDist += srch.path.length;
+        if(extDistance > extMax) extMax = extDistance;
+        totalDist += extDistance;
 
         //Adjacency scoring
         extLoop:
@@ -225,20 +369,11 @@ function scorePlan(roomName,newPlanCM,newPlan){
     //Walk every route
     totalDist = 0
     for(let ramp of newPlan.ramparts){
-        let targetRamp = new RoomPosition(ramp.x,ramp.y,roomName);
-        //console.log("Search from",storePos,"to",targetRamp)
-        let srch = PathFinder.search(storePos,{pos:targetRamp},{
-            // Same cost for everything because we're finding a centerpoint
-            plainCost: 10,
-            swampCost: 11,
-            maxRooms:1,
-            roomCallback: function() {
-              return walkCM;
-            }
-        });
-        //Should check for incomplete at some point
-        totalDist+= srch.path.length;
-        //console.log("Ramp length:",srch.path.length)
+        let rampDist = distMap.get(ramp.x,ramp.y)
+        if(rampDist == 255){
+            console.log("INCOMPLETE RAMP")
+        }
+        totalDist+= rampDist;
     }
     rampAvg = totalDist/newPlan.ramparts.length
     //console.log("RAMPARTS\nAvg:",rampAvg,"Total:",rampTotal,"Groups:",rampGroups)
@@ -281,6 +416,7 @@ function scorePlan(roomName,newPlanCM,newPlan){
         for(let x=-1;x<=1;x++){
             for(let y=-1;y<=1;y++){
                 if(x==0 && y==0) continue;
+                if(ramp.x+x>49 || ramp.x+x<0 || ramp.y+y > 49 || ramp.y+y < 0) continue
                 if(towerCM.get(ramp.x+x,ramp.y+y) != 1){
                     towerTargets.add(`${ramp.x+x},${ramp.y+y}`)
                 }
@@ -288,6 +424,8 @@ function scorePlan(roomName,newPlanCM,newPlan){
         }
     }
     //For each tower, get tile damage and add it to the list
+    //TODO
+    //Track damage for each tower (average, minimum, something) to determine build order
     for(let tile of towerTargets){
         let [x,y] = tile.split(',').map(Number);
         let spot = {x,y};
@@ -314,7 +452,7 @@ function scorePlan(roomName,newPlanCM,newPlan){
         (towerMin * scoreWeights.towerMinDamage)
     )
     
-    // -----Misc Scoring-----
+    // -----Access Scoring-----
     let controllerInside = 1;
     let sourcesInside = roomData.sources.length;
     cLoop:
@@ -327,7 +465,7 @@ function scorePlan(roomName,newPlanCM,newPlan){
         }
     }
     sLoop:
-    for(source of roomData.sources){
+    for(let source of roomData.sources){
         for(let x=-1;x<=1;x++){
             for(let y=-1;y<=1;y++){
                 if(towerCM.get(source.x+x,source.y+y) != 1 && terrain.get(source.x+x,source.y+y) != TERRAIN_MASK_WALL){
@@ -338,8 +476,8 @@ function scorePlan(roomName,newPlanCM,newPlan){
         }
     }
 
-    //console.log("Misc\nControllerIn:",controllerInside,"SourcesIn:",sourcesInside)
-    scores.misc = Math.round(
+    //console.log("Access\nControllerIn:",controllerInside,"SourcesIn:",sourcesInside)
+    scores.access = Math.round(
         (controllerInside * scoreWeights.controllerFound) +
         (sourcesInside * scoreWeights.sourceFound)
     )
@@ -366,20 +504,62 @@ function scorePlan(roomName,newPlanCM,newPlan){
         total += num;
     }
     scores.total = total;
-    return scores;
+    return [scores,extensionDistances];
 
 }
 
+
+//This uses the old room plan reference!
+//Update once we fully convert over and do room planning in architect
+function getDistanceMap(newPlanCM,storePos,terrain){
+    let queue = [storePos];
+    let visited = new Set();
+    //Create cost matrix and fill with 255
+    //Anything still 255 in the end will be considered unreachable
+    let distanceCM = new PathFinder.CostMatrix()
+    distanceCM._bits.fill(255)
+    visited.add(`${storePos.x},${storePos.y}`)
+    distanceCM.set(storePos.x,storePos.y,0)
+    let distance;
+    let qi = 0
+    while(qi < queue.length){
+        let tile = queue[qi];
+        qi++;
+        distance = distanceCM.get(tile.x,tile.y)
+        for(let x=-1;x<=1;x++){
+            for(let y=-1;y<=1;y++){
+                if(x==0 && y==0) continue;
+                if(visited.has(`${tile.x+x},${tile.y+y}`)) continue;
+                //console.log(`Visiting tile: (${tile.x+x}, ${tile.y+y})`);
+                if(tile.x+x > 49 || tile.x+x < 0 || tile.y+y > 49 || tile.y+y < 0)continue;
+                //Add one exception to the wall check, as extractors are built on walls
+                let planTile = newPlanCM.get(tile.x+x,tile.y+y)     //USES ROOM PLAN REFERENCE< UPDATE TO CONVERTSTRUCTURE()
+                if(!(planTile == 87 || terrain.get(tile.x+x,tile.y+y) != TERRAIN_MASK_WALL)) continue;
+
+                tileStruct = Memory.roomPlanReference[planTile]
+                if(tileStruct && ![STRUCTURE_CONTAINER,STRUCTURE_ROAD,STRUCTURE_EXTRACTOR].includes(tileStruct)) continue
+
+                queue.push({x:tile.x+x,y:tile.y+y,});
+                visited.add(`${tile.x+x},${tile.y+y}`);
+                distanceCM.set(tile.x+x,tile.y+y,distance+1)
+                
+            }
+        }
+    }
+    return distanceCM;
+}
+
 function towerFF(newPlanCM,storePos,terrain){
-    
     let queue = [storePos];
     let visited = new Set();
     let towerCM = newPlanCM.clone()
     visited.add(`${storePos.x},${storePos.y}`)
     towerCM.set(storePos.x,storePos.y,1)
     //console.log("Running tower FF")
-    while(queue.length > 0){
-        let tile = queue.shift();
+    let qi = 0
+    while(qi < queue.length){
+        let tile = queue[qi];
+        qi++;
         //console.log("Tile",tile,"taken from queue")
         for(let x=-1;x<=1;x++){
             for(let y=-1;y<=1;y++){
@@ -427,13 +607,32 @@ function finalizePlan(config){
     } 
     config.bestPlan = config.elite[0].roomPlan
     config.bestScores = config.elite[0].scores
-    getRCLPlan(bestPlan)
+    getRCLPlan(config.bestPlan)
 
 }
 
+
+//UPDATE TO INCLUDE SPECIES GENES
+// -- New breeding methodology -- //
+//Breed best pairs within the same species, once per species
+//Breed random pairs, with 5-20% allowed to migrate and breed across species
+//Breed niche elites within each species
+//Keep (at least) one elite per species, as well as (at least) one global elite
+//Cross-species breeding should consider these:
+/**
+    Crossing two individuals with different species often creates children where some blocks were never under selection pressure (because they were inactive under that mode), so recombination produces noise.
+
+    Use one of these methods to prevent that:
+        Mode-anchored inheritance: child inherits MODE bits from one parent entirely, and only mixes compatible continuous blocks.
+
+        Blockwise crossover with mode-aware reinit: if child’s MODE activates a block that neither parent had “active,” reinitialize that block (or heavily mutate it) so it’s not garbage.
+ */
 function updateGeneration(config){
     chronicle.log(`Generation ${config.stage} complete. Breeding new population.`,'architect',3)
+    
+    //Need to append history and write back once we figure out what format and data to include
     let history = JSON.parse(RawMemory.segments[SEGMENT_PLAN_GENERATIONS]);
+    
     let plans = config.currentPlans.map(plan => {
         return {scores:plan[2],genes:plan[1],roomPlan:plan[3]}
     })
@@ -454,7 +653,7 @@ function updateGeneration(config){
         const ELITE_CAP_PERCENT = 20;
         //Sort plans by their scores
         //Objects to hold our niches. The top scoring of each will be niched together
-        let scoreTypes = ['extensions', 'ramparts', 'storage', 'towers', 'misc']
+        let scoreTypes = ['extensions', 'ramparts', 'storage', 'towers', 'access']
         let topScores = {};
         let newPop = [];
         let newElite = plans.slice().sort((a,b) => b.scores['total'] - a.scores['total']).slice(0,Math.max(2,Math.floor(plans.length/ELITE_CAP_PERCENT)))
@@ -530,6 +729,7 @@ function updateGeneration(config){
             }
             if(o1) newPop.push(o1)
         }
+        config.population = newPop;
         //chronicle.log(`Breeding round:\nParent 1: ${JSON.stringify(p1)}\nParent2: ${JSON.stringify(p2)}\nOffspring: ${JSON.stringify(o1)}`,'architect',4)
 
         //Sort into niches based on top score (10% of total pop allowed per niche)
@@ -540,38 +740,137 @@ function updateGeneration(config){
         
     }
 
-    //This breeding functioon preserves gene blocks
+    //This breeding function preserves gene blocks
     function blockCross(p1,p2){
         //console.log("Breeding:\n",JSON.stringify(p1),'\n',JSON.stringify(p2))
+        //blockLimits are the index of the last gene in each block
         let blockLimits = [3,6,8,13];
-        let genes = p1.genes;
+        let p1Genes = p1.genes;
         let offspring = [];
         let currentBlock = 0;
         let currentParent = randomInt(1);
-        for (let i = 0; i < genes.length; i++) {
+        for (let i = 0; i < p1Genes.length; i++) {
             //If we've passed the boundary for the current block, move to the next block.
             if (currentBlock < blockLimits.length && i > blockLimits[currentBlock]) {
               currentBlock++;
               currentParent = randomInt(1);
             }
             
-            const gene = genes[i];
+            //const gene = genes[i];
             //console.log("Taking", gene, "from parent", currentParent+1);
-            offspring[gene] = (currentParent === 0) ? p1.genes[gene] : p2.genes[gene];
-          }
+            //offspring[gene] = (currentParent === 0) ? p1.genes[gene] : p2.genes[gene];
+            offspring[i] = (currentParent === 0) ? p1.genes[i] : p2.genes[i];
+        }
           return offspring;
     }
 
-    function mutate(){
+    function mutateGenes(){
+        const { mutationRate, maxMutationMagnitude } = config;
 
+        const blockLimits = [3, 6, 8, 13];
+        const blocks = [
+            [0, blockLimits[0]],
+            [blockLimits[0] + 1, blockLimits[1]],
+            [blockLimits[1] + 1, blockLimits[2]],
+            [blockLimits[2] + 1, blockLimits[3]],
+        ];
+
+        const blockMutationRate = 0.10;
+        const resetRate = 0.005; 
+
+        function clampGene(i, gene) {
+            const [min, max] = GENE_LIMITS[i];
+            if (gene < min) gene = min;
+            else if (gene > max) gene = max;
+            return Math.round(gene * 100) / 100;
+        }
+        //Random base for mutation scaling, -1 or 1
+        function randombase() {
+            return (Math.random() * 2) - 1;
+        }
+
+
+        //Small chance to mutate all genes in a random block
+        if (Math.random() < blockMutationRate) {
+            const [start, end] = blocks[Math.floor(Math.random() * blocks.length)];
+            for (let i = start; i <= end; i++) {
+                const [min, max] = GENE_LIMITS[i];
+                const range = max - min;
+                const delta = randombase() * range * maxMutationMagnitude;
+                genes[i] = clampGene(i, genes[i] + delta);
+            }
+        }
+
+        //Small chance for any gene to be mutated
+        for (let i = 0; i < genes.length; i++) {
+            if (Math.random() >= mutationRate) continue;
+
+            const [min, max] = GENE_LIMITS[i];
+            const range = max - min;
+
+            //Very small chance to fully reseed the gene
+            //Helps to avoid being trapped in a locally optimal basin
+            if (Math.random() < resetRate) {
+                genes[i] = clampGene(i, min + Math.random() * range);
+                continue;
+            }
+
+            //Squaring the scale means small mutations are much more likely than large
+            const scale = Math.pow(Math.random(), 2);
+            const delta = randombase() * range * maxMutationMagnitude * scale;
+
+            genes[i] = clampGene(i, genes[i] + delta);
+        }
+
+        return genes;
     }
 
 }
 
+//Room Plan Function
+//Calls functions from architect.planner to build the room plan
+function generateRoomPlan(){
+    //Things we need to return for elsewhere, if generated in the room plan
+    //Structure CM for placement of all structures
+    //Distance CM for the room based on storage location
+    //Source lab locations
+    
+    //generateInitialPopulation() - Require minimum 5-10 members of each species, depending on max population limit, randomize the rest. Randomize all non-species genes.
+    //if watershed - architectPlanner.
+    //architectPlanner.getCoreOptions()
+    //architectPlanner.getStructureBlob()  //CM of the valid build area. Region tiles if using watershed, otherwise ~250 tile blob. Choice between, and blob size, determined by genes
+    //architectPlanner.buildCoreRoads()    //Source and controller roads, mineral road optional based on genes
 
 
-//Main Planner Object
+
+}
+
+//Main Architect Object
 const architect = {
+    //Persistent names for each species configuration
+    /**
+        Eventually set up something like this to track long-term persistent stats:
+        Memory.sovereign.plannerSpecies[key].stats = {
+            runs: 42,
+            wins: 9,
+            avgFitness: 128.4,
+            bestFitness: 173.9,
+            swampRooms: { runs: 10, wins: 4 },
+            centerController: { runs: 12, wins: 1 }
+        };
+     */
+    //When visualizing, can use the resource icons instead of names for easier reference and tracking.
+    //Even already comes with separate colors
+    SPECIES_NAMES : {
+        "000": { name: "HYDROGEN" },
+        "010": { name: "OXYGEN" },
+        "100": { name: "UTRIUM" },
+        "110": { name: "LEMERGIUM" },
+        "001": { name: "KEANIUM" },
+        "011": { name: "ZYNTHIUM" },
+        "101": { name: "CATALYST" },
+        "111": { name: "GHODIUM" }
+    },
     //Data for the room being planned
     data: {},
 
@@ -583,6 +882,7 @@ const architect = {
             chronicle.log(`No room data available for ${roomName}.`,'architect',4);
             return false;
         }
+        let watershedCM = getWatershed()  //Generate this once the first time it's needed, then cache for every other use
         //Set a fresh planner object
         this.config = {
             roomName:roomName,
@@ -599,13 +899,14 @@ const architect = {
             startTick:Game.time,
             currentPlans:[], ////`Stage,Subject identifier`, subject genes, scores
             mutationRate:mutationRate,
+            maxMutationMagnitude:maxMutationMagnitude,
             totalPop:totalPop,
             population:generatePopulation(totalPop),
             iterations:maxIterations,
             running:true
 
         };
-        for(let score of ['extensions', 'ramparts', 'storage', 'towers', 'misc','total']){
+        for(let score of ['extensions', 'ramparts', 'storage', 'towers', 'access','total']){
             this.config.highs[score] = 0;
             this.config.lows[score] = Infinity;
         }
@@ -615,7 +916,8 @@ const architect = {
             roomName:roomName,
             sources:sources,
             mineral:mineral,
-            controller:controller
+            controller:controller,
+            watershedCM:watershedCM
         }
         //Clear the segment
         RawMemory.segments[SEGMENT_PLAN_GENERATIONS] = '{}'
@@ -624,7 +926,7 @@ const architect = {
 
     //Continues the current room plan process
     run: function(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01,maxMutationMagnitude=0.5}={}){
-        //If no plan config
+        //---- No Config, Start New Process ----//
         if(this.config && this.config.running && roomName && roomName != this.config.roomName){
             chronicle.log(`Room plan request for ${roomName} rejected. Already generating a plan for ${this.config.running}.`,'architect',1)
         }
@@ -636,11 +938,17 @@ const architect = {
             let start = this.startPlan(roomName,{totalPop:totalPop,maxIterations:maxIterations,mutationRate:mutationRate,maxMutationMagnitude:maxMutationMagnitude});
             if(!start) return;
         }
+        //--------------------------------------//
+        // -- UPDATE TO SCORING AND GENERATIONS
+        // Minimum population of 64, 8 per species
+        // Batch size of 8 or 16 per generation, picking best pairs from within the same species and niche, with limited crossover
+        // Every tick evaluate 1 candidate. Every batch done perform selection/breed replacements
         if(!roomName) roomName = this.data.roomName
         //If we're at the end of the generation
         if(this.config.subject == this.config.population.length){
             //Generate a new one if needed, else finish
             if(this.config.stage >= this.config.iterations){
+                chronicle.log(`Room generation complete.`,'architect',4)
                 finalizePlan(this.config);
                 return;
             }
@@ -653,15 +961,16 @@ const architect = {
             let results = fiefPlanner.generateRoomPlan(roomName,this.config.population[this.config.subject]);
             if(!results){
                 chronicle.log(`Error generating room plan, no results. Skipping.`,'architect',1)
-                this.config.totalCPU += newPlanCPU;
                 this.config.subject++;
                 return;
             }
-            [newPlanCM,newPlan,newPlanCPU] = results;
+            let [newPlanCM,newPlan,newPlanCPU] = results;
             //chronicle.log(`Results received. Plan cost ${Math.round(newPlanCPU)} CPU.`,'architect',4)
             
             //Get the plan scores and add it and the genes to the current scores array
-            let newPlanScores = scorePlan(roomName,newPlanCM,newPlan,config);
+            
+            let newPlanScores = scorePlan(roomName,newPlanCM,newPlan,this.config);
+            let newRCLPlan = getRCLPlan(roomName,newPlanCM)
             if(!newPlanScores){
                 chronicle.log(`No scores available.`,'architect',4)
                 return;
@@ -669,8 +978,8 @@ const architect = {
             //Update highs/lows if new ones are found
             for(let niche of Object.keys(newPlanScores)){
                 let score = newPlanScores[niche];
-                if(score > config.highs[niche]) config.highs[niche] = score;
-                if(score < config.lows[niche]) config.lows[niche] = score;
+                if(score > this.config.highs[niche]) this.config.highs[niche] = score;
+                if(score < this.config.lows[niche]) this.config.lows[niche] = score;
             }
             //chronicle.log(`Room plan scored - ${roomName}.\n${JSON.stringify(newPlanScores)}\nStage: ${this.config.stage}, Subject: ${this.config.subject}`,'architect',4)
             //Stage,Subject identifier, subject genes, scores 
@@ -684,8 +993,10 @@ const architect = {
 
 module.exports = architect;
 //profiler.registerObject(architect, 'architect');
-global.testFiefPlan = function testFiefPlan(roomName,{totalPop=50, maxIterations=10,mutationRate=0.01,maxMutationMagnitude=0.5}={}){
+global.testFiefPlan = function testFiefPlan(roomName,{totalPop=2, maxIterations=2,mutationRate=0.01,maxMutationMagnitude=0.5}={}){
+    chronicle.log(`Attempting test plan`,'architect',4)
     architect.run(roomName,{totalPop:totalPop,maxIterations:maxIterations,mutationRate:mutationRate,maxMutationMagnitude:maxMutationMagnitude});
+    chronicle.log(`Test Complete`,'architect',4)
 }
 
 /**
