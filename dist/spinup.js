@@ -25,7 +25,8 @@ const spinup = {
                 Memory.kingdom.fiefs[myRoom.name] = {};
             }
         }
-        for(let segment of ALL_SEGMENTS){
+        for(let segName of Object.keys(ALL_SEGMENTS)){
+            let segment = ALL_SEGMENTS[segName];
             RawMemory.segments[segment] = "{}";
         }
 
