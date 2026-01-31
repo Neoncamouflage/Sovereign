@@ -72,6 +72,7 @@ const GENE_LIMITS = {
         [0.1,10.0],     //WATR - Controller range, prefer the controller be in or near the region
         [0.1,10.0],     //WATR - Source range, prefer sources be in or near the region
         [0.1,10.0],     //WATR - Exit range, prefer regions away from exits
+        [0.1,10.0],     //WATR - Border size, prefer regions with smaller borders
         // ----Core Placement Genes---- //
         [0.1,10.0],     //CORE - Exit range, prefer to stay away from exits
         [0.1,10.0],     //CORE - Controller range, prefer closeness to controller
@@ -91,7 +92,7 @@ const GENE_LIMITS = {
         [0.1,10.0],     //ASSN - Remote extensions, prefer extensions to be placed on remote roads
         [0.1,10.0],     //ASSN - Spawn range, prefer spawns to be placed next to the core
         [0.1,10.0],     //ASSN - Spawn distance, prefer spawns to be placed away from each other
-        [0.1,10.0],     //ASSN - Lab range, prefere labs to be close to the core
+        [0.1,10.0],     //ASSN - Lab range, prefer labs to be close to the core
         [0.1,10.0],     //ASSN - Tower range, prefer towers to be close to the core
         [0.1,10.0],     //ASSN - Tower distance, prefer towers to be placed away from each other
         [0.1,10.0],     //ASSN - Terminal range, prefer terminal to be close to the controller
@@ -101,14 +102,19 @@ const GENE_LIMITS = {
         [0.1,10.0],     //MINC - Distance transform, prefer ramparts on tiles close to walls, encouraging chokepoints
     ]    
 };
-
-function minMaxNormalize(value, max, min) {
-    if (max - min == 0){
-        console.log("Attempting to divide by zero, max and min are both 0 with a value of",value);
-        return 0; // Prevent division by zero
-    }
-    return (value - min) / (max - min);
+//Indexes of the first and last gene in each block
+const GENE_BLOCKS ={
+    'SPEC':[0,2],
+    'MODE':[3,5],
+    'WATR':[6,10],
+    'CORE':[11,14],
+    'BLOB':[15,18],
+    'ROAD':[19,22],
+    'ASSN':[23,29],
+    'MINC':[30,32]
 }
+
+
 
 
 
@@ -863,21 +869,64 @@ function updateGeneration(config){
 }
 
 //Room Plan Function
-//Calls functions from architect.planner to build the room plan
-function generateRoomPlan(config,data,subject){
-    //Things we need to return for elsewhere, if generated in the room plan
-    //Structure CM for placement of all structures
-    //Distance CM for the room based on storage location
-    //Source lab locations
+//Calls functions from architect submodules to build the room plan
+function generateRoomPlan(config,roomData){
+    let subject = config.population[config.subject];
+    let speciesBlock = subject.slice(GENE_BLOCKS.SPEC[0],GENE_BLOCKS.SPEC[1]+1);
+    let modeBlock = subject.slice(GENE_BLOCKS.MODE[0],GENE_BLOCKS.MODE[1]+1);
+    let planData = {};
+    //If watershed gene is active, we first select our region
+    let watershedGene = subject[0];
+    if(watershedGene){
+        let watershedBlock = subject.slice(GENE_BLOCKS.WATR[0],GENE_BLOCKS.WATR[1]+1);
+        planData = architectPlanner.planWatershed(config,roomData,planData,watershedBlock);
+    }
+
+    //Select our core location
+    let coreBlock = subject.slice(GENE_BLOCKS.CORE[0],GENE_BLOCKS.CORE[1]+1);
+    planData = architectPlanner.planCore(config,roomData,planData,coreBlock);
     
-    //generateInitialPopulation() - Minimum population of 64, 8 per species. Randomize all non-species genes.
-    //if watershed - architectPlanner.runWatershed()
-    //architectPlanner.getCoreOptions()
-    //if blob - architectPlanner.getStructureBlob()  //CM of the valid build area. Region tiles if using watershed, otherwise ~250 tile blob. Choice between, and blob size, determined by genes
-    //architectPlanner.buildCoreRoads()    //Source and controller roads, mineral road optional based on genes
+    //If we didn't use watershed, get our structure blob
+    if(!watershedGene){
+        let blobBlock = subject.slice(GENE_BLOCKS.BLOB[0],GENE_BLOCKS.BLOB[1]+1);
+        planData = architectPlanner.planStructureBlob(config,roomData,planData,blobBlock);
+    }
 
+    //Expand roads
+    let roadBlock = subject.slice(GENE_BLOCKS.ROAD[0],GENE_BLOCKS.ROAD[1]+1);
+    let mineralRoads = modeBlock[1];
+    let remoteRoads = modeBlock[2];
+    planData = architectPlanner.planRoads(config,roomData,planData,roadBlock,mineralRoads,remoteRoads);
 
+    //Assign structures
+    let assignBlock = subject.slice(GENE_BLOCKS.ASSN[0],GENE_BLOCKS.ASSN[1]+1);
+    planData = architectPlanner.planStructureAssignment(config,roomData,planData,assignBlock);
 
+    //Mincut
+    let mincutBlock = subject.slice(GENE_BLOCKS.MINC[0],GENE_BLOCKS.MINC[1]+1);
+    let customMincut = speciesBlock[2];
+    let rampartController = modeBlock[0];
+    planData = architectPlanner.planMincut(config,roomData,planData,mincutBlock,customMincut,rampartController);
+
+    return planData;
+
+}
+
+function getExits(terrain){
+    let exits = [];
+    for(let i = 0;i<50;i++){
+        let x1 = terrain.get(i,0);
+        let x2 = terrain.get(i,49);
+        if(x1 != TERRAIN_MASK_WALL) exits.push({x:i,y:0})
+        if(x2 != TERRAIN_MASK_WALL) exits.push({x:i,y:49})
+        if(i>0 && i<49){
+            let y1 = terrain.get(0,i);
+            let y2 = terrain.get(49,i);
+            if(y1 != TERRAIN_MASK_WALL) exits.push({x:0,y:i})
+            if(y2 != TERRAIN_MASK_WALL) exits.push({x:49,y:i})
+        }
+    }
+    return exits;
 }
 
 //Main Architect Object
@@ -920,9 +969,6 @@ const architect = {
             chronicle.log(`No room data available for ${roomName}.`,'architect',4);
             return false;
         }
-        let terrain = new Room.Terrain(roomName);
-        let distanceCM = architectMatrixes.getDistanceMap(terrain)
-        let watershedCM = architectMatrixes.getWatershed(distanceCM,terrain)  //Generate this once the first time it's needed, then cache for every other use
         //Set a fresh planner object
         this.config = {
             roomName:roomName,
@@ -941,7 +987,7 @@ const architect = {
             mutationRate:mutationRate,
             maxMutationMagnitude:maxMutationMagnitude,
             totalPop:totalPop,
-            population:generatePopulation(totalPop),
+            population:generatePopulation(totalPop), //- Minimum population of 64, 8 per species. Randomize all non-species genes.(totalPop),
             iterations:maxIterations,
             running:true
 
@@ -954,12 +1000,41 @@ const architect = {
         const {sources,mineral,controller} = roomData;
         this.data = {
             roomName:roomName,
-            sources:sources,
-            mineral:mineral,
-            controller:controller,
-            watershedCM:watershedCM
+            sources:sources.map(s => ({ x: s.x, y: s.y ,id:s.id})),
+            mineral:{x:mineral.x,y:mineral.y},
+            controller:{x:controller.x,y:controller.y}
         }
-        //Clear the segment
+        let terrain = new Room.Terrain(roomName);
+        this.data.exits = getExits(terrain);
+        this.data.distanceCM = architectMatrixes.getDistanceTransform(terrain)
+        this.data.controllerCM = architectMatrixes.getDistanceMap(terrain,[this.data.controller])
+        this.data.exitCM = architectMatrixes.getDistanceMap(terrain,this.data.exits)
+        if(this.data.sources.length > 1){
+            let finalSourceMatrix = new PathFinder.CostMatrix();
+            let matrixes = [];
+            let totalDist = 0;
+            for(let each of this.data.sources){
+                matrixes.push(architectMatrixes.getDistanceMap(terrain,[each]));
+            }
+            
+            for (let x = 0; x < 50; x++) {
+                for (let y = 0; y < 50; y++) {
+                    totalDist = 0;
+                    for(let each of matrixes){
+                        totalDist += each.get(x,y);
+                    }
+                    finalSourceMatrix.set(x,y,Math.round(totalDist/matrixes.length))
+                }
+            }
+            this.data.sourceCM = finalSourceMatrix;
+        }
+        else{
+            this.data.sourceCM = architectMatrixes.getDistanceMap(terrain,this.data.sources)
+        }
+        let watershedCM = architectMatrixes.getWatershed(this.data.distanceCM,terrain);
+        this.data.watershedData = architectMatrixes.getWatershedData(watershedCM,this.data)
+        this.data.watershedCM = watershedCM;
+        //Clear the segment - This is where we will write a compact history of all plans to visualize
         RawMemory.segments[SEGMENT_PLAN_GENERATIONS] = '{}'
         return true;
     },
@@ -998,7 +1073,7 @@ const architect = {
         //If not at the end of a generation, process a new plan
         else{
             //chronicle.log(`Generating room plan - ${roomName}. Genes: ${JSON.stringify(this.config.population[this.config.subject])}`,'architect',4)
-            let results = fiefPlanner.generateRoomPlan(roomName,this.config.population[this.config.subject]);
+            let results = generateRoomPlan(this.config,this.data);
             if(!results){
                 chronicle.log(`Error generating room plan, no results. Skipping.`,'architect',1)
                 this.config.subject++;

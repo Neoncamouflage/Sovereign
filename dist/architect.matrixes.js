@@ -1,13 +1,24 @@
 const minCut = require('minCut');
 const profiler = require('screeps-profiler');
-
+const DIRECTIONS_4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const DIRECTIONS_8 = [[1, 0], [-1, 0], [0, 1], [0, -1],[1, 1], [-1, 1], [-1, 1], [1, -1]];
 const architectMatrixes = {
-    getWatershed: function(distanceTransformObj,terrain,MIN_PEAK = 5,MERGE_RADIUS = 3,MIN_SIZE = 30){
-        const DIRECTIONS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    getWatershed: function(distanceTransformObj,terrain,MIN_PEAK = 2,MERGE_RADIUS = 6,MIN_SIZE = 90,MAX_MERGE=25){
+        //Lower min peak
+        //console.log("Watershed running with min peak",MIN_PEAK,"Merge radius",MERGE_RADIUS,"Min size",MIN_SIZE)
+        
         let seedQueue = getWatershedSeeds(distanceTransformObj.distCM)
         seedQueue = mergeSeeds(seedQueue)
         let watershedCM = runWatershed(seedQueue,distanceTransformObj.distCM,terrain,distanceTransformObj.distHighest);
-        for (let i = 0; i < 5; i++) watershedCM = mergeSmallRegions(watershedCM, terrain);
+        //Merge up to 20 times
+        for (let i = 0; i < MAX_MERGE; i++){
+            let res = mergeSmallRegions(watershedCM, terrain);
+            watershedCM = res.out;
+            if(!res.merged){
+                chronicle.log(`Watershed merged ${i} times.`,'architect.matrixes',4);
+                break;
+            }
+        }
         watershedCM = fillBorderTiles(watershedCM, terrain);
         return watershedCM;
 
@@ -21,7 +32,7 @@ const architectMatrixes = {
                     if(tileValue < MIN_PEAK) continue;
 
                     //Check all directions and skip to next y loop if not the largest
-                    for(const direction of DIRECTIONS){
+                    for(const direction of DIRECTIONS_4){
                         let neighborX = x + direction[0];
                         let neighborY = y + direction[1];
                         if(distanceTransform.get(neighborX,neighborY)>tileValue){
@@ -56,9 +67,9 @@ const architectMatrixes = {
             const BORDER = 255
             if (!seeds.length) return new PathFinder.CostMatrix();
             const regionCM = new PathFinder.CostMatrix();
-            for(let each of seeds){
-                console.log(JSON.stringify(each))
-            }
+            //for(let each of seeds){
+                //console.log(JSON.stringify(each))
+            //}
             // region ids start at 1
             for (let i = 0; i < seeds.length; i++) seeds[i].region = i + 1;
 
@@ -78,7 +89,7 @@ const architectMatrixes = {
             // Seed initialization: label seeds and enqueue their neighbors
             for (const s of seeds) {
                 regionCM.set(s.x, s.y, s.region);
-                for (const [dx, dy] of DIRECTIONS) {
+                for (const [dx, dy] of DIRECTIONS_4) {
                     pushIfCandidate(s.x + dx, s.y + dy, s.region);
                 }
             }
@@ -99,7 +110,7 @@ const architectMatrixes = {
                         let found = 0;
                         let conflict = false;
 
-                        for (const [dx, dy] of DIRECTIONS) {
+                        for (const [dx, dy] of DIRECTIONS_4) {
                             const v = regionCM.get(tile.x + dx, tile.y + dy);
                             if (v === 0 || v === BORDER) continue;
 
@@ -116,7 +127,7 @@ const architectMatrixes = {
                         regionCM.set(tile.x, tile.y, assignRegion);
 
                         // expand frontier
-                        for (const [dx, dy] of DIRECTIONS) {
+                        for (const [dx, dy] of DIRECTIONS_4) {
                             pushIfCandidate(tile.x + dx, tile.y + dy, assignRegion);
                         }
                     }
@@ -131,7 +142,8 @@ const architectMatrixes = {
         }
 
         function mergeSmallRegions(regionCM, terrain) {
-            const BORDER = 255
+            const BORDER = 255;
+
             // 1) Count region sizes
             const size = Object.create(null);
 
@@ -144,7 +156,7 @@ const architectMatrixes = {
                 }
             }
 
-            // 2) Build adjacency THROUGH border tiles (BORDER separates regions)
+            // 2) Build adjacency THROUGH border tiles
             const adj = Object.create(null);
 
             for (let x = 1; x < 49; x++) {
@@ -152,17 +164,15 @@ const architectMatrixes = {
                     if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
                     if (regionCM.get(x, y) !== BORDER) continue;
 
-                    // distinct region ids touching this border tile
                     const around = [];
                     const seen = new Set();
 
-                    for (const [dx, dy] of DIRECTIONS) {
+                    for (const [dx, dy] of DIRECTIONS_4) {
                         const r = regionCM.get(x + dx, y + dy);
                         if (r === 0 || r === BORDER) continue;
                         if (!seen.has(r)) { seen.add(r); around.push(r); }
                     }
 
-                    // every pair of regions meeting at this border contributes adjacency
                     for (let i = 0; i < around.length; i++) {
                         for (let j = i + 1; j < around.length; j++) {
                             const a = around[i], b = around[j];
@@ -175,15 +185,16 @@ const architectMatrixes = {
                 }
             }
 
-            // 3) Decide merges: small region -> neighbor with strongest contact (tie: larger)
+            // 3) Decide merges
             const mergeTo = Object.create(null);
+            let merged = false;
 
             for (const rStr of Object.keys(size)) {
                 const r = Number(rStr);
                 if (size[r] >= MIN_SIZE) continue;
 
                 const neighbors = adj[r];
-                if (!neighbors) continue; // no known neighbor via borders
+                if (!neighbors) continue;
 
                 let best = null;
                 let bestEdge = -1;
@@ -194,6 +205,14 @@ const architectMatrixes = {
                     const edge = neighbors[n];
                     const nSize = size[n] || 0;
 
+                    // enforce direction: only merge into a region that is >= in size
+                    // tie-break on ID to keep deterministic and avoid mutual merges
+                    const allowed =
+                        (nSize > size[r]) ||
+                        (nSize === size[r] && n < r);
+
+                    if (!allowed) continue;
+
                     if (edge > bestEdge || (edge === bestEdge && nSize > bestSize)) {
                         best = n;
                         bestEdge = edge;
@@ -201,22 +220,36 @@ const architectMatrixes = {
                     }
                 }
 
-                if (best != null) mergeTo[r] = best;
-            }
-
-            // 4) Apply merges (single scan)
-            const out = new PathFinder.CostMatrix();
-
-            for (let x = 0; x < 50; x++) {
-                for (let y = 0; y < 50; y++) {
-                    const v = regionCM.get(x, y);
-                    const m = mergeTo[v];
-                    out.set(x, y, m ? m : v);
+                if (best != null) {
+                    mergeTo[r] = best;
+                    merged = true;
                 }
             }
 
-            return out;
+            // resolve chains (A->B->C => A->C) and avoid cycles defensively
+            function resolve(id) {
+                let cur = id;
+                const seen = new Set([cur]);
+                while (mergeTo[cur] != null) {
+                    cur = mergeTo[cur];
+                    if (seen.has(cur)) break; // cycle guard (shouldn't happen with rules above)
+                    seen.add(cur);
+                }
+                return cur;
+            }
+
+            const out = new PathFinder.CostMatrix();
+            for (let x = 0; x < 50; x++) {
+                for (let y = 0; y < 50; y++) {
+                    const v = regionCM.get(x, y);
+                    // only resolve real region IDs
+                    out.set(x, y, (v !== 0 && v !== BORDER) ? resolve(v) : v);
+                }
+            }
+
+            return { out, merged };
         }
+
 
         function fillBorderTiles(regionCM, terrain) {
             const BORDER = 255;
@@ -238,7 +271,7 @@ const architectMatrixes = {
                     let bestRegion = 0;
                     let bestCount = 0;
 
-                    for (const [dx, dy] of DIRECTIONS) {
+                    for (const [dx, dy] of DIRECTIONS_4) {
                         const v = regionCM.get(x + dx, y + dy);
                         if (v === 0 || v === BORDER) continue;
                         const c = (counts[v] = (counts[v] || 0) + 1);
@@ -303,14 +336,86 @@ const architectMatrixes = {
             }
         }
         return {distCM,distHighest,distLowest};
+    },
+    getDistanceMap: function(terrain,queue){
+        let distanceMap = new PathFinder.CostMatrix();
+        let qi = 0;
+        queue = queue.map(p => ({ x: p.x, y: p.y, distance: 0 }));
+        for (let x = 0; x < 50; x++) {
+            for (let y = 0; y < 50; y++) {
+                distanceMap.set(x, y, 255);
+            }
+        }
+        for(let each of queue){
+            distanceMap.set(each.x,each.y,0)
+        }
+        while(qi < queue.length){
+            let tile = queue[qi];
+            qi++;
+            for(let direction of DIRECTIONS_8){
+                let newX = tile.x+direction[0];
+                let newY = tile.y+direction[1];
+                if(newX>49 || newX<0 || newY>49 || newY<0) continue;
+                if(terrain.get(newX,newY) == TERRAIN_MASK_WALL) continue;
+                let newTileValue = distanceMap.get(newX,newY);
+                let newDistance = tile.distance+1;
+                if(newTileValue != 255 && newDistance >= newTileValue) continue;
+                distanceMap.set(newX,newY,newDistance)
+                let newTile = {x:newX,y:newY,distance:newDistance};
+                queue.push(newTile);
+            }
+        }
+        return distanceMap;
+    },
+    getWatershedData: function(watershedCM,roomData){
+        //Returns a data object containing region IDs and their total size, controller distance, source distance, exit distance, and border size
+        //regions = {id:}
+        const regions = Object.create(null);
+        let terrain = new Room.Terrain(roomData.roomName);
+        for (let x = 0; x < 50; x++) {
+            for (let y = 0; y < 50; y++) {
+                const id = watershedCM.get(x, y);
+                if (id === 0 || id === 255) continue;
+                const coord = {x:x,y:y}
+                if(!regions[id]){
+                    regions[id] = {tiles:[],sourceDistance:0,controllerDistance:0,exitDistance:0,borderSize:0};
+                }
+                //Add tiles and increase all distances
+                regions[id].tiles.push(coord);
+                regions[id].sourceDistance += roomData.sourceCM.get(x,y);
+                regions[id].controllerDistance += roomData.controllerCM.get(x,y);
+                regions[id].exitDistance += roomData.exitCM.get(x,y);
+
+                //Check borders
+                for (const [dx, dy] of DIRECTIONS_8) {
+                    const nx = x + dx, ny = y + dy;
+                    if (nx < 0 || nx > 49 || ny < 0 || ny > 49) continue;
+                    if (terrain.get(nx, ny) == TERRAIN_MASK_WALL) continue;
+
+                    const nid = watershedCM.get(nx, ny);
+                    if (nid !== 0 && nid !== id && nid !== 255) {
+                        r.borderSize++;
+                        break;
+                    }
+                }
+            }
+        }
+        //Update distances to average
+        for(let regionID of Object.keys(regions)){
+            let region = regions[regionID];
+            region.sourceDistance = Math.round(region.sourceDistance/region.tiles.length)
+            region.controllerDistance = Math.round(region.controllerDistance/region.tiles.length)
+            region.exitDistance = Math.round(region.exitDistance/region.tiles.length)
+        }
+        return regions;
     }
 }
 module.exports = architectMatrixes;
-global.testWT = function testWT(roomName,a=3,b=3,c=30){
+global.testWT = function testWT(roomName,a=2,b=6,c=90,d=25){
     chronicle.log(`Attempting test watershed`,'architect.matrixes',4)
     let terrain = new Room.Terrain(roomName);
     let dt = architectMatrixes.getDistanceTransform(terrain);
-    let g = architectMatrixes.getWatershed(dt,terrain,a,b,c);
+    let g = architectMatrixes.getWatershed(dt,terrain,a,b,c,d);
     if(g) Memory.test.testCM = g.serialize();
     chronicle.log(`Test Complete`,'architect.matrixes',4)
 }

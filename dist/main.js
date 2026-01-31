@@ -71,7 +71,7 @@ module.exports.loop = function () {
     //}
     if (hasRespawned() || !Memory.kingdom){
         console.log("SPINUP");
-        spinup.run();
+        spinup.spawn();
     }
     //Reset movement
     Traveler.resetMovementIntents();

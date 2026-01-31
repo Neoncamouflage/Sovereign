@@ -94,6 +94,7 @@ const constants = {
         'o': 'observer'
     },
 
+
     //Misc
     FLAG_MASK : 0x8000
 

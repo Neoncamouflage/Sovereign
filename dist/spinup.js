@@ -1,7 +1,7 @@
 //Fires after respawning or initial spawn-in
 
 const spinup = {
-    run: function(){
+    spawn: function(){
         Memory.globalReset = Game.time;
         Memory.spawnTick = Game.time;
         Memory.me = 'NeonCamouflage';
@@ -19,11 +19,14 @@ const spinup = {
             drawIntel:true
         }
         Memory.kingdom.army = {troupes:[],missions:{},reserve:[]};
-        for(const room in Game.rooms){
+        for(let room in Game.rooms){
             let myRoom = Game.rooms[room];
             if(myRoom.controller && myRoom.controller.my){
                 Memory.kingdom.fiefs[myRoom.name] = {};
             }
+        }
+        for(let segment of ALL_SEGMENTS){
+            RawMemory.segments[segment] = "{}";
         }
 
 

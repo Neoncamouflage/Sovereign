@@ -15,6 +15,13 @@ global.clamp = function(number, min, max) {
   return Math.max(min, Math.min(number, max));
 }
 
+global.minMaxNormalize = function(value, max, min) {
+    if (max - min == 0){
+        return 0; // Prevent division by zero
+    }
+    return (value - min) / (max - min);
+}
+
 //Update diplomacy
 global.setDiplomacy = function(type,username){
     //Memory.diplomacy = {allies:[], ceasefire:[], outlaws:[],ledger:[]}
