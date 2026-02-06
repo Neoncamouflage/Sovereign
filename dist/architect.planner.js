@@ -76,10 +76,16 @@ const architectPlanner = {
         //Sort by score and select highest as our core location
         scores.sort((a,b) => b-a)
         planData.region = scores[0].id;
-
+        return planData;
     },
     planCore: function(config,roomData,planData,coreBlock){
+        if (planData.isWatershed){
 
+        }
+        else{
+
+        }
+        return planData;
     },
     planStructureBlob: function(config,roomData,planData,blobBlock){
 

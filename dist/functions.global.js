@@ -84,6 +84,9 @@ global.isMe = function(target){
     if(target instanceof String){
         return target.toLowerCase() == Memory.me.toLowerCase()
     }
+    else if(typeof target === 'string'){
+        return target.toLowerCase() == Memory.me.toLowerCase()
+    }
     else if(target.username){
         return target.username.toLowerCase() == Memory.me.toLowerCase()
     }

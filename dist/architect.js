@@ -879,6 +879,7 @@ function generateRoomPlan(config,roomData){
     let watershedGene = subject[0];
     if(watershedGene){
         let watershedBlock = subject.slice(GENE_BLOCKS.WATR[0],GENE_BLOCKS.WATR[1]+1);
+        planData.isWatershed = true;
         planData = architectPlanner.planWatershed(config,roomData,planData,watershedBlock);
     }
 
