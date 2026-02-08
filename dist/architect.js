@@ -4,7 +4,12 @@ const fiefPlanner = require('fiefPlanner');
 const architectPlanner = require('architect.planner')
 const architectMatrixes = require('architect.matrixes')
 
-//
+/**
+  -- TO DO --
+  - Calculate combined score matrix(es) at the start of each plan so they don't have to rebuild them
+ */
+
+//Plan CM reference
 /**
 100:STRUCTURE_RAMPART,
 15:STRUCTURE_NUKER,
@@ -22,6 +27,12 @@ const architectMatrixes = require('architect.matrixes')
 3:STRUCTURE_SPAWN,
 2:STRUCTURE_CONTAINER,
 1:STRUCTURE_ROAD,
+*/
+//Blob CM reference
+/**
+1: Blob
+2: Road
+3: Structure
 */
 
 
@@ -56,7 +67,7 @@ const scoreWeights = {
 const GENE_LIMITS = {
     species:[
         // ----Species Genes---- //
-        [0,1],          //SPEC - Watershed, use watershed regions instead of structure blob for buildable area
+        [0,1],          //SPEC - Watershed, use a watershed region as the starting point for the structure blob
         [0,1],          //SPEC - FastFill, place fastfiller stamps before filling out extensions normally
         [0,1],          //SPEC - Custom Mincut, use the MINC genes to modify the standard mincut CM
     ],
@@ -78,11 +89,12 @@ const GENE_LIMITS = {
         [0.1,10.0],     //CORE - Controller range, prefer closeness to controller
         [0.1,10.0],     //CORE - Source range, prefer to minimize average range to sources
         [0.1,10.0],     //CORE - Distance transform, prefer distance from walls
-        // ----Structure Blob Genes---- // (ONLY IF SPEC1 IS INACTIVE)
-        [0.1,10.0],     //BLOB - Blob size, prefer larger tile counts
+        // ----Structure Blob Genes---- //
+        [1.0,5.0],      //BLOB - Blob size, prefer larger tile counts. Up to 5x the minimum blob size of 100.
         [0.1,10.0],     //BLOB - Distance transform, prefer to expand the blob away from walls
         [0.1,10.0],     //BLOB - Exit range, prefer to expand the blob away from exits
         [0.1,10.0],     //BLOB - Source range, prefer to expand the blob towards sources
+        [0.1,10.0],     //BLOB - Controller range, prefer to expand the blob towards the controller
         // ----Road Expansion Genes---- //
         [0.1,10.0],     //ROAD - Road exploration, prefer roads that maximize new adjacent tiles
         [0.1,10.0],     //ROAD - Diagonal bias, prefer roads to expand diagonally
@@ -108,10 +120,10 @@ const GENE_BLOCKS ={
     'MODE':[3,5],
     'WATR':[6,10],
     'CORE':[11,14],
-    'BLOB':[15,18],
-    'ROAD':[19,22],
-    'ASSN':[23,29],
-    'MINC':[30,32]
+    'BLOB':[15,19],
+    'ROAD':[20,23],
+    'ASSN':[24,30],
+    'MINC':[31,33]
 }
 
 
@@ -870,28 +882,59 @@ function updateGeneration(config){
 
 //Room Plan Function
 //Calls functions from architect submodules to build the room plan
+
+/*Room Data Object Structure
+{
+    roomName:roomName,
+    sources:sources.map(s => ({ x: s.x, y: s.y ,id:s.id})),
+    mineral:{x:mineral.x,y:mineral.y},
+    controller:{x:controller.x,y:controller.y},
+    exits : getExits(terrain),
+    distanceCM: ...
+    controllerCM
+    exitCM
+    sourceCM
+    watershedCM
+    regionData: {
+        22:{
+            tiles: [{x:1,y:2},...]
+            sourceDistance:
+            exitDistance:
+            controllerDistance:
+            borderSize: 
+            neighbors: [11,22,45]
+        },
+        ...
+    }
+}
+*/
+/*Plan Data Object Structure
+{
+    isWatershed: true/false
+    region: 27
+    coreSpot: {x,y}
+}
+*/
 function generateRoomPlan(config,roomData){
     let subject = config.population[config.subject];
     let speciesBlock = subject.slice(GENE_BLOCKS.SPEC[0],GENE_BLOCKS.SPEC[1]+1);
     let modeBlock = subject.slice(GENE_BLOCKS.MODE[0],GENE_BLOCKS.MODE[1]+1);
     let planData = {};
-    //If watershed gene is active, we first select our region
+    //If watershed gene is active, we first select our region -Done
     let watershedGene = subject[0];
     if(watershedGene){
         let watershedBlock = subject.slice(GENE_BLOCKS.WATR[0],GENE_BLOCKS.WATR[1]+1);
         planData.isWatershed = true;
-        planData = architectPlanner.planWatershed(config,roomData,planData,watershedBlock);
+        planData.region = architectPlanner.pickWatershedRegion(config,roomData,planData,watershedBlock);
     }
 
-    //Select our core location
+    //Select our core location -Done
     let coreBlock = subject.slice(GENE_BLOCKS.CORE[0],GENE_BLOCKS.CORE[1]+1);
-    planData = architectPlanner.planCore(config,roomData,planData,coreBlock);
+    planData.coreSpot = architectPlanner.planCore(config,roomData,planData,coreBlock);
     
-    //If we didn't use watershed, get our structure blob
-    if(!watershedGene){
-        let blobBlock = subject.slice(GENE_BLOCKS.BLOB[0],GENE_BLOCKS.BLOB[1]+1);
-        planData = architectPlanner.planStructureBlob(config,roomData,planData,blobBlock);
-    }
+    //Get our structure blob for the buildable area -Done
+    let blobBlock = subject.slice(GENE_BLOCKS.BLOB[0],GENE_BLOCKS.BLOB[1]+1);
+    planData = architectPlanner.planStructureBlob(config,roomData,planData,blobBlock);
 
     //Expand roads
     let roadBlock = subject.slice(GENE_BLOCKS.ROAD[0],GENE_BLOCKS.ROAD[1]+1);
@@ -900,6 +943,9 @@ function generateRoomPlan(config,roomData){
     planData = architectPlanner.planRoads(config,roomData,planData,roadBlock,mineralRoads,remoteRoads);
 
     //Assign structures
+    //Special considerations for assigning structures:
+    //Need to return source lab locations so we can buid those first
+    //Need to plan links next to sources early so they don't get filled by extensions
     let assignBlock = subject.slice(GENE_BLOCKS.ASSN[0],GENE_BLOCKS.ASSN[1]+1);
     planData = architectPlanner.planStructureAssignment(config,roomData,planData,assignBlock);
 
@@ -1007,13 +1053,16 @@ const architect = {
         }
         let terrain = new Room.Terrain(roomName);
         this.data.exits = getExits(terrain);
-        this.data.distanceCM = architectMatrixes.getDistanceTransform(terrain)
-        this.data.controllerCM = architectMatrixes.getDistanceMap(terrain,[this.data.controller])
-        this.data.exitCM = architectMatrixes.getDistanceMap(terrain,this.data.exits)
+        let distTransform = architectMatrixes.getDistanceTransform(terrain)
+        this.data.distanceCM = distTransform.distanceCM;
+        this.data.distanceCMMax = distTransform.max;
+        [this.data.controllerCM,this.data.controllerCMMax] = architectMatrixes.getDistanceMap(terrain,[this.data.controller])
+        [this.data.exitCM,this.data.exitCMMax] = architectMatrixes.getDistanceMap(terrain,this.data.exits)
         if(this.data.sources.length > 1){
             let finalSourceMatrix = new PathFinder.CostMatrix();
             let matrixes = [];
             let totalDist = 0;
+            let max = -Infinity;
             for(let each of this.data.sources){
                 matrixes.push(architectMatrixes.getDistanceMap(terrain,[each]));
             }
@@ -1024,17 +1073,20 @@ const architect = {
                     for(let each of matrixes){
                         totalDist += each.get(x,y);
                     }
-                    finalSourceMatrix.set(x,y,Math.round(totalDist/matrixes.length))
+                    let avgTotal = Math.round(totalDist/matrixes.length);
+                    if(avgTotal > max) max = avgTotal;
+                    finalSourceMatrix.set(x,y,avgTotal);
                 }
             }
-            this.data.sourceCM = finalSourceMatrix;
+            [this.data.sourceCM, this.data.sourceCMMax] = finalSourceMatrix;
         }
         else{
-            this.data.sourceCM = architectMatrixes.getDistanceMap(terrain,this.data.sources)
+            [this.data.sourceCM, this.data.sourceCMMax] = architectMatrixes.getDistanceMap(terrain,this.data.sources)
         }
         let watershedCM = architectMatrixes.getWatershed(this.data.distanceCM,terrain);
-        this.data.watershedData = architectMatrixes.getWatershedData(watershedCM,this.data)
+        this.data.regionData = architectMatrixes.getWatershedData(watershedCM,this.data)
         this.data.watershedCM = watershedCM;
+        
         //Clear the segment - This is where we will write a compact history of all plans to visualize
         RawMemory.segments[SEGMENT_PLAN_GENERATIONS] = '{}'
         return true;

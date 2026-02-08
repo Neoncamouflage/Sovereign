@@ -77,26 +77,9 @@ const constants = {
     PRIORITY_REACTION: 6,
     PRIORITY_CLEANUP: 8,
 
-    //Room Plan Constants
-    STRUCTURE_KEYS : {
-        's': 'spawn',
-        'e': 'extension',
-        'r': 'road',
-        't': 'tower',
-        'st': 'storage',
-        'l': 'link',
-        'ls': 'lab',
-        'lt': 'lab',
-        'tm': 'terminal',
-        'f': 'factory',
-        'ps': 'powerSpawn',
-        'n': 'nuker',
-        'o': 'observer'
-    },
-
-
     //Misc
-    FLAG_MASK : 0x8000
+    DIRECTIONS_4:  [[1, 0], [-1, 0], [0, 1], [0, -1]],
+    DIRECTIONS_8: [[1, 0], [-1, 0], [0, 1], [0, -1],[1, 1], [-1, 1], [-1, 1], [1, -1]]
 
 }
 

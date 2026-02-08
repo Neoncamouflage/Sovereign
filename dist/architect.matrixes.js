@@ -1,7 +1,5 @@
 const minCut = require('minCut');
 const profiler = require('screeps-profiler');
-const DIRECTIONS_4 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-const DIRECTIONS_8 = [[1, 0], [-1, 0], [0, 1], [0, -1],[1, 1], [-1, 1], [-1, 1], [1, -1]];
 const architectMatrixes = {
     getWatershed: function(distanceTransformObj,terrain,MIN_PEAK = 2,MERGE_RADIUS = 6,MIN_SIZE = 90,MAX_MERGE=25){
         //Lower min peak
@@ -9,7 +7,7 @@ const architectMatrixes = {
         
         let seedQueue = getWatershedSeeds(distanceTransformObj.distCM)
         seedQueue = mergeSeeds(seedQueue)
-        let watershedCM = runWatershed(seedQueue,distanceTransformObj.distCM,terrain,distanceTransformObj.distHighest);
+        let watershedCM = runWatershed(seedQueue,distanceTransformObj.distCM,terrain,distanceTransformObj.max);
         //Merge up to 20 times
         for (let i = 0; i < MAX_MERGE; i++){
             let res = mergeSmallRegions(watershedCM, terrain);
@@ -290,8 +288,7 @@ const architectMatrixes = {
     getDistanceTransform: function(terrain){
         //Create the distance transform cost matrix and set default values for highest/lowest
         let distCM = new PathFinder.CostMatrix;
-        let distHighest = 0;
-        let distLowest = 999
+        let max = -Infinity;
         let top;
         let left;
         let bottom;
@@ -326,18 +323,17 @@ const architectMatrixes = {
                 value = Math.min(Math.min(bottom, right) + 1, distCM.get(x, y));
                 distCM.set(x, y,value);
                 if(value < 255){
-                    if(value > distHighest){
-                        distHighest = value;
-                    }
-                    if(value < distLowest){
-                        distLowest = value;
+                    if(value > max){
+                        max = value;
                     }
                 }
             }
         }
-        return {distCM,distHighest,distLowest};
+        return {distCM,max};
     },
     getDistanceMap: function(terrain,queue){
+        let min = 1;
+        let max = -Infinity;
         let distanceMap = new PathFinder.CostMatrix();
         let qi = 0;
         queue = queue.map(p => ({ x: p.x, y: p.y, distance: 0 }));
@@ -360,61 +356,81 @@ const architectMatrixes = {
                 let newTileValue = distanceMap.get(newX,newY);
                 let newDistance = tile.distance+1;
                 if(newTileValue != 255 && newDistance >= newTileValue) continue;
-                distanceMap.set(newX,newY,newDistance)
+                distanceMap.set(newX,newY,newDistance);
+                if(newDistance > max) max = newDistance;
                 let newTile = {x:newX,y:newY,distance:newDistance};
                 queue.push(newTile);
             }
         }
-        return distanceMap;
+        return [distanceMap, max];
     },
-    getWatershedData: function(watershedCM,roomData){
-        //Returns a data object containing region IDs and their total size, controller distance, source distance, exit distance, and border size
-        //regions = {id:}
+    getWatershedData: function (watershedCM, roomData) {
         const regions = Object.create(null);
-        let terrain = new Room.Terrain(roomData.roomName);
+        const terrain = new Room.Terrain(roomData.roomName);
+
+        const ensureRegion = (id) => {
+            if (!regions[id]) {
+                regions[id] = {
+                    tiles: [],
+                    sourceDistance: 0,
+                    controllerDistance: 0,
+                    exitDistance: 0,
+                    borderSize: 0,
+                    neighbors: new Set(),
+                };
+            }
+            return regions[id];
+        };
+
         for (let x = 0; x < 50; x++) {
             for (let y = 0; y < 50; y++) {
                 const id = watershedCM.get(x, y);
                 if (id === 0 || id === 255) continue;
-                const coord = {x:x,y:y}
-                if(!regions[id]){
-                    regions[id] = {tiles:[],sourceDistance:0,controllerDistance:0,exitDistance:0,borderSize:0};
-                }
-                //Add tiles and increase all distances
-                regions[id].tiles.push(coord);
-                regions[id].sourceDistance += roomData.sourceCM.get(x,y);
-                regions[id].controllerDistance += roomData.controllerCM.get(x,y);
-                regions[id].exitDistance += roomData.exitCM.get(x,y);
 
-                //Check borders
+                const r = ensureRegion(id);
+
+                r.tiles.push({ x, y });
+                r.sourceDistance += roomData.sourceCM.get(x, y);
+                r.controllerDistance += roomData.controllerCM.get(x, y);
+                r.exitDistance += roomData.exitCM.get(x, y);
+
+                //Check borders and neighbors
                 for (const [dx, dy] of DIRECTIONS_8) {
                     const nx = x + dx, ny = y + dy;
                     if (nx < 0 || nx > 49 || ny < 0 || ny > 49) continue;
-                    if (terrain.get(nx, ny) == TERRAIN_MASK_WALL) continue;
+                    if (terrain.get(nx, ny) === TERRAIN_MASK_WALL) continue;
 
                     const nid = watershedCM.get(nx, ny);
-                    if (nid !== 0 && nid !== id && nid !== 255) {
-                        r.borderSize++;
-                        break;
-                    }
+                    if (nid === 0 || nid === 255 || nid === id) continue;
+
+                    r.neighbors.add(String(nid));
+                    ensureRegion(nid).neighbors.add(String(id));
+
+                    r.borderSize++;
+                    break;
                 }
             }
         }
-        //Update distances to average
-        for(let regionID of Object.keys(regions)){
-            let region = regions[regionID];
-            region.sourceDistance = Math.round(region.sourceDistance/region.tiles.length)
-            region.controllerDistance = Math.round(region.controllerDistance/region.tiles.length)
-            region.exitDistance = Math.round(region.exitDistance/region.tiles.length)
+
+        // Finalize averages + convert neighbor Sets to arrays
+        for (const regionID of Object.keys(regions)) {
+            const region = regions[regionID];
+            region.sourceDistance = Math.round(region.sourceDistance / region.tiles.length);
+            region.controllerDistance = Math.round(region.controllerDistance / region.tiles.length);
+            region.exitDistance = Math.round(region.exitDistance / region.tiles.length);
+
+            region.neighbors = Array.from(region.neighbors);
         }
+
         return regions;
     }
+
 }
 module.exports = architectMatrixes;
 global.testWT = function testWT(roomName,a=2,b=6,c=90,d=25){
     chronicle.log(`Attempting test watershed`,'architect.matrixes',4)
     let terrain = new Room.Terrain(roomName);
-    let dt = architectMatrixes.getDistanceTransform(terrain);
+    let dt = architectMatrixes.getDistanceTransform(terrain)[0];
     let g = architectMatrixes.getWatershed(dt,terrain,a,b,c,d);
     if(g) Memory.test.testCM = g.serialize();
     chronicle.log(`Test Complete`,'architect.matrixes',4)
@@ -422,7 +438,7 @@ global.testWT = function testWT(roomName,a=2,b=6,c=90,d=25){
 global.testDT = function testWT(roomName){
     chronicle.log(`Attempting test distanceCM`,'architect.matrixes',4)
     let terrain = new Room.Terrain(roomName);
-    let dt = architectMatrixes.getDistanceTransform(terrain);
+    let dt = architectMatrixes.getDistanceTransform(terrain)[0];
     if(dt.distCM) Memory.test.testCM = dt.distCM.serialize();
     chronicle.log(`Test Complete`,'architect.matrixes',4)
 }

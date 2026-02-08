@@ -434,8 +434,6 @@ var holdingManager = {
                 }
             }
         }
-        
-        
     },
     
     runHolding: function(holdingName,fiefCreeps,spawnPad){

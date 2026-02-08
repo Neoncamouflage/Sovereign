@@ -397,6 +397,8 @@ global.convertStructure = function convertStructure(structure) {
     chronicle.log(`Invalid structure: ${structure}`,'global.convertStructure',1)
 };
 
+const FLAG_MASK = 0x8000;
+const MAX_VALUE = 0x7FFF;
 global.BigCostMatrix = function() {
     this._bits = new Uint16Array(2500);
 };
@@ -404,7 +406,11 @@ global.BigCostMatrix = function() {
 BigCostMatrix.prototype.set = function(xx, yy, val) {
     xx = xx|0;
     yy = yy|0;
-    this._bits[xx * 50 + yy] = Math.min(Math.max(0, val), 65535);
+    if (val > MAX_VALUE) {
+        chronicle.log(`Matrix overflow. The provided value ${val} exceeds the maximum of ${MAX_VALUE}.`,'global.bigCostMatrix',1);
+        val = MAX_VALUE;
+    }
+    this._bits[xx * 50 + yy] = Math.min(Math.max(0, val), MAX_VALUE);
 };
 
 BigCostMatrix.prototype.get = function(xx, yy) {
@@ -418,6 +424,7 @@ BigCostMatrix.prototype.serialize = function(){
     const bits = this._bits;
     const len = bits.length;
     let i = 0;
+
     while (i < len) {
         const value = bits[i];
         let run = 1;
@@ -589,7 +596,7 @@ global.getCombatStats = function(creeps){
 
 global.getTowerMap = function(room,serialized=false){
     if(!(room instanceof Room)){
-        chronicle.log(`Room object must be provided to generate a tower map.`,'helper.getTowerMap',1)
+        chronicle.log(`Room object must be provided to generate a tower map.`,'global.getTowerMap',1)
         return false;
     }
     let tCM = new BigCostMatrix();
