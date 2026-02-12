@@ -147,7 +147,8 @@ var holdingManager = {
             kingdomCreeps[holding.homeFief] = kingdomCreeps[holding.homeFief] || []
             let fCreeps = kingdomCreeps[holding.homeFief];
             if(holding.homeFief && Game.rooms[holding.homeFief]){
-                
+                //let utilization = heap.shipping[holding.homeFief].utilSum / heap.shipping[holding.homeFief].utilization.length;
+                //No need to run 
                 let needSpawns = this.runHolding(each,fCreeps,fiefMap[holding.homeFief]);
                 heap.kingdomStatus.activeHoldings.push(each)
                 //If one holding needs spawns, stop processing more
@@ -556,7 +557,7 @@ var holdingManager = {
                     }
                 }
                 
-                if(remote.controller && reserverPower < 2 && Game.rooms[fief].energyCapacityAvailable >= 650){
+                if(remote.controller && reserverPower < 4 && Game.rooms[fief].energyCapacityAvailable >= 650){
                     //let spots = helper.getOpenSpots(remote.controller.pos,true);
                     //See if we have a mission already
                    // console.log("Reserver checks")

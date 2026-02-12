@@ -15,110 +15,100 @@ const supplyDemand = {
         //Run prepShipping for the room to ensure we're set up
         let room = Game.rooms[roomName];
         let poolHaulers = fiefCreeps;
-        //No nuker because it takes so much energy. Only fill upon explicit request
-        let fillStructures = [
-            STRUCTURE_SPAWN,
-            STRUCTURE_EXTENSION,
-            STRUCTURE_LAB,
-            STRUCTURE_POWER_SPAWN,
-            STRUCTURE_TOWER
-        ]
-        const MAX_IDLE = 0.15;
-
-        //global.heap.shipping[roomName].forEach(task =>{
-            //console.log(JSON.stringify(task));
-        //})
-
-        //Manage imports/exports
-
-
-        
-        //Process infrastructure energy demands (extensions,spawns,towers,labs)
-        let energyStructures = [];
-        energyStructures = room.find(FIND_MY_STRUCTURES,{filter: 
-            (structure) => fillStructures.includes(structure.structureType) && structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-        });
-
-
-
-
-        if(energyStructures.length){
-            //Flag so we only request one refill mission
-            let refillDone = false;
-            energyStructures.forEach(struct =>{
-                let structNeed = struct.store.getFreeCapacity(RESOURCE_ENERGY);
-                //console.log("Structure need for",struct.structureType,"is",struct.store.getFreeCapacity(RESOURCE_ENERGY))
-                switch(struct.structureType){
-                    
-                    //Towers get refilled below 700 in peacetime
-                    //Don't refill til we're leaving or soon to be out of safemode
-                    //This needs to be taken over by the military manager at some point
-                    case STRUCTURE_TOWER:
-                        if(structNeed > 300 && (!room.controller.safeMode || room.controller.safeMode < 100)){
-                            this.addRequest(room,{
-                                type:'dropoff',
-                                targetID:struct.id,
-                                amount:structNeed,
-                                priority:6
-                            });
-                        }
-                        //If it doesn't qualify, make sure it's at least got enough for a few repairs
-                        else if(struct.store.getUsedCapacity(RESOURCE_ENERGY) < 100){
-                            this.addRequest(room,{
-                                type:'dropoff',
-                                targetID:struct.id,
-                                amount:100,
-                                priority:6
-                            });
-                        }
-                        break;
-                    //Labs get refilled past 1k
-                    case STRUCTURE_LAB:
-                        if(structNeed > 1000){
-                            this.addRequest(room,{
-                                type:'dropoff',
-                                targetID:struct.id,
-                                amount:structNeed
-                            });
-                        }
-                        break;
-                    //Extensions and spawns get dropoff if there's no storage/terminal
-                    case STRUCTURE_EXTENSION:
-                    case STRUCTURE_SPAWN:
-                        if((struct.name && (struct.name == 'Origin Keep' || struct.name == 'Spawn1')) || ((!room.storage || room.storage.store.getUsedCapacity(RESOURCE_ENERGY) < 10000) && (!room.terminal || room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) < 10000))){
-                            this.addRequest(room,{
-                                type:'dropoff',
-                                targetID:struct.id,
-                                amount:structNeed,
-                                priority:9
-                            });
-                        }
-                        else if(!refillDone){
-                            this.addRequest(room,{
-                                type:'refill',
-                                priority:9,
-                                targetID:room.controller.id,
-                                amount:Infinity
-                            });
-                            refillDone = true;
-                        }
-                        break;
-                    //Labs get refilled past 3k
-                    case STRUCTURE_POWER_SPAWN:
-                        if(structNeed > 3000){
-                            this.addRequest(room,{
-                                type:'dropoff',
-                                targetID:struct.id,
-                                amount:structNeed
-                            });
-                            
-                        }
-                        break;
-                }
-            });
-
-        };
         let unassignedTotal = 0;
+        let newUtil = 0;
+        const shipping = global.heap.shipping[roomName];
+        const MIN_IDLE = 0.22;
+        const FILL_REFRESH_TICKS = 50;
+        const ROOM_UTIL_MULTIPLE = 25;
+        const safeMode = room.controller && room.controller.safeMode;
+        const storageEnergy = room.storage ? room.storage.store.getUsedCapacity(RESOURCE_ENERGY) : 0;
+        const terminalEnergy = room.terminal ? room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) : 0;
+        const hasEcoBuffer = storageEnergy >= 10000 || terminalEnergy >= 10000;        
+        //Keep a cache of fillable objects
+        if(!shipping.fillIds) shipping.fillIds = { tick: 0, ids: [] };
+        const fillCache = shipping.fillIds;
+        if(Game.time - fillCache.tick >= FILL_REFRESH_TICKS){
+            fillCache.tick = Game.time;
+            fillCache.ids = room.find(FIND_MY_STRUCTURES, {
+                filter: s => s.structureType == STRUCTURE_SPAWN
+                        || s.structureType == STRUCTURE_EXTENSION
+                        || s.structureType == STRUCTURE_LAB
+                        || s.structureType == STRUCTURE_POWER_SPAWN
+                        || s.structureType == STRUCTURE_TOWER
+            }).map(s => s.id);
+        }
+        let needRefill = false;
+        for(const id of fillCache.ids){
+            const struct = Game.getObjectById(id);
+            if(!struct) continue;
+
+            const structNeed = struct.store.getFreeCapacity(RESOURCE_ENERGY);
+            if(structNeed <= 0) continue;
+            switch(struct.structureType){
+                //Towers get refilled below 700 in peacetime
+                //Don't refill til we're leaving or soon to be out of safemode
+                //This needs to be taken over by the military manager at some point
+                case STRUCTURE_TOWER:
+                    if(structNeed > 300 && (!safeMode || safeMode < 200)){
+                        this.addRequest(room,{
+                            type:'dropoff',
+                            targetID:struct.id,
+                            amount:structNeed,
+                            priority:6
+                        });
+                    }
+                    //If it doesn't qualify, make sure it's at least got enough for a few repairs
+                    else if(struct.store.getUsedCapacity(RESOURCE_ENERGY) < 100){
+                        this.addRequest(room,{
+                            type:'dropoff',
+                            targetID:struct.id,
+                            amount:100,
+                            priority:6
+                        });
+                    }
+                    break;
+                //Labs get refilled past 1k
+                case STRUCTURE_LAB:
+                    if(structNeed > 1000){
+                        this.addRequest(room,{
+                            type:'dropoff',
+                            targetID:struct.id,
+                            amount:structNeed
+                        });
+                    }
+                    break;
+                //Extensions and spawns get dropoff if there's no storage/terminal
+                case STRUCTURE_EXTENSION:
+                case STRUCTURE_SPAWN:
+                    if(!hasEcoBuffer){
+                        this.addRequest(room,{
+                            type:'dropoff',
+                            targetID:struct.id,
+                            amount:structNeed,
+                            priority:9
+                        });
+                        break;
+                    }
+                    needRefill = true;
+                    break;
+                /*case STRUCTURE_POWER_SPAWN:
+                    if(structNeed > 0){
+                        this.addRequest(room,{
+                            type:'dropoff',
+                            targetID:struct.id,
+                            amount:structNeed
+                        });
+                        
+                    }
+                    break;*/
+            }
+        }
+        if(needRefill) this.addRequest(room,{type:'refill',priority:9,targetID:room.controller.id,amount:Infinity});
+
+        //Create utilization variables if they don't exist
+        if(!shipping.utilization) shipping.utilization = [];
+        if(shipping.utilSum === undefined || shipping.utilSum === null) shipping.utilSum = shipping.utilization.reduce((s,u)=>s+u,0.0);
         //Handle in-room haulers, get idle count in return
         if(poolHaulers && poolHaulers.length){
             unassignedTotal = this.assignTasks(poolHaulers,room)
@@ -126,53 +116,35 @@ const supplyDemand = {
             let newUnassigned = this.assignTasks(postIdles,room)
             //If we return -1 then we assigned nothing new. 
             if(newUnassigned > -1) unassignedTotal = newUnassigned;
-            //console.log("Received total",unassignedTotal)
-            
-            //console.log("Idle count",idleCount)
-            global.heap.shipping[roomName].utilization.unshift(idleCount/totalCount)
-
-            //If utilization is past our tracking length, trim
-            if(global.heap.shipping[roomName].utilization.length > MAX_SHIPPING_UTILIZATION) global.heap.shipping[roomName].utilization.length = MAX_SHIPPING_UTILIZATION;
+            //console.log("Idle Count:",idleCount,"Total Count:",totalCount,"Post Idles",postIdles)
+            //Add the new utilization
+            newUtil = idleCount/totalCount;
+            if(newUtil === null) newUtil = 0;
         }
-        //If no haulers, utilization is set to 0 by default
-        else{
-            global.heap.shipping[roomName].utilization.unshift(0)
+        //Add and recalculate the new utilization - 0 by default if no haulers
+        shipping.utilization.unshift(newUtil);
+        shipping.utilSum += newUtil;
+        //If utilization is now past our tracking length, trim and adjust utilSum
+        if(shipping.utilization.length > MAX_SHIPPING_UTILIZATION){
+            shipping.utilSum -= shipping.utilization.pop();
         }
         if(Game.time % GLOBAL_SPAWN_INTERVAL == 0){
-        
-        //Calculate utilization and request more haulers if needed
-            let utilization = global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length
             //Utilization minimum gets increased based on active remote demand vs hauler carry
-            let totalCarry = poolHaulers.reduce((sum,current) => sum+current.store.getCapacity(),0)
-            let roomMultiple = 20
+            let totalCarry = (poolHaulers && poolHaulers.length) ? poolHaulers.reduce((sum,c) => sum + c.store.getCapacity(), 0) : 0;
             let unassignedUtilization = totalCarry/Math.max(unassignedTotal,1);
-            let holdingUtilization = totalCarry/Math.max(((heap.fiefs[roomName].holdingDist || 0)*roomMultiple),1);
+            let utilization = shipping.utilSum / shipping.utilization.length;
+            let holdingUtilization = totalCarry/Math.max(((heap.fiefs[roomName].holdingDist || 0)*ROOM_UTIL_MULTIPLE),1);
             utilization = Math.min(utilization,unassignedUtilization,holdingUtilization)
-            //console.log("HD",heap.fiefs[roomName].holdingDist || 0)
-            /*console.log('\nUnassigned Total:',unassignedTotal,
-                '\nMAX_IDLE:',MAX_IDLE,
-                '\nholdingDist:',heap.fiefs[roomName].holdingDist,
-                '\nCalculated idle from history:',global.heap.shipping[roomName].utilization.reduce((sum,util) => sum+util,0) / global.heap.shipping[roomName].utilization.length,
-                '\nLast tick idle',global.heap.shipping[roomName].utilization[0],
-                '\nMinimum idle from holdings:',totalCarry/((heap.fiefs[roomName].holdingDist || 0)*roomMultiple),
-                '\nIdle from unassigned task amounts:',totalCarry/unassignedTotal,
-                '\nResult:',utilization)*/
             //Extra check, no spawning if half or more haulers are currently idle
-            //console.log("Haulcheck",MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5)
-            if(MAX_IDLE > utilization && global.heap.shipping[roomName].utilization[0] < 0.5){
-                //console.log("Yes1")
-                //console.log(unassignedUtilization)
+            if(MIN_IDLE > utilization && shipping.utilization[0] < 0.5){
                 //Extra check to make sure we have task assignments
-                if(poolHaulers.length <2 || unassignedUtilization < 0.9){
+                if((poolHaulers && poolHaulers.length <2) || unassignedUtilization < 0.9){
                     //console.log("Yes2")
                     registry.requestCreep({sev:poolHaulers.length > 2 ? 36 : room.storage && room.storage.store[RESOURCE_ENERGY] > 100 ? 100 :  fiefCreeps.length > 2 ? 50 : 60,memory:{role:'hauler',fief:roomName,preflight:false,state:'idle'}})
                 }
                 
             }
-            //console.log(`${roomName} hauler utilization: ${utilization}`)
         }
-        
-        //console.log(global.heap.shipping[roomName].utilization)
     },
     addRequest: function(room,details){
         //addSupplyRequest(Game.rooms.E46N37,{type:'pickup',resourceType:'energy',amount:0,targetID:'aaa',international:true,priority:5})
@@ -502,11 +474,15 @@ const supplyDemand = {
         const TOW = 'tow';
         const REFILL = 'refill';
         const STATES = [IDLE,PICKUP,DROPOFF,RENEW,TOW,REFILL];
-        let shippingTasks = global.heap.shipping[room.name].requests;
-        
+        const STATE_OK = { idle:1, pickup:1, dropoff:1, renew:1, tow:1, refill:1 };
+        const RESPAWN_UTIL_MAX = 0.3;
+        const RESPAWN_TICK_UTIL_MAX = 0.7;
+        let shipping = global.heap.shipping[room.name]
+        let shippingTasks = shipping.requests;
         let isIdle = 0;
         let totalCarry = 0;
         let combos = [];
+        let currentState = null;
         let [emptyHauls,energyHauls] = haulers.reduce((arr,hauler) => {
             if(hauler.store[RESOURCE_ENERGY]) arr[1].push(hauler);
             //Pushing to empty haulers goes here
@@ -522,7 +498,9 @@ const supplyDemand = {
         let remoteLinks = Memory.kingdom.fiefs[room.name].links && Memory.kingdom.fiefs[room.name].links.remoteLinks
         let link = Game.getObjectById(coreLink)
         //Track IDs of fills so we can clear their tasks
-        let fillTransfers = []
+        const fillTransfers = new Set();
+        //Non refill haulers ad hoc fill builders/ugraders
+        let buildUps = Game.rooms[[room.name]].find(FIND_MY_CREEPS).filter(c=>(c.memory.role == 'upgrader' || c.memory.role == 'builder') && c.store.getFreeCapacity()>c.store.getCapacity()/2)
         for(let haul of energyHauls){
             if(haul.id in heap.relays)continue;
             //if(link && haul.store.getFreeCapacity()>0){
@@ -567,18 +545,17 @@ const supplyDemand = {
                 let fillTargets = heap.fiefs[room.name].sourceRefills.get(checkPos);
                 let target = Game.getObjectById(fillTargets.values().next().value);
                 haul.transfer(target,RESOURCE_ENERGY);
-                fillTransfers.push(target.id);
+                fillTransfers.add(target.id);
                 continue
             }
             else if(heap.fiefs[room.name].otherRefills && heap.fiefs[room.name].otherRefills.has(checkPos)){
                 let fillTargets = heap.fiefs[room.name].otherRefills.get(checkPos);
                 let target = Game.getObjectById(fillTargets.values().next().value);
                 haul.transfer(target,RESOURCE_ENERGY);
-                fillTransfers.push(target.id);
+                fillTransfers.add(target.id);
                 continue
             }
-            //Non refill haulers ad hoc fill builders/ugraders
-            let buildUps = haul.room.find(FIND_MY_CREEPS).filter(c=>(c.memory.role == 'upgrader' || c.memory.role == 'builder') && c.store.getFreeCapacity()>c.store.getCapacity()/2)
+            
             for(let targetCrp of buildUps){
                 if(haul.memory.state != 'refill' && haul.pos.isNearTo(targetCrp)){
                     haul.transfer(targetCrp,RESOURCE_ENERGY);
@@ -586,19 +563,26 @@ const supplyDemand = {
                 }
             }
         }
-        let fillTasks = []
-        for(let each of Object.values(shippingTasks)){
-            if(fillTransfers.includes(each.taskID)){
-                fillTasks.push(each)
+        for (const each of Object.values(shippingTasks)) {
+            if (fillTransfers.has(each.taskID)) {
+                each.remove(room.name);
             }
         }
-        for(let every of fillTasks){
-            every.remove(room.name)
-        }
         //Hauler action loop
-        haulers.forEach(creep => {
+        //Probably best to do a while loop so it can process more than once if a hauler needs to change states
+        for(let creep of haulers) {
             let postFlag = true;
             let carryParts = creep.getActiveBodyparts(CARRY);
+            let oldState = creep.memory.state || IDLE;
+            currentState = creep.memory.state || IDLE;
+            let task = creep.memory.task ? getTaskByID(creep.memory.fief, creep.memory.task) : null;
+            //Kill invalid tasks
+            if(creep.memory.task && !task){
+                if(STATE_OK[currentState]){
+                    setState(creep,IDLE);
+                }
+                delete creep.memory.task;
+            }
             //Add carry parts so we can track idle time
             totalCarry += carryParts;
             //if(heap.relays.includes(creep.id))console.log(creep.id,'relayed. State:',creep.memory.state,'Task:',creep.memory.task)
@@ -606,11 +590,14 @@ const supplyDemand = {
                 let baddies = creep.room.find(FIND_HOSTILE_CREEPS).filter(c=>helper.isSoldier(c) && !isFriend(c))
                 let bad = creep.pos.findClosestByRange(baddies)
                 if(bad && creep.pos.getRangeTo(bad) < 7){
-                    if(creep.memory.task) getTaskByID(creep.memory.fief,creep.memory.task).unassign(creep,'Fleeing')
-                        let words = helper.getSay({symbol:`${Game.time % 2 == 1 ? '🚨' : '📢'}`});
-                        creep.say(words.join(''))
-                        creep.memory.status = 'flee';
-                        creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
+                    if(task) {
+                        task.unassign(creep,'Fleeing')
+                        task = null;
+                    }
+                    let words = helper.getSay({symbol:`${Game.time % 2 == 1 ? '🚨' : '📢'}`});
+                    creep.say(words.join(''))
+                    creep.memory.status = 'flee';
+                    creep.travelTo(Game.rooms[creep.memory.fief].controller,{range:10})
                 }
 
             }
@@ -623,95 +610,66 @@ const supplyDemand = {
             }
             //Deathcheck every 3 ticks to match spawn timing
             if(Game.time % GLOBAL_SPAWN_INTERVAL == 0 && creep.ticksToLive <= CREEP_SPAWN_TIME*creep.body.length && !creep.memory.respawn){
-                let utilization = global.heap.shipping[room.name].utilization.reduce((sum,util) => sum+util,1) / global.heap.shipping[room.name].utilization.length
-                
+                let utilization = shipping.utilSum / shipping.utilization.length
                 //Check utilization to make sure we aren't respawning when not needed
-                if(utilization < 0.15 && global.heap.shipping[room.name].utilization[0] < 0.5){
+                if(utilization < RESPAWN_UTIL_MAX && shipping.utilization[0] < RESPAWN_TICK_UTIL_MAX){
                     registry.requestCreep({sev:35,memory:{role:'hauler',fief:room.name,preflight:false},respawn:creep.id})
                 }
             }
-            let oldState = creep.memory.state;
-            let state = creep.memory.state;
             //If the creep's state is not in the list of hauler states, skip.
             //Unfamiliar state means logic is taken over by another handler, likely combat
-            if(creep.spawning) return;
-            if(state && !STATES.includes(state)){
-                return;
-            };
+            if(creep.spawning) continue;
+            if(!STATE_OK[currentState]) continue;
             //If assigned 0 qty on task, remove it
-            if(creep.memory.task){
-                let checkTask = getTaskByID(creep.memory.fief,creep.memory.task);
-                //console.log("Checktask for",creep.name,"task ID",creep.memory.task)
-                if(!checkTask){
-                    delete creep.memory.task
-                }
-                else if(checkTask.type != REFILL && checkTask.assignedHaulers[creep.id] <= 0 || checkTask.assignedHaulers[creep.id] == null){
+            if(task){
+                if(task.type != REFILL && task.assignedHaulers[creep.id] <= 0 || task.assignedHaulers[creep.id] == null){
                     //console.log(Game.time)
                    // console.log("Task ID",creep.memory.task,"in room",creep.memory.fief,"unassigning due to assigned inventory:",checkTask.assignedHaulers[creep.id],"in task",JSON.stringify(checkTask))
-                    checkTask.unassign(creep,checkTask.assignedHaulers[creep.id] <= 0 ? "Assigned amount is <=0." : "No result for this creep in assigned haulers") 
+                    task.unassign(creep,task.assignedHaulers[creep.id] <= 0 ? "Assigned amount is <=0." : "No result for this creep in assigned haulers") 
                 }
                 //Set the state if needed, seems to be causing issues
-                else if(checkTask.type == REFILL && (state != REFILL || creep.memory.state != REFILL)){
-                    state = REFILL;
-                    creep.memory.state = REFILL;
+                else if(task.type == REFILL && currentState != REFILL){
+                    setState(creep, REFILL)
                 }
             }
             //If no state, or no task but a non-idle state, assign idle
-            if(!state || (!creep.memory.task && creep.memory.state != IDLE)){
-                state = IDLE;
-                creep.memory.state = IDLE;
+            if(!currentState || (!task && currentState != IDLE)){
+                setState(creep,IDLE);
             }
 
-
             //console.log("Hauler",creep.name,'task:',JSON.stringify(creep.memory.task),'state:',creep.memory.state)
-            if(state == IDLE){
-                if(creep.memory.task){
-                    //Got a task
-                    let newTask = getTaskByID(creep.memory.fief,creep.memory.task);
-                    
-                    if(newTask == null){
-                        delete creep.memory.task;
-                        return;
-                    }
+            if(currentState == IDLE){
+                if(task){                    
                     //console.log(creep.name,"new task!")
-                    let resourceType = newTask.resourceType
+                    let resourceType = task.resourceType
                     //console.log("New task type",newTask.type)
                     //If demand task
-                    if(newTask.type == 'dropoff'){
+                    if(task.type == 'dropoff'){
                         //Are we carrying enough of what we need
-                        if(!creep.store.getUsedCapacity(resourceType) >= newTask.assignedHaulers[creep.id]){
+                        if(creep.store.getUsedCapacity(resourceType) >= task.assignedHaulers[creep.id]){
                             //If so, set state to dropoff
-                            creep.memory.state = DROPOFF;
-                            state = DROPOFF;
+                            setState(creep,DROPOFF)
                         }
                         //Else, set state to pickup
                         else{
-                            creep.memory.state = PICKUP;
-                            state = PICKUP;
+                            setState(creep,PICKUP);
                         }
                     }
-                    else if(newTask.type == 'pickup'){
+                    else if(task.type == 'pickup'){
                         //Do we have room for it
                         //Would there ever be an assignment situation where we didn't?
-                        if(creep.store.getFreeCapacity() > newTask.assignedHaulers[creep.id]){
+                        if(creep.store.getFreeCapacity() > task.assignedHaulers[creep.id]){
                             //If so, switch to pickup
-                            creep.memory.state = PICKUP;
-                            state = PICKUP;
+                            setState(creep,PICKUP);
                         }
                         else{
                             //If not, switch to dropoff
-                            creep.memory.state = DROPOFF;
-                            state = DROPOFF;
+                            setState(creep,DROPOFF);
                         }
-                    }
-                    else if(newTask.type == 'refill'){
-                        creep.memory.state = REFILL;
-                        state = REFILL;
                     }
                 }
                 else{
-                    //No task
-                    //Increment idle counter when we get one
+                    //Idle with no task
                     //If we started idle then we don't need to be added to postIdles
                     postFlag = false;
                     //If creep has stuff, dump it
@@ -721,13 +679,14 @@ const supplyDemand = {
                             creep.emptyStore();
                         }
                         //Otherwise refill
-                        else{
+                        //Cutting this out for now. Ideally all refills happen based on tasks and ad hocs
+                        /*else{
                             creep.say(LANGUAGE.refill2)
                             let sourceMap = heap.fiefs[room.name].sourceRefills;
                             let otherMap = heap.fiefs[room.name].otherRefills;
                             //console.log('source',sourceMap && sourceMap.size)
                             //console.log('other',otherMap && otherMap.size)
-                            if(!sourceMap || !otherMap) return
+                            if(!sourceMap || !otherMap) continue
                             //If we already have a target
                             if(creep.memory.refillTarget){
                                 if(!otherMap.has(creep.memory.refillTarget) && !sourceMap.has(creep.memory.refillTarget)){
@@ -739,26 +698,27 @@ const supplyDemand = {
                                         creep.memory.refillTarget = getRefillTarget(creep, sourceMap, room.name);
                                     }
                                     else{
-                                        creep.memory.state = IDLE;
-                                        state = IDLE;
-                                        return;
+                                        setState(creep,IDLE);
                                     }
                                 }
-                                let [x, y] = creep.memory.refillTarget.split(',').map(num => parseInt(num));
-                                let targetPos = new RoomPosition(x, y, room.name);
-                                //console.log(creep,"refilling",targetPos,'total refills',sourceMap.has(creep.memory.refillTarget) ? sourceMap.get(creep.memory.refillTarget).size : otherMap.has(creep.memory.refillTarget) ? otherMap.get(creep.memory.refillTarget).size : 'No map has target')
-                                if(creep.pos.getRangeTo(targetPos) > 0){
-                                    creep.travelTo(targetPos,{creepState:'refill'});
-                                }
-                                else{
-                                    let refillExt;
-                                    if(otherMap.has(creep.memory.refillTarget)){
-                                        refillExt = Game.getObjectById(otherMap.get(creep.memory.refillTarget).values().next().value);
-                                        creep.transfer(refillExt,RESOURCE_ENERGY)
+                                if(currentState != IDLE){
+                                    let [x, y] = creep.memory.refillTarget.split(',').map(num => parseInt(num));
+                                    let targetPos = new RoomPosition(x, y, room.name);
+                                    //console.log(creep,"refilling",targetPos,'total refills',sourceMap.has(creep.memory.refillTarget) ? sourceMap.get(creep.memory.refillTarget).size : otherMap.has(creep.memory.refillTarget) ? otherMap.get(creep.memory.refillTarget).size : 'No map has target')
+                                    if(creep.pos.getRangeTo(targetPos) > 0){
+                                        creep.travelTo(targetPos,{creepState:'refill'});
+                                        creep.canRelay = true;
                                     }
-                                    else if(sourceMap.has(creep.memory.refillTarget)){
-                                        refillExt = Game.getObjectById(sourceMap.get(creep.memory.refillTarget).values().next().value);
-                                        creep.transfer(refillExt,RESOURCE_ENERGY)
+                                    else{
+                                        let refillExt;
+                                        if(otherMap.has(creep.memory.refillTarget)){
+                                            refillExt = Game.getObjectById(otherMap.get(creep.memory.refillTarget).values().next().value);
+                                            creep.transfer(refillExt,RESOURCE_ENERGY)
+                                        }
+                                        else if(sourceMap.has(creep.memory.refillTarget)){
+                                            refillExt = Game.getObjectById(sourceMap.get(creep.memory.refillTarget).values().next().value);
+                                            creep.transfer(refillExt,RESOURCE_ENERGY)
+                                        }
                                     }
                                 }
                             }
@@ -771,7 +731,7 @@ const supplyDemand = {
                                 //console.log(creep, "getting sourcemap");
                                 creep.memory.refillTarget = getRefillTarget(creep, sourceMap, room.name);
                             }
-                        }
+                        }*/
                     }
                     //If chilling idle, go home if remote. If home then stay off room edges
                     else if(creep.room.name != creep.memory.fief || [0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
@@ -779,16 +739,14 @@ const supplyDemand = {
                     }
                 }
             }
-            if(state == REFILL){
-                creep.say(LANGUAGE.refill)
-                let refillTask = getTaskByID(creep.memory.fief,creep.memory.task);
+            if(currentState == REFILL && task){
+                creep.say(LANGUAGE.refill);
                 //console.log(creep,room.name,'ENERGY EVEN',room.energyAvailable == room.energyCapacityAvailable)
                 //Always try to get energy
-                if(room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 0 && creep.pos.getRangeTo(room.storage)==1)creep.withdraw(room.storage,RESOURCE_ENERGY)
-                if(room.energyAvailable == room.energyCapacityAvailable || ((!room.storage || room.storage.store.getUsedCapacity(RESOURCE_ENERGY) == 0) && (!room.terminal || room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) == 0))){
-                    refillTask.remove(creep.memory.fief)
-                    creep.memory.state = IDLE;
-                    state = IDLE;
+                if(room.storage && room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 0 && creep.pos.getRangeTo(room.storage)==1)creep.withdraw(room.storage,RESOURCE_ENERGY);
+                if(room.energyAvailable == room.energyCapacityAvailable /*|| ((!room.storage || room.storage.store.getUsedCapacity(RESOURCE_ENERGY) == 0) && (!room.terminal || room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) == 0))*/){
+                    task.remove(creep.memory.fief)
+                    setState(creep,IDLE)
                 }
                 //If we're empty, go fill up
                 else if(creep.store.getUsedCapacity(RESOURCE_ENERGY) == 0){
@@ -820,8 +778,20 @@ const supplyDemand = {
                 else{
                     let sourceMap = heap.fiefs[room.name].sourceRefills;
                     let otherMap = heap.fiefs[room.name].otherRefills;
-                    //If we already have a target
+                    //Get a target if we need one
+                    if(!creep.memory.refillTarget){
+                        if(otherMap && otherMap.size) {
+                            //console.log(creep, "getting othermap");
+                            creep.memory.refillTarget = getRefillTarget(creep, otherMap, room.name);
+                        }
+                        else if(sourceMap && sourceMap.size) {
+                            //console.log(creep, "getting sourcemap");
+                            creep.memory.refillTarget = getRefillTarget(creep, sourceMap, room.name);
+                        }
+                    }
+                    //If we have a target
                     if(creep.memory.refillTarget){
+                        let removed = false;
                         if(!otherMap.has(creep.memory.refillTarget) && !sourceMap.has(creep.memory.refillTarget)){
                             delete creep.memory.refillTarget;
                             if(otherMap && otherMap.size) {
@@ -833,54 +803,43 @@ const supplyDemand = {
                                 creep.memory.refillTarget = getRefillTarget(creep, sourceMap, room.name);
                             }
                             else{
-                                refillTask.remove(creep.memory.fief)
-                                creep.memory.state = IDLE;
-                                state = REFILL;
-                                return;
+                                task.remove(creep.memory.fief)
+                                setState(creep,IDLE);
+                                removed = true;
                             }
                         }
-                        let [x, y] = creep.memory.refillTarget.split(',').map(num => parseInt(num));
-                        let targetPos = new RoomPosition(x, y, room.name);
-                       //console.log(creep,"refilling",targetPos,'total refills',sourceMap.has(creep.memory.refillTarget) ? sourceMap.get(creep.memory.refillTarget).size : otherMap.has(creep.memory.refillTarget) ? otherMap.get(creep.memory.refillTarget).size : 'No map has target')
-                        if(creep.pos.getRangeTo(targetPos) > 0){
-                            creep.travelTo(targetPos);
-                        }
-                        else{
-                            let refillExt;
-                            if(otherMap.has(creep.memory.refillTarget)){
-                                refillExt = Game.getObjectById(otherMap.get(creep.memory.refillTarget).values().next().value);
-                                creep.transfer(refillExt,RESOURCE_ENERGY)
+                        if(!removed){
+                            let [x, y] = creep.memory.refillTarget.split(',').map(num => parseInt(num));
+                            let targetPos = new RoomPosition(x, y, room.name);
+                        //console.log(creep,"refilling",targetPos,'total refills',sourceMap.has(creep.memory.refillTarget) ? sourceMap.get(creep.memory.refillTarget).size : otherMap.has(creep.memory.refillTarget) ? otherMap.get(creep.memory.refillTarget).size : 'No map has target')
+                            if(creep.pos.getRangeTo(targetPos) > 0){
+                                creep.travelTo(targetPos);
                             }
-                            else if(sourceMap.has(creep.memory.refillTarget)){
-                                refillExt = Game.getObjectById(sourceMap.get(creep.memory.refillTarget).values().next().value);
-                                creep.transfer(refillExt,RESOURCE_ENERGY)
+                            else{
+                                let refillExt;
+                                if(otherMap.has(creep.memory.refillTarget)){
+                                    refillExt = Game.getObjectById(otherMap.get(creep.memory.refillTarget).values().next().value);
+                                    creep.transfer(refillExt,RESOURCE_ENERGY)
+                                }
+                                else if(sourceMap.has(creep.memory.refillTarget)){
+                                    refillExt = Game.getObjectById(sourceMap.get(creep.memory.refillTarget).values().next().value);
+                                    creep.transfer(refillExt,RESOURCE_ENERGY)
+                                }
                             }
                         }
-                    }
-                    //If we need to get a target
-                    else if(otherMap && otherMap.size) {
-                        //console.log(creep, "getting othermap");
-                        creep.memory.refillTarget = getRefillTarget(creep, otherMap, room.name);
-                    }
-                    else if(sourceMap && sourceMap.size) {
-                        //console.log(creep, "getting sourcemap");
-                        creep.memory.refillTarget = getRefillTarget(creep, sourceMap, room.name);
+                        
                     }
                 }
-                return;
             }
-            if(state == TOW){
+            if(currentState == TOW){
 
             }
-
-            if(state == PICKUP){
-                let task = getTaskByID(creep.memory.fief,creep.memory.task);
-                if(task == null){
-                    delete creep.memory.task;
-                    return;
-                }
-                else if(task.assignedHaulers[creep.id] < 20 && task.resourceType == RESOURCE_ENERGY && Game.rooms[creep.memory.fief].controller.level > 2){
-                    task.unassign(creep,"Assigned amount is low energy.")
+            //Need to do a check on whether PICKUP/DROPOFF should be flipped beforehand
+            //Right now if state DROPOFF requires a pickup task, it won't go til the next run
+            if(currentState == PICKUP){
+                if(task.assignedHaulers[creep.id] < 20 && task.resourceType == RESOURCE_ENERGY && Game.rooms[creep.memory.fief].controller.level > 2){
+                    task.unassign(creep,"Assigned amount is low energy.");
+                    setState(creep,IDLE);
                 }
                 //Are we on a pickup task? If so, head to the target and take the resource
                 if(task.type == 'pickup'){
@@ -888,10 +847,11 @@ const supplyDemand = {
                     if(!pickTarget || pickTarget == null){
                         //console.log("Bad pickuptarget",task.targetID)
                         task.remove(creep.memory.fief)
-                        creep.memory.state = IDLE;
+                        setState(creep,IDLE)
                     }
                     else if(!(creep.id in heap.relays) && creep.store.getFreeCapacity() < task.assignedHaulers[creep.id]){
-                        task.unassign(creep, 'No room')
+                        task.unassign(creep, 'No room');
+                        setState(creep,IDLE);
                     }
                     else if(creep.pos.getRangeTo(pickTarget) > 1){
                         creep.travelTo(pickTarget)
@@ -903,7 +863,7 @@ const supplyDemand = {
                         let x = creep.pickup(pickTarget);
                         //console.log(x)
                         task.completeRun(creep)
-                        creep.memory.state = IDLE;
+                        setState(creep,IDLE);
                         }
                         else{
                         if(pickTarget instanceof Creep){
@@ -915,8 +875,8 @@ const supplyDemand = {
                         //If we're in range, withdraw and finish the task
 
                         //console.log(x)
-                        task.completeRun(creep)
-                        creep.memory.state = IDLE;
+                        task.completeRun(creep);
+                        setState(creep,IDLE);
                         }
                     }
                 }
@@ -926,14 +886,15 @@ const supplyDemand = {
                     //If we're picking up for a demand task, see if we have enough
                     if((creep.store[task.resourceType] >= task.assignedHaulers[creep.id]) || (heap.relays[creep.id] && heap.relays[creep.id] > task.assignedHaulers[creep.id])){
                         //If so, set dropoff
-                        creep.memory.state = DROPOFF
+                        setState(creep,DROPOFF);
                     }
                     else{
                         //If not, dump and get it from terminal/storage, whichever has more
                         //If pulling energy, no amount specified so we multi-fill
                         //If no amount anywhere, drop task
                         if(((room.storage && room.storage.id != task.targetID && room.storage.store[resourceType])|| 0) + ((room.terminal && room.terminal.id != task.targetID && room.terminal.store[resourceType])|| 0) == 0){
-                            task.unassign(creep,"No resources to get")
+                            task.unassign(creep,"No resources to get");
+                            setState(creep,DROPOFF);
                         }
                         if(Memory.kingdom.fiefs[creep.room.name] && creep.room.storage && creep.room.terminal){
                             //Take from storage if it has more and is not the target, or if our target is the terminal
@@ -967,45 +928,42 @@ const supplyDemand = {
                         //If no storage or terminal, throw alert and kill task. Move to idle.
                         else{
                            // console.log(creep.name,"unable to complete task!",JSON.stringify(task)," No pickup location. Hauler has",creep.store[task.resourceType]);
-                            console.log("C7")
+                            //console.log("C7")
                             task.remove(creep.memory.fief)
-                            creep.memory.state = IDLE;
-                            return;
+                            setState(creep,IDLE);
+                            continue;
                         }
                     }
                 }
                 
             }
-            else if(state == DROPOFF){
-                let task = getTaskByID(creep.memory.fief,creep.memory.task);
-                if(task == null){
-                    delete creep.memory.task;
-                    return;
-                }
+            if(currentState == DROPOFF){
                 //Are we on a dropoff task? If so, go to target and transfer
                 if(task.type == 'dropoff'){
                     //Make sure we didn't dump all our inventory. If so, pickup
                     if(creep.store.getUsedCapacity() == 0 && (!global.heap.relays || !(creep.id in heap.relays))){
                         task.unassign(creep,"Used capacity is zero");
-                        return;
-                    }
-                    let dropTarget = Game.getObjectById(task.targetID);
-                    if(creep.pos.getRangeTo(dropTarget) > 1){
-                        creep.travelTo(dropTarget,{maxRooms:32})
+                        setState(creep,IDLE);
                     }
                     else{
-                        //If we're in range, transfer and finish the task
-                        creep.transfer(dropTarget,task.resourceType);
-                        task.completeRun(creep)
-                        creep.memory.state = IDLE;
-                        return;
+                        let dropTarget = Game.getObjectById(task.targetID);
+                        if(creep.pos.getRangeTo(dropTarget) > 1){
+                            creep.travelTo(dropTarget,{maxRooms:32})
+                        }
+                        else{
+                            //If we're in range, transfer and finish the task
+                            creep.transfer(dropTarget,task.resourceType);
+                            task.completeRun(creep);
+                            setState(creep,IDLE);
+                        }
                     }
+                    
                 }
                 else if(task.type == 'pickup'){
                     //If we're dumping cargo for a pickup task, see if we have space yet
                     if(creep.store.getFreeCapacity(task.resourceType) >= task.assignedHaulers[creep.id]){
                         //If so, set pickup
-                        creep.memory.state = PICKUP
+                        setState(creep,PICKUP);
                     }
                     else{
                         //If not, empty
@@ -1024,17 +982,17 @@ const supplyDemand = {
                         else{
                            // console.log(creep.name,"unable to complete task! No storage/terminal for",task.resourceType);
                             task.remove(creep.memory.fief)
-                            creep.memory.state = IDLE;
+                            setState(creep,IDLE);
                         }
                     }
                 }
             }
-            else if(state == RENEW){
+            if(currentState == RENEW){
                 //Dunno what this will do yet
             }
             let usedStore = creep.store.getUsedCapacity();
             //If state is idle, all idle
-            if(state==IDLE){
+            if(currentState==IDLE){
                 //See if we can be usefulby renewing
                 //No postflag means we didn't do anything, no need to rerun
                 if(postFlag) postIdles.push(creep)
@@ -1060,42 +1018,43 @@ const supplyDemand = {
                     }
                 }
                 else if(creep.memory.fief == creep.room.name){
-                    isIdle += carryParts
+                    isIdle += carryParts;
+                    creep.emptyStore();
                 }
 
             }
             else{
                 //Check if we're empty, if so we need to use the assigned amount to calculate
-                if(usedStore == 0){
-                    let myTask = getTaskByID(creep.memory.fief,creep.memory.task);
-                    if(myTask == null){
-                        isIdle += carryParts
-                    }else{
-                        assignedQty = myTask.assignedHaulers[creep.id]
-                        isIdle += (carryParts - Math.ceil(assignedQty / CARRY_CAPACITY))
+                if (usedStore == 0) {
+                    if (!task) {
+                        isIdle += carryParts;
+                    } else {
+                        const assignedQty = (task.assignedHaulers && task.assignedHaulers[creep.id]) || 0;
+                        const usedCarryParts = Math.ceil(assignedQty / CARRY_CAPACITY) || 0;
+                        const idleCarryParts = Math.max(0, carryParts - usedCarryParts);
+                        isIdle += idleCarryParts;
                     }
-                    
                 }
 
                 //If not empty, no idle
                 else{
-                    //isIdle += (carryParts - Math.ceil(usedStore / CARRY_CAPACITY))
+                    //creep.emptyStore();
                 }
             }
 
 
-            if(oldState != state){
+            if(oldState != currentState){
                 let signs={
                     [IDLE]:    LANGUAGE.idle,
                     [PICKUP]:  LANGUAGE.pickup,
                     [DROPOFF]: LANGUAGE.dropoff
                 }
                 let oldSign = signs[oldState] ? signs[oldState] : '𒃽'
-                let newSign = signs[state] ? signs[state] : '𒃽'
+                let newSign = signs[currentState] ? signs[currentState] : '𒃽'
                 creep.say(oldSign+' '+newSign)
             }
 
-        });
+        };
         //Before we return, we try to combine energy
         if(combos.length){
             combos.sort((a,b) =>{
@@ -1116,6 +1075,11 @@ const supplyDemand = {
             }
         }
         return [isIdle,totalCarry,postIdles];
+
+        function setState(creep,newState){
+            creep.memory.state = newState;
+            currentState = newState;
+        }
     }
 };
 

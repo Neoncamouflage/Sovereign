@@ -1,5 +1,11 @@
-function invertScore(v){
-    return 1-v;
+// TODO
+// Set up universal scoring system
+// Ensure it uses the global normalizeWeights function
+// 
+const profiler = require('screeps-profiler');
+
+function scoreBlock(){
+
 }
 
 const architectPlanner = {
@@ -8,22 +14,13 @@ const architectPlanner = {
         let [minSize, minController, minSource, minExit, minBorder] = [Infinity, Infinity, Infinity, Infinity, Infinity];
         //Watershed genes
         //Region size, prefer larger watershed region
-        const GENE_REGIONSIZE = watershedBlock[0];
-        //Controller range, prefer the controller be in or near the region
-        const GENE_CONTROLLER = watershedBlock[1];
-        //Source range, prefer sources be in or near the region
-        const GENE_SOURCE = watershedBlock[2];
-        //Exit range, prefer regions away from exits
-        const GENE_EXIT = watershedBlock[3];
-        //Border size, prefer regions with smaller borders
-        const GENE_BORDER = watershedBlock[4];
+        const [GENE_REGIONSIZE, GENE_CONTROLLER, GENE_SOURCE, GENE_EXIT, GENE_BORDER] = normalizeWeights(watershedBlock);
         let watershedData = roomData.watershedData;
-        let watershedCM = roomData.watershedCM;
-        let chosenRegion;
         let scores = []
         //minMaxNormalize()
+        let regionIDs = Object.keys(watershedData);
         //Pick preferred region based on weighted selection
-        for(let regionID of watershedData){
+        for(let regionID of regionIDs){
             let region = watershedData[regionID];
             if(region.tiles.length > maxSize) maxSize = region.tiles.length;
             if(region.tiles.length < minSize) minSize = region.tiles.length;
@@ -38,7 +35,7 @@ const architectPlanner = {
             
         }
         //Normalize scores, inverting when smaller scores are better, and apply weights
-        for (let regionID of Object.keys(watershedData)) {
+        for (let regionID of regionIDs) {
             let scoredRegion = {id:regionID}
             let r = watershedData[regionID];
             scoredRegion.normSize = minMaxNormalize(r.tiles.length, maxSize, minSize);
@@ -66,15 +63,15 @@ const architectPlanner = {
                 minBorder
             );
             scoredRegion.totalScore = 
-                r.normSize * GENE_REGIONSIZE
-                + r.normController * GENE_CONTROLLER
-                + r.normSource * GENE_SOURCE
-                + r.normExit * GENE_EXIT
-                + invertScore(r.normBorder) * GENE_BORDER
+                scoredRegion.normSize * GENE_REGIONSIZE
+                + invertScore(scoredRegion.normController) * GENE_CONTROLLER
+                + invertScore(scoredRegion.normSource) * GENE_SOURCE
+                + scoredRegion.normExit * GENE_EXIT
+                + invertScore(scoredRegion.normBorder) * GENE_BORDER
             scores.push(scoredRegion);
         }
         //Sort by score and select highest as our core location
-        scores.sort((a,b) => b-a)
+        scores.sort((a,b) => b.totalScore-a.totalScore)
         return scores[0].id;
     },
     planCore: function(config,roomData,planData,coreBlock){
@@ -84,6 +81,7 @@ const architectPlanner = {
             [0.1,10.0],     //CORE - Source range, prefer to minimize average range to sources
             [0.1,10.0],     //CORE - Distance transform, prefer distance from walls
          */
+        const NORMALIZED_COREBLOCK = normalizeWeights(coreBlock);
         const matrixData = {
             distance:   { matrix: roomData.distanceCM,   min: Infinity,  max: -Infinity, geneIndex: 3, invert: false , defaultMax: roomData.distanceCMMax},
             source:     { matrix: roomData.sourceCM,     min: Infinity,  max: -Infinity, geneIndex: 2, invert: true , defaultMax: roomData.sourceCMMax  },
@@ -115,7 +113,7 @@ const architectPlanner = {
                 //Total up the weighted scores
                 let tileScore = 0;
                 for(let scoreType of Object.keys(scores)){
-                    tileScore += scores[scoreType] * coreBlock[matrixData[scoreType].geneIndex];
+                    tileScore += scores[scoreType] * NORMALIZED_COREBLOCK[matrixData[scoreType].geneIndex];
                 }
                 //Replace winner if larger
                 if(tileScore > winningTile.score) winningTile = {tile:tile,score:tileScore}       
@@ -141,10 +139,10 @@ const architectPlanner = {
                 //Total up the weighted scores
                 let tileScore = 0;
                 for(let scoreType of Object.keys(scores)){
-                    tileScore += scores[scoreType] * coreBlock[matrixData[scoreType].geneIndex];
+                    tileScore += scores[scoreType] * NORMALIZED_COREBLOCK[matrixData[scoreType].geneIndex];
                 }
                 //Replace winner if larger
-                if(tileScore > winningTile.score) winningTile = {tile:tile,score:tileScore}   
+                if(tileScore > winningTile.score) winningTile = {tile:{x:x,y:y},score:tileScore}   
             }
         }
         return {x:winningTile.tile.x,y:winningTile.tile.y} 
@@ -153,23 +151,24 @@ const architectPlanner = {
     planStructureBlob: function(config,roomData,planData,blobBlock){
         /*        // ----Structure Blob Genes---- //
             [1.0,5.0],      //BLOB - Blob size, prefer larger tile counts
-            [0.1,10.0],     //BLOB - Distance transform, prefer to expand the blob away from walls
-            [0.1,10.0],     //BLOB - Exit range, prefer to expand the blob away from exits
-            [0.1,10.0],     //BLOB - Source range, prefer to expand the blob towards sources
-            [0.1,10.0],     //BLOB - Controller range, prefer to expand the blob towards the controller
+            [0,1.0],     //BLOB - Distance transform, prefer to expand the blob away from walls
+            [0,1.0],     //BLOB - Exit range, prefer to expand the blob away from exits
+            [0,1.0],     //BLOB - Source range, prefer to expand the blob towards sources
+            [0,1.0],     //BLOB - Controller range, prefer to expand the blob towards the controller
         */
-        const [GENE_BLOBSIZE,GENE_DISTANCE,GENE_EXIT,GENE_SOURCE] = blobBlock;
+        const GENE_BLOBSIZE = blobBlock[0];
         //0 is undefined
         //Buildable is 1
         //Road is 2
         //Reserved is 3
         const BLOB_START = []
         const MIN_BLOB = 100 * GENE_BLOBSIZE; //Minimum buildable area for our blob, weighted by the size gene
+        const NORMALIZED_BLOBBLOCK = normalizeWeights(blobBlock.slice(1, 5));
         const matrixData = {
-            distance:   { matrix: roomData.distanceCM,   min: Infinity,  max: -Infinity, geneIndex: 1, invert: false , defaultMax: roomData.distanceCMMax},
-            source:     { matrix: roomData.sourceCM,     min: Infinity,  max: -Infinity, geneIndex: 3, invert: true , defaultMax: roomData.sourceCMMax  },
-            exit:       { matrix: roomData.exitCM,       min: Infinity,  max: -Infinity, geneIndex: 2, invert: false , defaultMax: roomData.exitCMMax },
-            controller: { matrix: roomData.controllerCM, min: Infinity,  max: -Infinity, geneIndex: 4, invert: true , defaultMax: roomData.controllerCMMax  },
+            distance:   { matrix: roomData.distanceCM,   geneIndex: 0, invert: false, defaultMax: roomData.distanceCMMax },
+            exit:       { matrix: roomData.exitCM,       geneIndex: 1, invert: false, defaultMax: roomData.exitCMMax },
+            source:     { matrix: roomData.sourceCM,     geneIndex: 2, invert: true,  defaultMax: roomData.sourceCMMax },
+            controller: { matrix: roomData.controllerCM, geneIndex: 3, invert: true,  defaultMax: roomData.controllerCMMax },
         };
         //Create the blobCM and a score CM, and set our core
         let blobCM = new PathFinder.CostMatrix();
@@ -204,7 +203,7 @@ const architectPlanner = {
                 //Total up the weighted scores
                 let tileScore = 0;
                 for(let scoreType of Object.keys(scores)){
-                    tileScore += scores[scoreType] * coreBlock[matrixData[scoreType].geneIndex];
+                    tileScore += scores[scoreType] * NORMALIZED_BLOBBLOCK[matrixData[scoreType].geneIndex];
                 }
                 //Apply the final score to the CM
                 scoreBigCM.set(x,y,tileScore)
@@ -217,8 +216,10 @@ const architectPlanner = {
             for(let each of DIRECTIONS_8){
                 let newx = tile.x+each[0];
                 let newy = tile.y+each[1];
-                let key = `${newx},${newy}`;
+                let key = newx*50 + newy;
                 if(visited.has(key))continue;
+                if (newx < 0 || newx > 49 || newy < 0 || newy > 49) continue;
+                if (roomData.terrain.get(newx, newy) === TERRAIN_MASK_WALL) continue;
                 visited.add(key);
                 frontier.push({x:newx,y:newy,score:scoreBigCM.get(newx,newy)});
             }
@@ -251,7 +252,7 @@ const architectPlanner = {
                 const ny = y + dy;
                 if (nx < 0 || nx > 49 || ny < 0 || ny > 49) continue;
 
-                const nKey = `${nx},${ny}`;
+                const nKey = nx*50 + ny;
                 if (visited.has(nKey)) continue;
                 if (roomData.terrain.get(nx, ny) === TERRAIN_MASK_WALL) continue;
                 const nCur = blobCM.get(nx, ny);
@@ -267,7 +268,28 @@ const architectPlanner = {
 
     },
     planRoads: function(config,roomData,planData,roadBlock,mineralRoads,remoteRoads){
-        
+        /**
+                 // ----Road Expansion Genes---- //
+            [0,1.0],     //ROAD - Road exploration, prefer roads that maximize new adjacent tiles
+            [0,1.0],     //ROAD - Diagonal bias, prefer roads to expand diagonally
+            [0,1.0],     //ROAD - Core range, prefer roads close to the core
+            [0,1.0],     //ROAD - Exit range, prefer roads away from exits
+         */
+        const NORMALIZED_ROADBLOCK = normalizeWeights(roadBlock);
+        const matrixData = {
+            distance:   { matrix: roomData.distanceCM,   min: Infinity,  max: -Infinity, geneIndex: 3, invert: false , defaultMax: roomData.distanceCMMax},
+            source:     { matrix: roomData.sourceCM,     min: Infinity,  max: -Infinity, geneIndex: 2, invert: true , defaultMax: roomData.sourceCMMax  },
+            exit:       { matrix: roomData.exitCM,       min: Infinity,  max: -Infinity, geneIndex: 0, invert: false , defaultMax: roomData.exitCMMax },
+            controller: { matrix: roomData.controllerCM, min: Infinity,  max: -Infinity, geneIndex: 1, invert: true , defaultMax: roomData.controllerCMMax  },
+        };
+
+        //Wrap the core location in roads
+
+        //Route roads to the source(s) and controller
+
+        //Route road to mineral and remote sources
+
+        //Count available structure tiles and expand
     },
     planStructureAssignment: function(config,roomData,planData,assignBlock){
 
@@ -278,3 +300,4 @@ const architectPlanner = {
 }
 
 module.exports = architectPlanner;
+profiler.registerObject(architectPlanner, 'architect.planner');

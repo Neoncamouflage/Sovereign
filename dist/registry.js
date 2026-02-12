@@ -155,7 +155,7 @@ const registry = {
                 }
             });
             //Only mark them fat if they're road fat
-            if(nonMove*2 > movePart){
+            if(nonMove > movePart*2){
                 plan.memory['fat'] = true;
             }
             try{
@@ -455,8 +455,10 @@ function getHauler(energyRemaining,room,fiefCreeps){
     let roadsDone = Object.values(Memory.kingdom.fiefs[room.name].roadsDone||{}).reduce((sum,each)=>sum+each,0) >= Math.min(Object.values(Memory.kingdom.fiefs[room.name].roadsDone||{}).length,3);
     let parts = roadsDone && room.controller.level >=4 ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
     let partsCap = (()=>{
-        if(global.cpuAverage/Game.cpu.limit > 90) return 36;
-        if(parts.length == 2 || room.controller.level == 8) return 20;
+        if(global.cpuAverage/Game.cpu.limit > 90) return 36;            //Large creeps if over 90% CPU use
+        if(parts.length == 2 || room.controller.level == 8) return 20;  //Need to remember why I added this
+        if(room.controller.level == 2) return 6;
+        if(room.controller.level == 3) return 8;
         return 18;
     })()
     let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);

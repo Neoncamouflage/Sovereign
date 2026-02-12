@@ -305,5 +305,5 @@ function setupCreeps(){
     }
     return kingdomCreeps;
 }
-setupCreeps = profiler.registerFN(setupCreeps, 'setupCreeps');
-runRoles = profiler.registerFN(runRoles, 'runRoles');
+setupCreeps = profiler.registerFN(setupCreeps, 'kingdomManager.setupCreeps');
+runRoles = profiler.registerFN(runRoles, 'kingdomManager.runRoles');

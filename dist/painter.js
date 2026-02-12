@@ -1,6 +1,7 @@
 if(!Memory.visuals) Memory.visuals = {};
 const profiler = require('screeps-profiler');
-const architect = require('architect')
+const architect = require('architect');
+const Traveler = require('Traveler');
 const painter = {
     //Paints visuals based on flags set in memory
     run: function(kingdomCreeps){
@@ -22,9 +23,10 @@ const painter = {
         if(visuals.drawIntel) this.drawIntel(kingdomCreeps);
         if(visuals.drawTest) this.drawTest();
         if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan);
-        if(visuals.drawScores) this.drawScores(architect.config);
+        if(visuals.drawShipping) this.drawShipping(visuals.drawShipping,kingdomCreeps);
+        /*if(visuals.drawScores) this.drawScores(architect.config);
         if(visuals.drawAllies) this.drawAllies();
-        if(visuals.drawStartup) this.drawStartup();
+        if(visuals.drawStartup) this.drawStartup();*/
         
     },
     setVisual: function(vis,setting='default'){
@@ -311,6 +313,52 @@ const painter = {
             }
         }
     },
+    drawShipping(fief,kingdomCreeps){
+        //Triangle pointing up for pickup
+        //Triangle pointing down for dropoff
+        //Triangle contains the resource type
+        //ID and quantity next to it
+        //Color matches to the hauler(s) assigned
+        //Dotted line pointing to haulerx
+        const shipping = heap.shipping[fief];
+        const doneHaulers = new Set();
+        for(let shippingID of Object.keys(shipping.requests)){
+            let request = shipping.requests[shippingID];
+            let hue = (shippingID * 137.508) % 360;
+            let shipTarget = Game.getObjectById(request.targetID);
+            if(!shipTarget)continue;
+            let assignedHaulers = request.assignedHaulers;
+            let roomVis =  new RoomVisual(shipTarget.pos.roomName);
+            let yPoint;
+            let yMod;
+            if(request.type == 'pickup') yMod = -1;
+            else if(request.type == 'dropoff') yMod = 1;
+            else if(request.type == 'refill') continue;
+            let polyPoints = [
+                [shipTarget.pos.x-0.75,shipTarget.pos.y-(0.5*yMod)],
+                [shipTarget.pos.x+0.75,shipTarget.pos.y-(0.5*yMod)],
+                [shipTarget.pos.x,shipTarget.pos.y+(0.5*yMod)],
+                [shipTarget.pos.x-0.75,shipTarget.pos.y-(0.5*yMod)]
+            ]
+            roomVis.poly(polyPoints, {
+                        fill: `hsl(${hue}, 100%, 60%)`,
+                        opacity: 0.6,
+                        stroke:`black`
+                        });
+            roomVis.resource(request.resourceType,shipTarget.pos.x,shipTarget.pos.y-(0.12*yMod),0.3);
+            for(let haulID of Object.keys(assignedHaulers)){
+                let hauler = Game.getObjectById(haulID);
+                if(!hauler || hauler.room.name != fief) continue;
+                let haulerNextPos = hauler.fatigue ? hauler.pos : Traveler.getNextPosition(hauler);
+                if(!haulerNextPos)continue;
+                roomVis.line(shipTarget.pos.x,shipTarget.pos.y+(0.5*yMod),haulerNextPos.x,haulerNextPos.y,{color:`hsl(${hue}, 100%, 60%)`,lineStyle:'dotted'});
+                //Write state and add the hauler ID to the done set so we don't check it again after
+                roomVis.text(hauler.memory.state ? hauler.memory.state.toUpperCase() : "NOSTATE",haulerNextPos.x,haulerNextPos.y-1,{color:'white',font:'0.4'})
+                doneHaulers.add(haulID);
+            }
+            //roomVis.text(request.amount,shipTarget.pos.x,shipTarget.pos.y-yPoint,{color:`hsl(${hue}, 100%, 60%)`});
+        }
+    },
     drawLoot(){
         for(let room of Object.values(Game.rooms)){
             if(!room.memory.loot) continue;
@@ -437,7 +485,7 @@ const painter = {
                     let weight = testCM.get(x,y);
                     if(weight==0) continue;
                     if(weight!=255){
-                        const hue = (weight * 137.508) % 360; // golden-angle spacing
+                        const hue = (weight * 137.508) % 360; //Assign distinguishable colors
                         new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
                         fill: `hsl(${hue}, 100%, 60%)`,
                         opacity: 0.4,
@@ -449,9 +497,7 @@ const painter = {
                             fill: `hsl(0, 0%, 100%)`,
                             opacity: 0.4,
                         })
-                    }
-
-                    
+                    }   
                 }
             }
         }

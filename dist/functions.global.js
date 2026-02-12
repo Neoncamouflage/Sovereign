@@ -3,23 +3,42 @@ const supplyDemand = require('supplyDemand');
 const helper = require('functions.helper');
 const Quad = require('Quad');
 const profiler = require('screeps-profiler');
-//Functions for a random integer from 0 to max(inclusive) and random array selection
+//Fetch a random integer from 0 to max(inclusive) and random array selection
 global.randomInt = function(max) {
     return Math.floor(Math.random() * (max + 1));
 };
+
+//Random array selection
 global.randomChoice = function(array) {
     return array[Math.floor(Math.random() * array.length)];
 };
 
+//Clamp to min/max bounds
 global.clamp = function(number, min, max) {
   return Math.max(min, Math.min(number, max));
 }
 
+//Normalize between 0.0-1.0 for scoring
 global.minMaxNormalize = function(value, max, min) {
     if (max - min == 0){
-        return 0; // Prevent division by zero
+        return 0.5; // Prevent division by zero
     }
     return (value - min) / (max - min);
+}
+
+//Invert for when smaller numbers are scored higher
+global.invertScore = function(v){
+    return 1-v;
+}
+
+//Normalization of weights within a gene block
+global.normalizeWeights = function(raw, floor = 0) {
+    let sum = 0;
+    for (let v of raw) sum += Math.max(floor, v);
+
+    if (sum === 0) return raw.map(_ => 0);
+
+    return raw.map(v => Math.max(floor, v) / sum);
 }
 
 //Update diplomacy
@@ -687,140 +706,6 @@ global.changeRoomPlan = function(roomName,rcl,structure,update){
     Memory.kingdom.fiefs[roomName].roomPlan[rcl][structure] = newSection;
 }
 
-/*global.marketCalcTest = function(){
-    try {
-        const allOrders = Game.market.getAllOrders();
-        
-        const marketData = {
-            timestamp: Date.now(),
-            tick: Game.time,
-            shard: Game.shard.name,
-            orders: allOrders,
-            stats: calculateMarketStats(allOrders)
-        };
-        const segmentData = JSON.stringify(marketData);
-        
-        if (segmentData.length <= 100000) {
-            RawMemory.segments[SEGMENT_MARKET_INFO] = segmentData;
-            chronicle.log(`Market data saved to segment ${SEGMENT_MARKET_INFO}. Size: ${segmentData.length} bytes`,'global.marketCalc',3);
-        } else {
-            chronicle.log(`Market data too large for segment (${segmentData.length} bytes).`,'global.marketCalc',2);
-        }
-        
-    } catch (error) {
-        chronicle.log(`Error collecting market data:${error}`,'global.marketCalc',1);
-    }
-    function calculateMarketStats(orders) {
-        const stats = {};
-        
-        orders.forEach(order => {
-            const resource = order.resourceType;
-            
-            if (!stats[resource]) {
-                stats[resource] = {
-                    buyOrders: [],
-                    sellOrders: [],
-                    totalBuyVolume: 0,
-                    totalSellVolume: 0
-                };
-            }
-            
-            if (order.type === 'buy') {
-                stats[resource].buyOrders.push({
-                    price: order.price,
-                    amount: order.remainingAmount
-                });
-                stats[resource].totalBuyVolume += order.remainingAmount;
-            } else {
-                stats[resource].sellOrders.push({
-                    price: order.price,
-                    amount: order.remainingAmount
-                });
-                stats[resource].totalSellVolume += order.remainingAmount;
-            }
-        });
-        
-        // Calculate the meaningful market statistics for each resource
-        Object.keys(stats).forEach(resource => {
-            const resourceStats = stats[resource];
-            
-            // Sort orders by price - highest buy prices first, lowest sell prices first
-            resourceStats.buyOrders.sort((a, b) => b.price - a.price);
-            resourceStats.sellOrders.sort((a, b) => a.price - b.price);
-            
-            // Best bid (highest buy price)
-            resourceStats.bestBid = resourceStats.buyOrders.length > 0 
-                ? {
-                    price: resourceStats.buyOrders[0].price,
-                    amount: resourceStats.buyOrders[0].amount
-                } 
-                : null;
-            
-            // Best ask (lowest sell price)
-            resourceStats.bestAsk = resourceStats.sellOrders.length > 0 
-                ? {
-                    price: resourceStats.sellOrders[0].price,
-                    amount: resourceStats.sellOrders[0].amount
-                } 
-                : null;
-            
-            // Calculate spread
-            resourceStats.spread = (resourceStats.bestBid && resourceStats.bestAsk) 
-                ? (resourceStats.bestAsk.price - resourceStats.bestBid.price) 
-                : null;
-            
-            // Calculate volume-weighted mid price for candlestick charts
-            if (resourceStats.bestBid && resourceStats.bestAsk) {
-                const totalVolume = resourceStats.totalBuyVolume + resourceStats.totalSellVolume;
-                
-                if (totalVolume > 0) {
-                    // Weight the mid price by the relative volume of buy vs sell orders
-                    const buyWeight = resourceStats.totalBuyVolume / totalVolume;
-                    const sellWeight = resourceStats.totalSellVolume / totalVolume;
-                    
-                    // If more buy volume, mid price leans toward ask (sell) price
-                    // If more sell volume, mid price leans toward bid (buy) price
-                    resourceStats.midPrice = (resourceStats.bestBid.price * sellWeight) + 
-                                           (resourceStats.bestAsk.price * buyWeight);
-                } else {
-                    // Simple average if no volume data
-                    resourceStats.midPrice = (resourceStats.bestBid.price + resourceStats.bestAsk.price) / 2;
-                }
-            } else if (resourceStats.bestBid) {
-                // Only buy orders exist
-                resourceStats.midPrice = resourceStats.bestBid.price;
-            } else if (resourceStats.bestAsk) {
-                // Only sell orders exist
-                resourceStats.midPrice = resourceStats.bestAsk.price;
-            } else {
-                resourceStats.midPrice = null;
-            }
-            
-            // Calculate depth at best prices (useful for market depth charts)
-            resourceStats.bidDepth = resourceStats.buyOrders.slice(0, 5).map(order => ({
-                price: order.price,
-                amount: order.amount
-            }));
-            
-            resourceStats.askDepth = resourceStats.sellOrders.slice(0, 5).map(order => ({
-                price: order.price,
-                amount: order.amount
-            }));
-            
-            // Clean up the raw order arrays to save space if desired
-            // Comment these out if you want to keep the full order book
-            delete resourceStats.buyOrders;
-            delete resourceStats.sellOrders;
-            
-            // Summary counts for reference
-            resourceStats.buyOrderCount = resourceStats.buyOrders ? resourceStats.buyOrders.length : 0;
-            resourceStats.sellOrderCount = resourceStats.sellOrders ? resourceStats.sellOrders.length : 0;
-        });
-        
-        return stats;
-    }
-}*/
-
 setDiplomacy = profiler.registerFN(setDiplomacy, 'setDiplomacy');
 isMe = profiler.registerFN(isMe, 'isMe');
 getDiplomacy = profiler.registerFN(getDiplomacy, 'getDiplomacy');
@@ -847,5 +732,6 @@ getTowerMap = profiler.registerFN(getTowerMap, 'getTowerMap');
 getDamageMap = profiler.registerFN(getDamageMap, 'getDamageMap');
 getCreeps = profiler.registerFN(getCreeps, 'getCreeps');
 damageMap = profiler.registerFN(damageMap, 'damageMap');
+changeRoomPlan = profiler.registerFN(changeRoomPlan, 'changeRoomPlan');
 //marketCalc = profiler.registerFN(marketCalc, 'marketCalc');
 profiler.registerClass(BigCostMatrix, 'BigCostMatrix');

@@ -28,7 +28,9 @@ const constants = {
         refill:'𒉓',
         refill2:'𒌋',
         idle:'𒂟',
-        testOutput:'𒋝'
+        shove:'𒋝',
+        pull:'𒁣'
+
     },
     //How many ticks between spawn checks
     GLOBAL_SPAWN_INTERVAL:3,
@@ -77,9 +79,9 @@ const constants = {
     PRIORITY_REACTION: 6,
     PRIORITY_CLEANUP: 8,
 
-    //Misc
-    DIRECTIONS_4:  [[1, 0], [-1, 0], [0, 1], [0, -1]],
-    DIRECTIONS_8: [[1, 0], [-1, 0], [0, 1], [0, -1],[1, 1], [-1, 1], [-1, 1], [1, -1]]
+    //Direction offset arrays
+    DIRECTIONS_4:  [[1, 0], [0, 1], [-1, 0], [0, -1]],
+    DIRECTIONS_8: [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]],
 
 }
 

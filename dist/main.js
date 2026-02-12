@@ -20,7 +20,7 @@ const fiefPlanner = require('fiefPlanner')
 const architect = require('architect')
 let lastMemory;
 
-//profiler.enable();
+profiler.enable();
 console.log("<font color='yellow'>", Game.shard.name, ": global reset</font>");
 RawMemory.setActiveSegments(Object.values(ALL_SEGMENTS))    //Once we pass 10 segments and build a handler, this needs to change
 Memory.lastReset = 0
@@ -505,4 +505,3 @@ function profileMemory(root = Memory, depth = 1) {
 }
 
 global.profileMemory = profileMemory;
-//#endregion

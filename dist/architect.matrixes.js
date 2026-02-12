@@ -1,13 +1,13 @@
 const minCut = require('minCut');
 const profiler = require('screeps-profiler');
 const architectMatrixes = {
-    getWatershed: function(distanceTransformObj,terrain,MIN_PEAK = 2,MERGE_RADIUS = 6,MIN_SIZE = 90,MAX_MERGE=25){
+    getWatershed: function(distanceCM,distanceMax,terrain,exitCM,MIN_PEAK = 2,MERGE_RADIUS = 6,MIN_SIZE = 90,MAX_MERGE=25){
         //Lower min peak
         //console.log("Watershed running with min peak",MIN_PEAK,"Merge radius",MERGE_RADIUS,"Min size",MIN_SIZE)
         
-        let seedQueue = getWatershedSeeds(distanceTransformObj.distCM)
+        let seedQueue = getWatershedSeeds(distanceCM)
         seedQueue = mergeSeeds(seedQueue)
-        let watershedCM = runWatershed(seedQueue,distanceTransformObj.distCM,terrain,distanceTransformObj.max);
+        let watershedCM = runWatershed(seedQueue,distanceCM,terrain,distanceMax,exitCM);
         //Merge up to 20 times
         for (let i = 0; i < MAX_MERGE; i++){
             let res = mergeSmallRegions(watershedCM, terrain);
@@ -61,7 +61,7 @@ const architectMatrixes = {
         }
 
         //TODO - If regions are encountered and one is below X tiles, consume it
-        function runWatershed(seeds, distanceTransform,terrain,maxDist) {
+        function runWatershed(seeds, distanceTransform,terrain,maxDist,exitCM) {
             const BORDER = 255
             if (!seeds.length) return new PathFinder.CostMatrix();
             const regionCM = new PathFinder.CostMatrix();
@@ -74,12 +74,13 @@ const architectMatrixes = {
             // Bucketed priority queue: buckets[d] holds tiles with priority d
             const buckets = Array.from({ length: maxDist + 1 }, () => []);
 
-            function pushIfCandidate(x, y, region) {
+            function pushIfCandidate(x, y, region,exitCM) {
                 if (x <= 0 || x >= 49 || y <= 0 || y >= 49) return;
                 const d = distanceTransform.get(x, y);
                 if (d <= 0) return;
-                if (terrain.get(x,y) === TERRAIN_MASK_WALL) return;              // skip walls
-                if (regionCM.get(x, y) !== 0) return;          // already labeled (or boundary)
+                if (terrain.get(x,y) === TERRAIN_MASK_WALL) return;
+                if (regionCM.get(x, y) !== 0) return;          //Already labeled
+                if (exitCM.get(x,y) == 1) return; //1 distance tiles from exit can't be built on and aren't included
                 const pr = Math.min(d, maxDist);
                 buckets[pr].push({ x, y, region });
             }
@@ -88,7 +89,7 @@ const architectMatrixes = {
             for (const s of seeds) {
                 regionCM.set(s.x, s.y, s.region);
                 for (const [dx, dy] of DIRECTIONS_4) {
-                    pushIfCandidate(s.x + dx, s.y + dy, s.region);
+                    pushIfCandidate(s.x + dx, s.y + dy, s.region,exitCM);
                 }
             }
             let safety = 0
@@ -126,7 +127,7 @@ const architectMatrixes = {
 
                         // expand frontier
                         for (const [dx, dy] of DIRECTIONS_4) {
-                            pushIfCandidate(tile.x + dx, tile.y + dy, assignRegion);
+                            pushIfCandidate(tile.x + dx, tile.y + dy, assignRegion,exitCM);
                         }
                     }
                 }
@@ -332,7 +333,6 @@ const architectMatrixes = {
         return {distCM,max};
     },
     getDistanceMap: function(terrain,queue){
-        let min = 1;
         let max = -Infinity;
         let distanceMap = new PathFinder.CostMatrix();
         let qi = 0;
@@ -427,6 +427,8 @@ const architectMatrixes = {
 
 }
 module.exports = architectMatrixes;
+profiler.registerObject(architectMatrixes, 'architect.matrixes');
+
 global.testWT = function testWT(roomName,a=2,b=6,c=90,d=25){
     chronicle.log(`Attempting test watershed`,'architect.matrixes',4)
     let terrain = new Room.Terrain(roomName);
@@ -440,5 +442,28 @@ global.testDT = function testWT(roomName){
     let terrain = new Room.Terrain(roomName);
     let dt = architectMatrixes.getDistanceTransform(terrain)[0];
     if(dt.distCM) Memory.test.testCM = dt.distCM.serialize();
+    chronicle.log(`Test Complete`,'architect.matrixes',4)
+}
+
+global.testDM = function testDM(roomName){
+    let terrain = new Room.Terrain(roomName)
+    let exits = [];
+    for(let i = 0;i<50;i++){
+        let x1 = terrain.get(i,0);
+        let x2 = terrain.get(i,49);
+        if(x1 != TERRAIN_MASK_WALL) exits.push({x:i,y:0})
+        if(x2 != TERRAIN_MASK_WALL) exits.push({x:i,y:49})
+        if(i>0 && i<49){
+            let y1 = terrain.get(0,i);
+            let y2 = terrain.get(49,i);
+            if(y1 != TERRAIN_MASK_WALL) exits.push({x:0,y:i})
+            if(y2 != TERRAIN_MASK_WALL) exits.push({x:49,y:i})
+        }
+    }
+    chronicle.log(`Attempting test distanceMap`,'architect.matrixes',4)
+    let [map,max] = architectMatrixes.getDistanceMap(terrain,exits);
+    console.log("MAX",max)
+    if(map)Memory.test.testCM = map.serialize();
+    else{console.log("NOMAP")}
     chronicle.log(`Test Complete`,'architect.matrixes',4)
 }

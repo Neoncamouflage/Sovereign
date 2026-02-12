@@ -130,11 +130,14 @@ var roleMiner = {
             }
         }
 
-        //If there's a source, harvest if energy. If no energy, repair can if there
+        
         if(targetSource){
-            if(targetSource.energy > 0){
+            //Harvest energy if it's regenerated and we don't need to repair a container up to minimum
+            //Only do so if we have energy currently in our store, otherwise we get stuck with no energy and no harvesting
+            if(targetSource.energy > 0 && (!can || (can && (can.hits > can.hitsMax * 0.1 || !creep.store[RESOURCE_ENERGY])))){
                 creep.harvest(targetSource);
             }
+            //If no energy, repair the container.
             else if(can){
                 if(can.hits < can.hitsMax * 0.9){
                     creep.repair(can);
@@ -157,7 +160,7 @@ var roleMiner = {
                 }
             }
             //If no can and home RCL is 4+ and we're a big creep, build one
-            else if(Game.rooms[creep.memory.fief].controller.level > 4){
+            else if(Game.rooms[creep.memory.fief].controller.level >= 4){
                 if(creep.getActiveBodyparts(WORK) >=5){
                     let cSite = creep.room.lookForAt(LOOK_CONSTRUCTION_SITES,creep.pos)
                     if(!cSite.length){
@@ -179,18 +182,24 @@ var roleMiner = {
                 }
             }
         }
+        //Get energy for repairing
         if(creep.repping){
+            //Check container for energy first
             if(can && can.store && can.store[RESOURCE_ENERGY] > 0){
                 creep.withdraw(can,RESOURCE_ENERGY)
             }
+            //Safety check in case the container is bad
             else if(can && !can.store){
                 if(can.structureType && can.structureType != STRUCTURE_CONTAINER){
                     delete holding.sources[targetID].can
                 }
             }
+            //If no container, check resources on the ground
             else{
                 let resSpot = creep.room.lookForAt(LOOK_RESOURCES,creep.pos).filter(res => res.resourceType == RESOURCE_ENERGY);
-                if(resSpot.length) creep.pickup(resSpot[0])
+                if(resSpot.length){
+                    creep.pickup(resSpot[0]);
+                }
             }
         }
     }

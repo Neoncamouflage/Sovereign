@@ -6,7 +6,7 @@ const intelManager = {
     toScout:[],
     run: function(scouts,fiefs){
         let scoutList = heap && heap.scoutList || {}//{scoutRoom:requestingFief}
-        const SCOUT_MAX = 7;
+        const SCOUT_MAX = 0;
         if(!scouts || !fiefs) return;
         //If we have no scouts, order one
         if(Game.time % GLOBAL_SPAWN_INTERVAL == 0){
@@ -81,7 +81,7 @@ const intelManager = {
                 else{
                     if(creep.pos.getRangeTo(creep.room.controller) > 1){
                         let retData = creep.travelTo(creep.room.controller,{maxRooms:1});
-                        console.log(JSON.stringify(retData))
+                        //console.log(JSON.stringify(retData))
                     }
                     else{
                         creep.signController(creep.room.controller,creep.memory.signMessage)
@@ -179,7 +179,7 @@ const intelManager = {
             //If the only exit is back the way we came, then add it back
             if (!exitRooms.length) {
                 //if the exit room is the current room, just push all exits, probably trapped in the fief
-                if(creep.memory.lastroom == creep.room.name){
+                if(creep.memory.lastRoom == creep.room.name){
                     exitRooms = exits;
                 }
                 else{

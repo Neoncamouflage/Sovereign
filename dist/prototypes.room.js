@@ -21,7 +21,7 @@ Room.prototype.getLoot = function (consideRamparts=false) {
         for([resource,resourceAmount] of Object.entries(each.store)){
             let lootbag = loot.structures[each.id];
             let money = getPrice(resource);
-            console.log(money)
+            //console.log(money)
             lootbag[resource] = {amount:resourceAmount,credits:money*resourceAmount}
             if(money) loot.totalCredit += Number(money*resourceAmount);
             loot.resources[resource] = (loot.resources[resource] || 0) + resourceAmount;

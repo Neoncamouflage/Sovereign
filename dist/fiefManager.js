@@ -192,8 +192,8 @@ const fiefManager = {
                     }
                     //Specific check for origin spawn
                     let firstSpawn = room.find(FIND_MY_SPAWNS)[0];
-                    if(each == STRUCTURE_SPAWN && (firstSpawn.name == 'Origin Keep' || firstSpawn.name == 'Spawn1')){
-                        console.log("Origin spawn detected")
+                    if(each == STRUCTURE_SPAWN && mySpawns.length == 1 && firstSpawn && !firstSpawn.pos.isEqualTo(fief.roomPlan[1].spawn[0].x,fief.roomPlan[1].spawn[0].y)){
+                        //console.log("Origin spawn detected")
                         //If we're replacing the origin spawn but aren't ready with energy, skip it
                         if(room.controller.level <= 3 || !room.storage || !room.storage.my || room.storage.store[RESOURCE_ENERGY] < 20000){
                             
@@ -1914,6 +1914,10 @@ function getControllerSpots(room, fief) {
 module.exports = fiefManager;
 profiler.registerObject(fiefManager, 'fiefManager');
 getControllerSpots = profiler.registerFN(getControllerSpots, 'getControllerSpots');
+getExtensionMap = profiler.registerFN(getExtensionMap, 'getExtensionMap');
+getTravelMatrix = profiler.registerFN(getTravelMatrix, 'getTravelMatrix');
+getRefillMaps = profiler.registerFN(getRefillMaps, 'getRefillMaps');
+sortMapBySetSize = profiler.registerFN(sortMapBySetSize, 'sortMapBySetSize');
 getDomainRooms = profiler.registerFN(getDomainRooms, 'getDomainRooms');
 manageResourceCollection = profiler.registerFN(manageResourceCollection, 'manageResourceCollection');
 totalWares = profiler.registerFN(totalWares, 'totalWares');

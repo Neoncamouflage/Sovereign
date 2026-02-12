@@ -245,6 +245,7 @@ Creep.prototype.emptyStore = function () {
         if(terminal && terminal.store.getFreeCapacity() > 0){
             if(this.pos.getRangeTo(terminal) > 1){
                 this.travelTo(terminal);
+                this.canRelay = true;
             }
             else{
                 for(const thisType in this.store) {
@@ -256,6 +257,7 @@ Creep.prototype.emptyStore = function () {
         else if(storage && storage.store.getFreeCapacity() > 0){
             if(this.pos.getRangeTo(storage) > 1){
                 this.travelTo(storage);
+                this.canRelay = true;
             }
             else{
                 for(const thisType in this.store) {
@@ -272,6 +274,7 @@ Creep.prototype.emptyStore = function () {
         if(storage && storage.store.getFreeCapacity() > 0){
             if(this.pos.getRangeTo(storage) > 1){
                 this.travelTo(storage);
+                this.canRelay = true;
             }
             else{
                 for(const thisType in this.store) {
@@ -283,6 +286,7 @@ Creep.prototype.emptyStore = function () {
         else if(terminal && terminal.store.getFreeCapacity() > 0){
             if(this.pos.getRangeTo(terminal) > 1){
                 this.travelTo(terminal);
+                this.canRelay = true;
             }
             else{
                 for(const thisType in this.store) {
@@ -322,7 +326,6 @@ Creep.prototype.dumpAndGet = function (target,resourceType) {
 //Attempts to shove the target creep. Returns creep at the end of the shove chain
 Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
     depth++
-    console.log("Pushing",targetCreep,"Origin",originSpace,"Depth",depth,"JSON",JSON.stringify(targetCreep))
     if(depth > 10){
         console.log("SHOVE ERROR, DEPTH EXCEEDED")
         return false;
@@ -330,7 +333,7 @@ Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
     let secondPos;
     let secondCheck;
     //Reference for how far/close creeps want to be from their target
-    rangeRef = {
+    const rangeRef = {
         'builder':3,
         'upgrader':3,
         'repair':3,
@@ -342,7 +345,7 @@ Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
     //Check for travel data to avoid just shoving along the path it wants to go next
     let travelData = this.memory._trav
     if (!originSpace && travelData && travelData.path && travelData.path.length > 1) {
-        secondPos = Traveler.positionAtDirection(targetCreep.pos,travelData.path[1]);
+        secondPos = Traveler.positionAtDirection(targetCreep.pos,Number(travelData.path[1]));
     }
 
     //If no origin space, this is the first shove, so we set it
@@ -351,6 +354,7 @@ Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
     let priorityCreepSpots = []
     let otherSpots = []
     let otherCreepSpots = []
+    //chronicle.log(`${creep} pushing ${targetCreep} - Origin ${originSpace} - Depth ${depth}`,'Creep.shove',4)
     if(!targetCreep){
         console.log("BAD PUSH, NO CREEP",this.name,this.pos,depth);
         return false;
@@ -366,11 +370,12 @@ Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
             if((x==0 && y==0))continue;
             let newX = targetCreep.pos.x+x;
             let newY = targetCreep.pos.y+y;
-            console.log(x,newX,y,newY,this.room.name)
-            let newPos = new RoomPosition(newX,newY,this.room.name)
-            
             //No moving to room edges
             if(newX < 1 || newY < 1 || newX > 48 || newY > 48)continue;
+            //console.log(x,newX,y,newY,this.room.name)
+            let newPos = new RoomPosition(newX,newY,this.room.name)
+            
+            
             let tileStuff = this.room.lookAt(newX,newY);
             let tileCreep;
             for(let each of tileStuff){
@@ -381,8 +386,17 @@ Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
                 //If it's a fatigued creep, we can't move there, so we skip
                 if(each.type == 'creep' && each.creep.fatigue != 0)continue tileLoop;
                 //If it's a structure we can't walk on, skip
-                if(each.type == 'structure' && (![STRUCTURE_ROAD,STRUCTURE_CONTAINER].includes(each.structure.structureType) 
-                    || (each.structure.structureType == STRUCTURE_RAMPART && !each.structure.my && !each.structure.isPublic)))continue tileLoop;
+                if (each.type === 'structure') {
+                    const st = each.structure.structureType;
+                    if (st === STRUCTURE_ROAD || st === STRUCTURE_CONTAINER) {
+                        //These are always fine
+                    } else if (st === STRUCTURE_RAMPART) {
+                        //Ramparts block if not mine and not public
+                        if (!each.structure.my && !each.structure.isPublic) continue tileLoop;
+                    } else {
+                        continue tileLoop;
+                    }
+                }
                 //If it's a non-origin space creep and it was not shoved, assign the creep if it'sm ine
                 if(each.type == 'creep' && each.creep.my && !newPos.isEqualTo(originSpace)) tileCreep = each.creep;
             }
@@ -435,7 +449,7 @@ Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
     //If available, just pick the first one
     if(otherSpots.length){
         //console.log("Other open spot found, moving to it",targetCreep.pos,targetCreep)
-        targetCreep.move(otherSpots[0])
+        targetCreep.move(targetCreep.pos.getDirectionTo(otherSpots[0]))
         this.move(this.pos.getDirectionTo(targetCreep.pos))
         targetCreep.shoved = true;
         return targetCreep;
@@ -502,7 +516,7 @@ Creep.prototype.tow = function (targetCreep,targetLocation) {
                 this.travelTo(targetLocation,{ignoreCreeps:false,range:0})
             }
         }
-        targetCreep.move(this);
+        targetCreep.move(targetCreep.pos.getDirectionTo(this));
         this.pull(targetCreep);
     }
     //If not in range, go to the target creep

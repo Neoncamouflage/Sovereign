@@ -636,13 +636,15 @@ class Traveler {
         let missionHaulers = [];
         let emptyHaulers = [];
         let emptyPos = {};
-        
+        let relCount = 0; //Debugging
         
         for(let each of haulers){
             //Haulers on a task with inventory
-            if(each.memory.task && each.memory.state == 'dropoff' && each.store.getUsedCapacity() > 0){
+            if((each.memory.task && each.memory.state == 'dropoff' && each.store.getUsedCapacity() > 0)
+                || each.memory.refillTarget){
                 let travelData = each.memory._trav;
                 if(travelData)missionHaulers.push(each);
+                //if(each.canRelay || each.memory.refillTarget)relCount++;
                 
             }
             //Empty haulers without a task or picking up
@@ -651,13 +653,15 @@ class Traveler {
                 emptyPos[`${each.pos.x},${each.pos.y}`] = each.id;
             }
         }
+        //chronicle.log(`${relCount} refill/notask haulers attempting relay.`,'Traveler',4);
         //For each mission creep, check if there's an adjacent empty on the way with same size carry. If so, swap missions and cargo.
         for(let each of missionHaulers){
-            
-            if(!global.heap.relays || (each.id in heap.relays) || !each.memory._trav || !each.memory._trav.path) continue;
+            if(!global.heap.relays && global.heap)global.heap.relays = {};
+            if((each.id in heap.relays) || !each.memory._trav || !each.memory._trav.path) continue;
             let path = each.memory._trav.path.substr(1);
             let nextDirection = parseInt(path[0], 10);
             let selfStore = each.store.getUsedCapacity();
+            
             //let empties = [];
             //This just loops and checks every adjacency.
             /*for (let dx = -1; dx <= 1; dx++) {
@@ -679,16 +683,23 @@ class Traveler {
             
             if(!emptyPos[nextKey]) continue;
             let targetCreep = Game.getObjectById(emptyPos[nextKey]);
+            //if(each.canRelay || each.memory.refillTarget)chronicle.log(`${each} ${each.pos} attempting relay to ${targetCreep}`,'Traveler',4);
             let otherStore = targetCreep.store.getUsedCapacity();
             let eachState = each.memory.state;
             let otherState = targetCreep.memory.state;
             if(targetCreep.store.getFreeCapacity() < selfStore || targetCreep.store.getCapacity() != each.store.getCapacity()) continue;
             if(targetCreep.id in heap.relays) continue;
-            let fullMission = heap.shipping[each.memory.fief].requests[each.memory.task];
-            if(!fullMission) continue
-            let target = Game.getObjectById(fullMission.targetID);
-            if(!target) continue;
-            if(getTileDistance(each.pos,target.pos) <= 2) continue;
+            //if(each.canRelay || each.memory.refillTarget)chronicle.log(`${each} passed check 1.`,'Traveler',4);
+            let fullMission = each.memory.task ? heap.shipping[each.memory.fief].requests[each.memory.task] : null;
+            //If the we have a mission, make sure we're not right next to the thing
+            if(fullMission){
+                //if(each.canRelay || each.memory.refillTarget)chronicle.log(`${each} logged with fullMission.`,'Traveler',4);
+                let target = Game.getObjectById(fullMission.targetID);
+                if(!target) continue;
+                if(getTileDistance(each.pos,target.pos) <= 2) continue;
+                //if(each.canRelay || each.memory.refillTarget)chronicle.log(`${each} passed fullMission.`,'Traveler',4);
+            }
+            
             let emptyMission = targetCreep.memory.task ? global.heap.shipping[targetCreep.memory.fief].requests[targetCreep.memory.task] : null;
             /*console.log("SWAPPING")
             console.log("Full:",JSON.stringify(fullMission))
@@ -709,16 +720,32 @@ class Traveler {
                 delete each.memory.task;
             }
 
-            //Give our mission to the empty
-            targetCreep.memory.task = fullMission.taskID
-            //Copy assignment to the empty and remove us
-            fullMission.assignedHaulers[targetCreep.id] = fullMission.assignedHaulers[each.id];
-            delete fullMission.assignedHaulers[each.id]
+            //Give our mission to the empty if needed
+            if(fullMission){
+                targetCreep.memory.task = fullMission.taskID
+                //Copy assignment to the empty and remove us
+                fullMission.assignedHaulers[targetCreep.id] = fullMission.assignedHaulers[each.id];
+                delete fullMission.assignedHaulers[each.id]
+            }
+            //If they're refilling, swap refill targets
+            if(each.memory.refillTarget || targetCreep.memory.refillTarget){
+                let eachRefill = each.memory.refillTarget || false;
+                let targetRefill = targetCreep.memory.refillTarget || false;
+                each.memory.refillTarget = targetRefill;
+                targetCreep.memory.refillTarget = eachRefill;
+                //if(each.canRelay || each.memory.refillTarget)chronicle.log(`${each} swapping refill with ${targetCreep}.`,'Traveler',4);
+            }
             targetCreep.memory.state = eachState;
             each.memory.state = otherState;
-
+            //if(each.canRelay || each.memory.refillTarget)chronicle.log(`${each} passed state swap.`,'Traveler',4);
             //Swap store
-            each.transfer(targetCreep,fullMission.resourceType);
+            if(fullMission){
+                each.transfer(targetCreep,fullMission.resourceType);
+            }
+            else{
+                let resType = Object.keys(each.store)[0];
+                each.transfer(targetCreep,resType)
+            }
             //Set relay so the rest of the code knows they've already done it
             //Assign values to tell them what their new store amount is
             global.heap.relays[each.id] = otherStore;
@@ -738,6 +765,8 @@ class Traveler {
      * @returns {any}
      */
     static resolveMovement(){
+        const dx = [0, 0, 1, 1, 1, 0, -1, -1, -1];
+        const dy = [0, -1, -1, 0, 1, 1, 1, 0, -1];
         let creeps = Object.keys(this.movementIntents).map(creepName => Game.creeps[creepName])
         //Sort creeps descending based on priority
         creeps.sort((a, b) => (b.memory.priority || PRIORITY_REF[b.memory.role] || 0) - (a.memory.priority || PRIORITY_REF[a.memory.role] || 0))
@@ -748,8 +777,6 @@ class Traveler {
             //If this creep was already shoved, skip it
             if(creep.shoved)continue;
             let creepData = this.movementIntents[creep.name];
-            const dx = [0, 0, 1, 1, 1, 0, -1, -1, -1];
-            const dy = [0, -1, -1, 0, 1, 1, 1, 0, -1];
             let nextX = creepData.x + dx[creepData.direction];
             let nextY = creepData.y + dy[creepData.direction];
             let roomName = creepData.roomName;
@@ -767,23 +794,34 @@ class Traveler {
                 console.log(creep)
                 continue;
             }
-            //If there is a non-moving blocker, and it isn't fatigued, request to shove
-            if(blocker && blocker.my && !this.movementIntents[blocker.name] && blocker.fatigue == 0 && !blocker.shoved){
-                //console.log("SHOVIN")
-                let shoveResult = creep.shove(blocker);
-                //console.log("SHOVE RESULT",shoveResult)
-                if(shoveResult){
-                    creep.say(LANGUAGE.testOutput)
-                    //If shove was successful, add the resulting creep (at the end of the shove chain) to the conflict check
-                    conflictTargets[`${roomName},${nextX},${nextY}`] = conflictTargets[`${roomName},${nextX},${nextY}`] || [];
-                    conflictTargets[`${roomName},${nextX},${nextY}`].push(shoveResult)
+            //If there's a blocking creep and it isn't being shoved
+            if(blocker && blocker.my && !blocker.shoved){
+                let blockerData = this.movementIntents[creep.name];
+                //If it isn't moving and isn't fatigued, see if we can shove it
+                if(!this.movementIntents[blocker.name] && blocker.fatigue == 0){
+                    //console.log("SHOVIN")
+                    let shoveResult = creep.shove(blocker);
+                    //console.log("SHOVE RESULT",shoveResult)
+                    if(shoveResult){
+                        creep.say(LANGUAGE.shove)
+                        //If shove was successful, add the resulting creep (at the end of the shove chain) to the conflict check
+                        conflictTargets[`${roomName},${nextX},${nextY}`] = conflictTargets[`${roomName},${nextX},${nextY}`] || [];
+                        conflictTargets[`${roomName},${nextX},${nextY}`].push(creep)
+                    }
+                    //If not, we cancel this move order
+                    else{
+                        creep.cancelOrder('move');
+                        delete this.movementIntents[creep.name];
+                    }
                 }
-                //If not, we cancel this move order
-                else{
+                //If it's fat but we aren't, have it pull us
+                else if(blocker.memory.fat && !creep.memory.fat && this.movementIntents[blocker.name]){
+                    blocker.pull(creep);
                     creep.cancelOrder('move');
-                    delete this.movementIntents[creep.name];
+                    creep.move(blocker);
+                    creep.isPulled = true;
+                    blocker.say(LANGUAGE.pull)
                 }
-
             }
             //If no blocker, check if it's a hauler. If so, add its move to the conflict check
             else if(!blocker && creep.memory.role == 'hauler'){
@@ -908,6 +946,16 @@ class Traveler {
             lastPosition = position;
         }
         return serializedPath;
+    }
+
+    static getNextPosition(creep){
+        let err;
+        if(!creep || !creep.memory || !creep.memory._trav){
+            chronicle.log(`${creep} does not exist or does not have a _trav key.`,'Traveler.getNextPosition',1);
+            return null;
+        }
+        let nextDirection = parseInt(creep.memory._trav.path[0], 10);
+        return Traveler.positionAtDirection(creep.pos,nextDirection);
     }
     /**
      * returns a position at a direction relative to origin

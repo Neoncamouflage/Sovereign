@@ -4,3 +4,4 @@ test.js
 .VS*
 /node_modules
 dist/oldMinCut.js
+dist/.TODO.txt
