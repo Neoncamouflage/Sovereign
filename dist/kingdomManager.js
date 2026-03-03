@@ -80,7 +80,7 @@ const kingdomManager = {
             
             heap.kingdomStatus.fiefs[fief] = fiefManager.run(Game.rooms[fief],kingdomCreeps[fief]);
             //Manage shipping tasks
-            Traveler.relay(kingdomCreeps[fief]['hauler'] || [])
+            //Traveler.relay(kingdomCreeps[fief]['hauler'] || [])
             supplyDemand.manageShipping(fief,kingdomCreeps[fief]['hauler'] || []);
             //Run spawn logic every 3 ticks
             if(Game.time % 3 == 0) registry.calculateSpawns(Game.rooms[fief],kingdomCreeps[fief]);
@@ -229,8 +229,11 @@ function runRoles(kingdomCreeps){
     }
 }
 
+//Creates arrays of creeps bucketed by role
+//Also update the creepPosMap in heap based on room
 function setupCreeps(){
     let kingdomCreeps={reserve:[],}
+    let creepPosMap = {};
     let milRoles = [
         'sapper',
         'archer',
@@ -249,6 +252,12 @@ function setupCreeps(){
         let creep = Game.creeps[creepName];
         let fief = creep.memory.fief;
         let role = creep.memory.role
+
+        //Build coordinate map
+        let roomName = creep.room.name;
+        if (!creepPosMap[roomName]) creepPosMap[roomName] = {};
+        creepPosMap[roomName][(creep.pos.x * 50) + creep.pos.y] = creep;
+
         //First process respawns for anything that needs it. Ticks are specified by creep or based on the distance from spawn
         let fiefDist = fief ? Game.map.getRoomLinearDistance(fief,creep.room.name,true) : 100
         if(creep.memory.respawnMe && !creep.spawning && !creep.memory.hasRespawn && creep.ticksToLive < (creep.memory.respawnTicks || (fiefDist*50+(creep.body.length*3)))){
@@ -303,6 +312,7 @@ function setupCreeps(){
             kingdomCreeps[fief][role].push(creep);
         }
     }
+    global.heap.creepPosMap = creepPosMap;
     return kingdomCreeps;
 }
 setupCreeps = profiler.registerFN(setupCreeps, 'kingdomManager.setupCreeps');

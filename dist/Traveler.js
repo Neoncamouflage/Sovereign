@@ -26,7 +26,9 @@ class Traveler {
 
         options.creepRole = options.creepRole || creep.memory.role;
         options.creepState = options.creepState || creep.memory.state;
+        let destinationIsPos = destination instanceof RoomPosition;
         destination = this.normalizePos(destination);
+        
         options.optDest = destination
         options.fief = creep.memory.fief
         // manage case where creep is nearby destination
@@ -41,6 +43,10 @@ class Traveler {
         }
         else if (rangeToDestination <= 1) {
             if (rangeToDestination === 1 && !options.range) {
+                //Not military and the target being an object means we assume range 1
+                if(!options.military && !destinationIsPos){
+                    return OK
+                }
                 let direction = creep.pos.getDirectionTo(destination);
                 if (options.returnData) {
                     options.returnData.nextPos = destination;
@@ -269,6 +275,7 @@ class Traveler {
             ignoreCreeps: true,
             maxOps: DEFAULT_MAXOPS,
             range: 1,
+            avoidSK:true
         });
         if (options.movingTarget) {
             options.range = 0;
@@ -299,6 +306,9 @@ class Traveler {
             roomsSearched++;
             let matrix;
             let room = Game.rooms[roomName];
+            let data = getScoutData(roomName);
+            
+            //THESE ONLY CALL IF WE HAVE VISION
             if (room) {
                 if (options.ignoreStructures) {
                     matrix = new PathFinder.CostMatrix();
@@ -314,7 +324,7 @@ class Traveler {
                 }
                 if (options.obstacles) {
                     matrix = matrix.clone();
-                    for (let obstacle of options.obstacles) {
+                    for(let obstacle of options.obstacles) {
                         if (obstacle.pos.roomName !== roomName) {
                             continue;
                         }
@@ -333,6 +343,33 @@ class Traveler {
                     }
                 }*/
             }
+            if (!matrix) matrix = new PathFinder.CostMatrix();
+
+            //Block out tiles around the lairs, sources, and mineral
+            if (options.avoidSK && describeRoom(roomName) == ROOM_SOURCE_KEEPER && data.lairs){
+                let terrain = new Room.Terrain(roomName);
+                let targets = [
+                    ...(data.sources ?? []),
+                    ...(data.mineral ? [data.mineral] : [])
+                ];
+                for(let x = -4;x<=4;x++){
+                    for(let y=-4;y<=4;y++){
+                        for(const each of targets){
+                            if(x==0 && y==0) continue;
+                            let newX = each.x+x;
+                            let newY = each.y+y;
+                            if(newX<0 || newY<0 || newX>49 || newY>49) continue;
+                            if(terrain.get(newX,newY) == TERRAIN_MASK_WALL) continue;
+                            matrix.set(newX,newY,255);
+                        }
+                    }
+                }
+
+            }
+            //else{
+                //if (!matrix) matrix = new PathFinder.CostMatrix();
+
+            //}
             if (options.roomCallback) {
                 if (!matrix) {
                     matrix = new PathFinder.CostMatrix();
@@ -433,7 +470,7 @@ class Traveler {
                     }
                 }
                 // SK rooms are avoided when there is no vision in the room, harvested-from SK rooms are allowed
-                if (!options.allowSK && !Game.rooms[roomName]) {
+                /*if (options.allowSK && !Game.rooms[roomName]) {
                     if (!parsed) {
                         parsed = /^[WE]([0-9]+)[NS]([0-9]+)$/.exec(roomName);
                     }
@@ -443,9 +480,9 @@ class Traveler {
                         ((fMod >= 4) && (fMod <= 6)) &&
                         ((sMod >= 4) && (sMod <= 6));
                     if (isSK) {
-                        return 10 * highwayBias;
+                        return 2 * highwayBias;
                     }
-                }
+                }*/
                 return highwayBias;
             },
         });
@@ -453,7 +490,7 @@ class Traveler {
             console.log(`couldn't findRoute to ${destination}`);
             return;
         }
-        for (let value of ret) {
+        for(let value of ret) {
             allowedRooms[value.room] = true;
         }
         return allowedRooms;
@@ -485,6 +522,8 @@ class Traveler {
         if (!this.structureMatrixCache[room.name] || (freshMatrix && Game.time !== this.structureMatrixTick)) {
             this.structureMatrixTick = Game.time;
             let matrix;
+            //REMEMBER THIS ONLY CALLS IF WE HAVE VISION
+            //THEY DON'T LISTEN TO THIS FOR NON-VISION ROOMS
             if(options.creepRole == 'hauler' && options.creepState != 'refill'){
                 if(heap.travelMatrixes && heap.travelMatrixes[room.name]){
                     matrix = heap.travelMatrixes[room.name].clone()
@@ -542,7 +581,7 @@ class Traveler {
             }
         }*/
 
-        for (let structure of room.find(FIND_STRUCTURES)) {
+        for(let structure of room.find(FIND_STRUCTURES)) {
             if (structure instanceof StructureRampart) {
                 if (!structure.my && !structure.isPublic) {
                     impassibleStructures.push(structure);
@@ -563,7 +602,7 @@ class Traveler {
             }
         }
         //Don't step on ally sites
-        for (let site of room.find(FIND_CONSTRUCTION_SITES)) {
+        for(let site of room.find(FIND_CONSTRUCTION_SITES)) {
             if (site.structureType === STRUCTURE_CONTAINER || site.structureType === STRUCTURE_ROAD
                 || site.structureType === STRUCTURE_RAMPART || (!isFriend(site) && !isMe(site.owner.username))) {
                 continue;
@@ -571,7 +610,7 @@ class Traveler {
             matrix.set(site.pos.x, site.pos.y, 0xff);
         }
         
-        for (let structure of impassibleStructures) {
+        for(let structure of impassibleStructures) {
             matrix.set(structure.pos.x, structure.pos.y, 0xff);
         }
 
@@ -632,7 +671,7 @@ class Traveler {
     /**
      * check for relay opportunities between supply creeps
      */
-    static relay(haulers){
+    /*static relay(haulers){
         let missionHaulers = [];
         let emptyHaulers = [];
         let emptyPos = {};
@@ -664,8 +703,8 @@ class Traveler {
             
             //let empties = [];
             //This just loops and checks every adjacency.
-            /*for (let dx = -1; dx <= 1; dx++) {
-                for (let dy = -1; dy <= 1; dy++) {
+            /*for(let dx = -1; dx <= 1; dx++) {
+                for(let dy = -1; dy <= 1; dy++) {
                     if(dx === 0 && dy === 0) continue;
         
                     let adjacentKey = `${creep.pos.x + dx},${creep.pos.y + dy}`;
@@ -676,7 +715,7 @@ class Traveler {
                         //Add the creep to our empties options
                         empties.push(emptyCreep)
                 }
-            }*/
+            }
             const ax = [0, 0, 1, 1, 1, 0, -1, -1, -1];
             const ay = [0, -1, -1, 0, 1, 1, 1, 0, -1];
             let nextKey = `${each.pos.x + ax[nextDirection]},${each.pos.y + ay[nextDirection]}`;
@@ -693,19 +732,17 @@ class Traveler {
             let fullMission = each.memory.task ? heap.shipping[each.memory.fief].requests[each.memory.task] : null;
             //If the we have a mission, make sure we're not right next to the thing
             if(fullMission){
-                //if(each.canRelay || each.memory.refillTarget)chronicle.log(`${each} logged with fullMission.`,'Traveler',4);
                 let target = Game.getObjectById(fullMission.targetID);
                 if(!target) continue;
                 if(getTileDistance(each.pos,target.pos) <= 2) continue;
-                //if(each.canRelay || each.memory.refillTarget)chronicle.log(`${each} passed fullMission.`,'Traveler',4);
             }
             
             let emptyMission = targetCreep.memory.task ? global.heap.shipping[targetCreep.memory.fief].requests[targetCreep.memory.task] : null;
-            /*console.log("SWAPPING")
+            console.log("SWAPPING")
             console.log("Full:",JSON.stringify(fullMission))
             console.log("Empty:",JSON.stringify(emptyMission))
             console.log("Giver:",JSON.stringify(each.memory))
-            console.log("Taker:",JSON.stringify(targetCreep.memory))*/
+            console.log("Taker:",JSON.stringify(targetCreep.memory))
             //Take empty creep's mission
             if(emptyMission){
                 //ID
@@ -750,15 +787,15 @@ class Traveler {
             //Assign values to tell them what their new store amount is
             global.heap.relays[each.id] = otherStore;
             global.heap.relays[targetCreep.id] = selfStore;
-            /*console.log("END SWAP")
+            console.log("END SWAP")
             console.log("Full:",JSON.stringify(fullMission))
             console.log("Empty:",JSON.stringify(emptyMission))
             console.log("Giver:",JSON.stringify(each.memory))
-            console.log("Taker:",JSON.stringify(targetCreep.memory))*/
+            console.log("Taker:",JSON.stringify(targetCreep.memory))
         }
 
 
-    }
+    }*/
     /**
      * resolve movement conflicts and execute moves
      * @param creep
@@ -796,7 +833,7 @@ class Traveler {
             }
             //If there's a blocking creep and it isn't being shoved
             if(blocker && blocker.my && !blocker.shoved){
-                let blockerData = this.movementIntents[creep.name];
+                let blockerData = this.movementIntents[blocker.name];
                 //If it isn't moving and isn't fatigued, see if we can shove it
                 if(!this.movementIntents[blocker.name] && blocker.fatigue == 0){
                     //console.log("SHOVIN")
@@ -844,10 +881,10 @@ class Traveler {
                 }
                 //Otherwise sort by priority: energy > other resources > empty
                 let sortedCreeps = creepList.slice().sort((a, b) => {
-                    let aEnergy = a.store.getUsedCapacity(RESOURCE_ENERGY);
-                    let bEnergy = b.store.getUsedCapacity(RESOURCE_ENERGY);
-                    let aTotal = a.store.getUsedCapacity();
-                    let bTotal = b.store.getUsedCapacity();
+                    let aEnergy = a.getStoreUsed(RESOURCE_ENERGY);
+                    let bEnergy = b.getStoreUsed(RESOURCE_ENERGY);
+                    let aTotal = a.getStoreUsed();
+                    let bTotal = b.getStoreUsed();
                     
                     //Energy haulers first
                     if(aEnergy > 0 && bEnergy === 0) return -1;
@@ -867,65 +904,6 @@ class Traveler {
             }
         }
     }
-    static resolveMovementOld(){
-        /*
-        x: destination.x,
-        y: destination.y,
-        roomName: destination.roomName,
-        direction:direction
-        */
-
-        //For every creep that wants to move this tick
-        let conflictTargets = {};
-        Object.keys(this.movementIntents).forEach(creep=>{
-            let creepData = this.movementIntents[creep];
-            const dx = [0, 0, 1, 1, 1, 0, -1, -1, -1];
-            const dy = [0, -1, -1, 0, 1, 1, 1, 0, -1];
-            let nextX = creepData.x + dx[creepData.direction];
-            let nextY = creepData.y + dy[creepData.direction];
-            let roomName = creepData.roomName;
-            //Return if dealing with a room edge
-            if(nextX > 49 || nextY > 49 || nextX < 0 || nextY < 0) return;
-
-
-            //Check if there's a creep at its target position
-            //console.log(roomName)
-            let blocker
-            try{blocker = Game.rooms[roomName].lookForAt(LOOK_CREEPS,nextX,nextY)[0];}
-            catch(e){
-                console.log('Traveler error',e,roomName);
-                console.log(JSON.stringify(creepData))
-                console.log(creep)
-                return;
-            }
-            //If there is, and it isn't also intending to move, request to swap - Also a check for permanently stationed creeps like fast fillers
-            if(blocker){
-                if(!this.movementIntents[blocker.name] && blocker.fatigue == 0 && blocker.memory && (!blocker.memory.stay || creepData.priority)){
-                    //Attempt swapping to the current creep
-                    let bMove = blocker.move((((creepData.direction - 1) + 4) % 8) + 1)
-                }
-            }
-            //If no blocker, check if it's a hauler. If so, add its move.
-            else if(Game.creeps[creep].memory.role == 'hauler'){
-                conflictTargets[`${roomName},${nextX},${nextY}`] = conflictTargets[`${roomName},${nextX},${nextY}`] || [];
-                conflictTargets[`${roomName},${nextX},${nextY}`].push(Game.creeps[creep])
-            }
-            //Second check for if it is going to move, but will generate fatigue. So that slow creeps will swap with fast creeps
-        });
-        //Check all hauler conflicts to let energy get priority
-        for(let spot of Object.keys(conflictTargets)){
-            let creepList = conflictTargets[spot];
-            if(creepList.length == 2){
-                //If one is empty and one is not, stop the empty from moving
-                if(creepList[0].store.getUsedCapacity()>0 && creepList[1].store.getUsedCapacity()==0){
-                    creepList[1].cancelOrder('move')
-                }
-                else if(creepList[1].store.getUsedCapacity()>0 && creepList[0].store.getUsedCapacity()==0){
-                    creepList[0].cancelOrder('move')
-                }
-            }
-        }
-    }
     /**
      * serialize a path, traveler style. Returns a string of directions. 
      * @param startPos
@@ -936,8 +914,10 @@ class Traveler {
     static serializePath(startPos, path, color = "orange") {
         let serializedPath = "";
         let lastPosition = startPos;
+        if(!(lastPosition instanceof RoomPosition)) lastPosition = new RoomPosition(lastPosition.x,lastPosition.y,lastPosition.roomName);
         this.circle(startPos, color);
-        for (let position of path) {
+        for(let position of path) {
+            if(!(position instanceof RoomPosition)) position = new RoomPosition(position.x,position.y,position.roomName);
             if (position.roomName === lastPosition.roomName) {
                 new RoomVisual(position.roomName)
                     .line(position, lastPosition, { color: color, lineStyle: "dashed" });
@@ -985,7 +965,7 @@ class Traveler {
             return;
         }
         let count = 0;
-        for (let roomName in Memory.empire.hostileRooms) {
+        for(let roomName in Memory.empire.hostileRooms) {
             if (Memory.empire.hostileRooms[roomName]) {
                 if (!Memory.rooms[roomName]) {
                     Memory.rooms[roomName] = {};
@@ -1045,7 +1025,7 @@ profiler.registerClass(Traveler, 'Traveler');
 // need to repath to often or they aren't finding valid paths, it can sometimes point to problems elsewhere in your code
 const REPORT_CPU_THRESHOLD = 1000;
 const DEFAULT_MAXOPS = 20000;
-const DEFAULT_STUCK_VALUE = 5;
+const DEFAULT_STUCK_VALUE = 2;
 const STATE_PREV_X = 0;
 const STATE_PREV_Y = 1;
 const STATE_STUCK = 2;

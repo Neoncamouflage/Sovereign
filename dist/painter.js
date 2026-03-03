@@ -117,9 +117,9 @@ const painter = {
         let heapPlan = heap.roomPlans && heap.roomPlans[roomName]
         let plan
         let ramps
-        if(heap.fiefPlanner && heap.fiefPlanner.roomName == roomName && heap.fiefPlann.stage != 0){
-            heapPlan
-        }
+        //if(heap.fiefPlanner && heap.fiefPlanner.roomName == roomName && heap.fiefPlann.stage != 0){
+            //heapPlan
+        //}
         if(heapPlan){
             [plan, ramps] = heapPlan;
         }
@@ -256,8 +256,8 @@ const painter = {
         let matrix = Memory.kingdom.fiefs.costMatrix
         if(!matrix) return;
         let fiefCM = PathFinder.CostMatrix.deserialize(matrix);
-        for (let x = 0; x <= 49; x += 1) {
-            for (let y = 0; y <= 49; y += 1) {
+        for(let x = 0; x <= 49; x += 1) {
+            for(let y = 0; y <= 49; y += 1) {
                 let weight = fiefCM.get(x,y);
                 if(weight == 0) continue;
                 new RoomVisual().text(weight,x,y+0.25);
@@ -314,6 +314,13 @@ const painter = {
         }
     },
     drawShipping(fief,kingdomCreeps){
+        let room = Game.rooms[fief];
+        if(!room){
+            console.log("Bad room name for drawShipping")
+            return;
+        }
+        let allHaulers = kingdomCreeps[fief]['hauler'] || [];
+        let linePos = {x:0,y:24}
         //Triangle pointing up for pickup
         //Triangle pointing down for dropoff
         //Triangle contains the resource type
@@ -327,13 +334,23 @@ const painter = {
             let hue = (shippingID * 137.508) % 360;
             let shipTarget = Game.getObjectById(request.targetID);
             if(!shipTarget)continue;
-            let assignedHaulers = request.assignedHaulers;
+            let assignedHaulers = request.assignees;
             let roomVis =  new RoomVisual(shipTarget.pos.roomName);
+
+            //Shipping Table
+            new RoomVisual(fief).text(`${request.taskID} ${request.type} ${request.amount} ${request.unassignedAmount()}`,linePos.x,linePos.y,{align:'left',color:'white',font:'0.3'})
+            linePos.y++;
+            for(let id of Object.keys(request.assignees)){
+                let g = Game.getObjectById(id);
+                new RoomVisual(fief).text(`${id} ${request.assignees[id].amount} ${g.getStoreUsed()} ${g.store.getCapacity()} ${g.store.getUsedCapacity()}`,linePos.x+1,linePos.y,{align:'left',color:'white',font:'0.3'})
+                linePos.y++;
+            }
+            //Arrows and lines
             let yPoint;
             let yMod;
             if(request.type == 'pickup') yMod = -1;
             else if(request.type == 'dropoff') yMod = 1;
-            else if(request.type == 'refill') continue;
+            else{yMod = 0};
             let polyPoints = [
                 [shipTarget.pos.x-0.75,shipTarget.pos.y-(0.5*yMod)],
                 [shipTarget.pos.x+0.75,shipTarget.pos.y-(0.5*yMod)],
@@ -346,18 +363,33 @@ const painter = {
                         stroke:`black`
                         });
             roomVis.resource(request.resourceType,shipTarget.pos.x,shipTarget.pos.y-(0.12*yMod),0.3);
-            for(let haulID of Object.keys(assignedHaulers)){
-                let hauler = Game.getObjectById(haulID);
-                if(!hauler || hauler.room.name != fief) continue;
-                let haulerNextPos = hauler.fatigue ? hauler.pos : Traveler.getNextPosition(hauler);
-                if(!haulerNextPos)continue;
-                roomVis.line(shipTarget.pos.x,shipTarget.pos.y+(0.5*yMod),haulerNextPos.x,haulerNextPos.y,{color:`hsl(${hue}, 100%, 60%)`,lineStyle:'dotted'});
-                //Write state and add the hauler ID to the done set so we don't check it again after
-                roomVis.text(hauler.memory.state ? hauler.memory.state.toUpperCase() : "NOSTATE",haulerNextPos.x,haulerNextPos.y-1,{color:'white',font:'0.4'})
-                doneHaulers.add(haulID);
-            }
-            //roomVis.text(request.amount,shipTarget.pos.x,shipTarget.pos.y-yPoint,{color:`hsl(${hue}, 100%, 60%)`});
         }
+        for(let hauler of allHaulers){
+            let roomVis =  new RoomVisual(fief);
+            let request = hauler.memory.task ? shipping.requests[hauler.memory.task] : null
+            //let hauler = Game.getObjectById(haulID);
+            if(!hauler || hauler.room.name != fief) continue;
+            let haulerNextPos = hauler.pos;
+            //let haulerNextPos = hauler.fatigue ? hauler.pos : Traveler.getNextPosition(hauler);
+            //if(!haulerNextPos)continue;
+            if(request){
+                let yMod;
+                if(request.type == 'pickup') yMod = -1;
+                else if(request.type == 'dropoff') yMod = 1;
+                else{yMod = 0};
+                let hue = (request.taskID * 137.508) % 360;
+                let shipTarget = Game.getObjectById(request.targetID);
+                if(shipTarget) roomVis.line(shipTarget.pos.x,shipTarget.pos.y+(0.5*yMod),haulerNextPos.x,haulerNextPos.y,{color:`hsl(${hue}, 100%, 60%)`,lineStyle:'dotted'});
+                roomVis.text(`${request.type} - ${request.assignees[hauler.id].state}`,haulerNextPos.x,haulerNextPos.y-1,{color:'white',font:'0.4'})
+            
+            }
+            else{
+                roomVis.text("NOTASK",haulerNextPos.x,haulerNextPos.y-1,{color:'white',font:'0.4'})
+            }
+            //Write state and add the hauler ID to the done set so we don't check it again after
+            //doneHaulers.add(haulID);
+        }
+            //roomVis.text(request.amount,shipTarget.pos.x,shipTarget.pos.y-yPoint,{color:`hsl(${hue}, 100%, 60%)`});
     },
     drawLoot(){
         for(let room of Object.values(Game.rooms)){
@@ -450,8 +482,8 @@ const painter = {
             const processed = Array(50).fill().map(() => Array(50).fill(false));
             const wallGroups = {};
             let currentGroupId = 0;
-            for (let x = 0; x < 50; x++) {
-                for (let y = 0; y < 50; y++) {
+            for(let x = 0; x < 50; x++) {
+                for(let y = 0; y < 50; y++) {
                     if (!processed[x][y] && terrain.get(x, y) === TERRAIN_MASK_WALL) {
                         wallGroups[currentGroupId] = [];
                         floodFill(x, y);
@@ -480,8 +512,8 @@ const painter = {
     drawTest(){
         if(Memory.test.testCM){
             let testCM = PathFinder.CostMatrix.deserialize(Memory.test.testCM)
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
+            for(let x = 0; x <= 49; x += 1) {
+                for(let y = 0; y <= 49; y += 1) {
                     let weight = testCM.get(x,y);
                     if(weight==0) continue;
                     if(weight!=255){
@@ -503,13 +535,26 @@ const painter = {
         }
         if(Memory.test.testBigCM){
             let testCM = BigCostMatrix.deserialize(Memory.test.testBigCM)
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
+            for(let x = 0; x <= 49; x += 1) {
+                for(let y = 0; y <= 49; y += 1) {
                     let weight = testCM.get(x,y);
                     //if(weight == 0) continue;
                     new RoomVisual().text(weight,x,y+0.25,{font:'0.3'});
                 }
             }
+        }
+        if(Memory.test.testPath){
+            let path = Memory.test.testPath;
+            if(!Array.isArray(path)){
+                chronicle.log(`No test path array available.`,'painter',1);
+                return;
+            }
+            if(!path[0].x || !path[0].y || !path[0].roomName){
+                chronicle.log(`Test path spot missing required properties for room position`,'painter',1);
+                return;
+            }
+            Game.map.visual.poly(path)
+            Game.map.visual.text(path.length, new RoomPosition(path[path.length-1].x,path[path.length-1].y,path[path.length-1].roomName), {color: '#f3f30b', fontSize: 6});
         }
     },
     drawMilitary(kingdomCreeps){

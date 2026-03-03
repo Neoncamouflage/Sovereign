@@ -57,6 +57,7 @@ var holdingManager = {
                 delete Memory.kingdom.holdings[key]
                 continue;
             }
+            if(!Memory.kingdom.holdings[key]) continue;
             //console.log("CHECKING",key,"STANDBY: ",Memory.kingdom.holdings[key].standby)
             if(!Memory.kingdom.holdings[key].standby && (Game.rooms[Memory.kingdom.holdings[key].homeFief].controller.level >=7 || describeRoom(key) != ROOM_SOURCE_KEEPER)){
                 activeHoldings.push(key)
@@ -388,15 +389,22 @@ var holdingManager = {
             //Retrieve current tasks to check against
             droppedResources.forEach(resource => {
                 const { id, amount, resourceType } = resource;
-        
+                let targetPos;
+                let plan = Memory.kingdom.fiefs[fief].roomPlan;
+                if(plan) targetPos = new RoomPosition(plan[4].storage[0].x,plan[4].storage[0].y,fief);
+                if(!targetPos) targetPos = Game.rooms[fief].controller.pos;
+                if(!targetPos){
+                    console.log("No target position for dropped resources in holding")
+                    return;
+                }
+                let distance = getTileDistance(targetPos,resource.pos);
                 //Details object for the addRequest call
                 let details = {
                     type: 'pickup',
                     targetID: id,
-                    amount: amount,
+                    amount: amount,//-distance
                     resourceType: resourceType,
-                    international : true,
-                    priority: 5//amount < 1000 ? 5 : 6
+                    international : true,//amount < 1000 ? 5 : 6
                 };
                 //console.log("Attempting to add",JSON.stringify(details))
                 const taskID = supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
@@ -410,7 +418,7 @@ var holdingManager = {
                         targetID: stone.id,
                         amount: amount,
                         resourceType: resource,
-                        priority: 6
+                        international:true,
                     };
                     supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
                 });
@@ -428,7 +436,6 @@ var holdingManager = {
                         targetID: canID,
                         amount: can.store[resType],
                         resourceType: resType,
-                        priority: 5,
                         international:true
                     };
                     supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
@@ -463,7 +470,7 @@ var holdingManager = {
         //console.log("SPAWNPAD",spawnPad)
         //Spawn Time
         if(Game.time % GLOBAL_SPAWN_INTERVAL == 0){
-            if(!enemyReserve && !global.heap.alarms[holdingName]){
+            if(!enemyReserve && (!global.heap.alarms[holdingName] || !holding.noDefend)){
                 //-- Harvester --
                 //Check each source for open space and harvester need
                 //console.log("RUNNING HOLDING SPAWN")
@@ -486,7 +493,7 @@ var holdingManager = {
                 Object.entries(holding.sources).forEach(([sourceID,source])=>{
                     //If there's no room, or if we have enough harvest power, return
 
-                    if((source.openSpots.length <= targetSources[sourceID].harvs || targetSources[sourceID].power >= (isReserved ? SOURCE_ENERGY_CAPACITY : hasController ? SOURCE_ENERGY_NEUTRAL_CAPACITY: SOURCE_ENERGY_KEEPER_CAPACITY)/ENERGY_REGEN_TIME)) return;
+                    if((source.openSpots.length <= targetSources[sourceID].harvs || targetSources[sourceID].power >= (isReserved ? SOURCE_ENERGY_CAPACITY : holding.isSK ? SOURCE_ENERGY_KEEPER_CAPACITY:SOURCE_ENERGY_NEUTRAL_CAPACITY)/ENERGY_REGEN_TIME)) return;
                     let sev = 30
                     //console.log("Adding remote harv to spawnQueue")
                     registry.requestCreep({sev:sev-spawnPad,memory:{role:'miner',fief:fief,target:sourceID,holding:holdingName,status:'spawning',preflight:false}})
@@ -500,7 +507,7 @@ var holdingManager = {
             if(remote){
 
                 let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => (helper.isSoldier(crp) || crp.getActiveBodyparts(CLAIM) > 0) && !isFriend(crp))
-                if(hostiles.length && !global.heap.alarms[holdingName] && (!heap.wardens || !heap.wardens[fief])){
+                if(hostiles.length && !holding.noDefend && !global.heap.alarms[holdingName] && (!heap.wardens || !heap.wardens[fief])){
                     setAlarm({roomName:holdingName,alarmType:hostiles[0].owner.username == 'Invader' ? 'invader' : 'creep',hostiles:hostiles,origin:'holdingManager'})
                     let hasMission = false;
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){
@@ -639,7 +646,7 @@ var holdingManager = {
         if(remote){//Game.rooms[fief].storage && Game.rooms[fief].storage.my && Game.rooms[fief].storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000
             let timeCheck = Game.rooms[holding.homeFief].controller.level >=5 ? 200 : 30
             //Only build over swamps til RCL5 to speed up room development
-            let swampsOnly = Game.rooms[holding.homeFief].controller.level <4;
+            let swampsOnly = Game.rooms[holding.homeFief].controller.level <=4;
             //If we're RCL4 or less and this is a later remote, we need much more frequent construction checks 
             if(Game.rooms[holding.homeFief].controller.level <=4 && heap.sortedHoldings && heap.sortedHoldings.indexOf(holdingName) > 1) timeCheck = 1;
             if(Game.time % (GLOBAL_SPAWN_INTERVAL*timeCheck) == 0 && Game.rooms[holding.homeFief].controller.level >=3 && Object.keys(Game.constructionSites).length < 40){

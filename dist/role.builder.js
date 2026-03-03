@@ -21,6 +21,8 @@ const roleBuilder = {
         }
 
         let boostLab;
+        let fief = Memory.kingdom.fiefs[creep.memory.fief];
+        if(!fief)return;
         /*if(creep.memory.needBoost){
             if(creep.memory.boostLab){
                 boostLab = Game.getObjectById(creep.memory.boostLab)
@@ -145,12 +147,12 @@ const roleBuilder = {
         
         let target;
         if(creep.memory.target) target = Game.getObjectById(creep.memory.target)
-        if(!target){
+        if(!target || !(target instanceof ConstructionSite)){
             //console.log(creep.name,'t2')
             let targets = creep.room.find(FIND_MY_CONSTRUCTION_SITES)
             target = creep.pos.findClosestByRange(targets)
             if(target){creep.memory.target = target.id}
-            else if(creep.memory.job != 'remoteBuilder' && creep.room.storage && creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000){
+            else if(creep.memory.job != 'remoteBuilder' && !fief.holdUpgrade &&creep.room.storage && creep.room.storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000){
                 creep.memory.status = 'upgrading'
                 upgrader.run(creep);
                 return;
@@ -190,6 +192,16 @@ const roleBuilder = {
                         } 
                     }
                 }
+                else if(fief.holdUpgrade){
+                    let sp = creep.room.find(FIND_MY_SPAWNS);
+                    if(!sp.length)return;
+                    if(creep.pos.getRangeTo(sp[0]) > 1){
+                        creep.travelTo(sp[0])
+                    }
+                    else{
+                        sp[0].recycleCreep(creep);
+                    }
+                }
             }
             
         }
@@ -216,7 +228,7 @@ const roleBuilder = {
                     orderDetails.priority = 6
                     orderDetails.amount *= 3;
                 }
-                if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2 || creep.memory.job == 'remoteBuilder') supplyDemand.addRequest(creep.room,orderDetails)
+                supplyDemand.addRequest(creep.room,orderDetails)
             }
             else{
                 if(creep.room.storage){

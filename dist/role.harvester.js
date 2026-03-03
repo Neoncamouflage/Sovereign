@@ -8,7 +8,7 @@ var roleHarvester = {
             const targetID = creep.memory.target
             const homeRoom = creep.memory.fief
             const fief = Memory.kingdom.fiefs[homeRoom]
-            
+            if(!fief)return;
             const link = fief.sources[targetID] && fief.sources[targetID].link;
             if(!creep.memory.preflight){
                 if(creep.memory.job == 'remoteHarvest'){
@@ -132,8 +132,8 @@ var roleHarvester = {
                             creep.memory.stay = true;
                             creep.memory.status = 'harvest';
                         }
-                        else{
-                            creep.travelTo(new RoomPosition(fief.sources[creep.memory.target].spotx,fief.sources[creep.memory.target].spoty,homeRoom))
+                        else if(target){
+                            creep.travelTo(new RoomPosition(creep.memory.harvestSpot.x,creep.memory.harvestSpot.y,creep.memory.fief),{ignoreCreeps:false})
                         }
                         return;
                     }
@@ -143,44 +143,64 @@ var roleHarvester = {
                             creep.memory.status = 'harvest';
                         }
                         else{
-                            creep.travelTo(target)
+                            creep.travelTo(target,{range:1})
                         }
                         return;
                     }
             }
-            
             //If there's a source, harvest if energy. If no energy, repair can if there
             if(target){
                 const can = fief.sources[targetID].can && Game.getObjectById(fief.sources[targetID].can)
                 if(target.energy > 0){
-                    creep.harvest(target);
+                    let hResult = creep.harvest(target);
+                    if(hResult == ERR_NOT_IN_RANGE){
+                        creep.memory.status = 'moving';
+                    }
                 }
                 else if(can && can.hits < can.hitsMax * 0.8){
                     creep.repair(can);
                     creep.withdraw(can,RESOURCE_ENERGY);
                 }
+                else if(!can && creep.store && creep.store[RESOURCE_ENERGY] > 0){
+                    let cSites = creep.room.find(FIND_MY_CONSTRUCTION_SITES);
+                    if(cSites.length){
+                        let targetSite = creep.pos.findClosestByRange(cSites);
+                        if(creep.pos.getRangeTo(targetSite) <=3) creep.build(targetSite);
+                        creep.repping = true;
+                    }
+                }
+                //If we've been pushed off, move back
+                if(!creep.pos.isEqualTo(creep.memory.harvestSpot.x,creep.memory.harvestSpot.y)){
+                    if(creep.getActiveBodyparts(WORK) >=5){
+                        if(creep.pos.x == fief.sources[creep.memory.target].spotx && creep.pos.y == fief.sources[creep.memory.target].spoty && creep.room.name == homeRoom){
+                            //creep.memory.stay = true;
+                            creep.memory.status = 'harvest';
+                            //console.log(creep,"good")
+                        }
+                        else if(target){
+                            //console.log(creep,"not good")
+                            creep.travelTo(new RoomPosition(creep.memory.harvestSpot.x,creep.memory.harvestSpot.y,creep.room.name),{ignoreCreeps:false})
+                        }
+                        return;
+                    }
+                }
             }
-            //Old link code, likely just remove
             if(link){
                 let harvLink = Game.getObjectById(link);
                 if(!harvLink){
                     delete fief.sources[targetID].link
                 }
                 else{
-                //console.log("HERE")
-                //Stop flag in case link is full
                 //If we're at the point of using carry creeps
-                if(creep.store && creep.store.getCapacity() > 0){
-                    //Check for a can to repair
-                    
+                if(creep.store && creep.store.getUsedCapacity() > 0){
                     //If link is live
-                    if(harvLink && harvLink.store[RESOURCE_ENERGY] != 800){
+                    if(harvLink && harvLink.store[RESOURCE_ENERGY] < 800){
                         creep.transfer(harvLink,RESOURCE_ENERGY);
                     }else if(harvLink){
                         //stopFlag = true;
                     }
                     //If free room and energy in can/on ground, get it
-                    if(creep.store.getFreeCapacity() != 0){
+                    if(creep.store.getFreeCapacity() > 0){
                         let canSpot = creep.room.lookForAt(LOOK_STRUCTURES,creep.pos)
                         let can = canSpot.filter(structure => structure.structureType === STRUCTURE_CONTAINER)[0]
                         let drops = creep.room.lookForAt(LOOK_RESOURCES,creep.pos)[0]

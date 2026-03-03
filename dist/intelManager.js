@@ -2,11 +2,12 @@ const registry = require('registry');
 const helper = require('functions.helper');
 const profiler = require('screeps-profiler');
 const closedRooms = new Set();
+
 const intelManager = {
     toScout:[],
     run: function(scouts,fiefs){
         let scoutList = heap && heap.scoutList || {}//{scoutRoom:requestingFief}
-        const SCOUT_MAX = 0;
+        const SCOUT_MAX = 2;
         if(!scouts || !fiefs) return;
         //If we have no scouts, order one
         if(Game.time % GLOBAL_SPAWN_INTERVAL == 0){

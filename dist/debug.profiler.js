@@ -165,7 +165,7 @@ const printout = (interval) => {
         100;
     preOutput += `\n Heap Usage: ${heapUsage.toFixed(2)}%`;
 
-    for (let i = 0; i < FILLER; i++) console.log(" ");
+    for(let i = 0; i < FILLER; i++) console.log(" ");
     console.log(preOutput + output);
 
     // Clear records for next profile

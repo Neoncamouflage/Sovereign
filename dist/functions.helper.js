@@ -183,8 +183,8 @@ const helper = {
         let walkables = [STRUCTURE_ROAD,STRUCTURE_CONTAINER];
         let lookAt
         // Check the terrain in a 3x3 area centered on the target position
-        for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
+        for(let dy = -1; dy <= 1; dy++) {
+            for(let dx = -1; dx <= 1; dx++) {
                 const x = targetPosition.x + dx;
                 const y = targetPosition.y + dy;
                 if(checkConstructed){

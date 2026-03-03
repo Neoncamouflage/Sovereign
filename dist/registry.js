@@ -53,7 +53,7 @@ const registry = {
         for(let each of spawnQueue){
             qprint+=`${each.memory.job || each.memory.role} - ${each.sev}\n`
         }
-        //console.log(qprint)
+        console.log(qprint)
         //Sort the queue's keys based on severity
         spawnQueue.sort((a, b) => b.sev - a.sev);
         
@@ -79,14 +79,17 @@ const registry = {
                 [body,cost] = getBody(energyRemaining,newCreep.memory.role,room,(newCreep.memory.job || 'default'),fiefCreeps,newCreep)
                 //If cost is -1, log the body error and continue
                 if(cost == -1){
-                    //console.log(body);
+                    //console.log("Body error",JSON.stringify(body));
                     continue;
                 }
                 newCreep.body = body
             }
 
             //Warden activation means no civilian creep spawning
-            if(heap.wardens && heap.wardens[room.name] && (['mineralHarvester'].includes(newCreep.memory.job) || ['miner','repair','claimer'].includes(newCreep.memory.role))) continue
+            if(heap.wardens && heap.wardens[room.name] && (['mineralHarvester'].includes(newCreep.memory.job) || ['miner','repair','claimer'].includes(newCreep.memory.role))){
+                //console.log("Warden active in room trying to spawn civilian creep",room.name);
+                continue;
+            }
             
             
             //Check if spawn has energy
@@ -94,8 +97,18 @@ const registry = {
             if(energyRemaining >= cost){
                 let nextSpawn = freeSpawns.shift();
                 //If spawning, continue
-                if(!nextSpawn || nextSpawn.spawning) continue;
-                let newName = this.nameRef[newCreep.memory.job] ? this.nameRef[newCreep.memory.job]+' '+helper.getName()+' of House '+room.name : this.nameRef[newCreep.memory.role]+' '+helper.getName()+' of House '+room.name;
+                if(!nextSpawn || nextSpawn.spawning){
+                    //console.log("No spawns free");
+                    continue
+                }
+                let newName;
+                goodName = false;
+                while(!goodName){
+                    let houseName = Memory.kingdom.fiefs[room.name].house || 'Contested';
+                    let jobTitle = this.nameRef[newCreep.memory.job] ? this.nameRef[newCreep.memory.job] : this.nameRef[newCreep.memory.role]
+                    newName = jobTitle +' '+helper.getName()+' of '+room.name+', House '+houseName;
+                    if(!Game.creeps[newName]) goodName = true;
+                }
                 //Assign a fief if one isn't provided or is invalid
                 if(!newCreep.memory.fief || !Memory.kingdom.fiefs[newCreep.memory.fief]){
                     newCreep.memory.fief = room.name;
@@ -115,10 +128,11 @@ const registry = {
                     for(let val of Object.keys(spawnWaits[room.name])){
                         spawnWaits[room.name][val] = 0;
                     }
-                    
+                    break;
                 } 
                 if(spawnTry != OK){
                     chronicle.log(`Failed spawn: Error ${spawnTry}. Creep:${JSON.stringify(newCreep)}`,'registry',1);
+                    break;
                 }
                 
                 //If no more free spawns, break
@@ -126,10 +140,11 @@ const registry = {
             }
             //If we're trying to spawn something too big for the room capacity, continue to the next one
             else if(room.energyCapacityAvailable < cost){
-                chronicle.log(`${room.name} - Registry trying to spawn a creep too large for the room.`,'registry',1);
+                chronicle.log(`${room.name} - Registry trying to spawn a creep too large for the room. ${JSON.stringify(newCreep)}`,'registry',1);
                 continue;
             }
             else{
+                //console.log("Room not yet at energy capacity to spawn. Cost:",cost,"Creep:",JSON.stringify(newCreep))
                 //Focusing on priority. If we can't build the top priority creep yet, break and we wait
                 //Increment how many times this creep has waited
                 spawnWaits[room.name][newCreep.memory.role] += 1;
@@ -261,7 +276,7 @@ function getManAtArms(room,plan){
     newBody.push(...parts);
     totalCost += setCost;
     let cap = 2;
-    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50 && i <= cap; i++) {
+    for(let i = 1; i < maxParts && newBody.length + parts.length <= 50 && i <= cap; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
@@ -320,7 +335,7 @@ function getSettler(energyRemaining,room) {
     let newBod = [];
 
     // Manually concatenate arrays to avoid `.flat()`
-    for (let i = 0; i < mult; i++) {
+    for(let i = 0; i < mult; i++) {
         newBod = newBod.concat(parts);
         if (newBod.length >= 50) {
             newBod = newBod.slice(0, 50);
@@ -382,7 +397,7 @@ function getSapper(energyRemaining,room){
     newBody.push(...parts);
     totalCost += setCost;
 
-    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+    for(let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
@@ -401,7 +416,7 @@ function getArcher(energyRemaining,room,plan){
     newBody.push(...parts);
     totalCost += setCost;
 
-    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+    for(let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
@@ -420,7 +435,7 @@ function getPikeman(energyRemaining,room,plan){
     newBody.push(...parts);
     totalCost += setCost;
 
-    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
+    for(let i = 1; i < maxParts && newBody.length + parts.length <= 50; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
@@ -441,7 +456,7 @@ function getSkirmisher(energyRemaining,room,plan){
     newBody.push(...parts);
     totalCost += setCost;
     let cap = 2;
-    for (let i = 1; i < maxParts && newBody.length + parts.length <= 50 && i <= cap; i++) {
+    for(let i = 1; i < maxParts && newBody.length + parts.length <= 50 && i <= cap; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
@@ -454,26 +469,30 @@ function getHauler(energyRemaining,room,fiefCreeps){
     //If at least 3 of the holding roads are done, or less if there's not that many remotes, 2c1m is approved
     let roadsDone = Object.values(Memory.kingdom.fiefs[room.name].roadsDone||{}).reduce((sum,each)=>sum+each,0) >= Math.min(Object.values(Memory.kingdom.fiefs[room.name].roadsDone||{}).length,3);
     let parts = roadsDone && room.controller.level >=4 ? [MOVE, CARRY, CARRY] : [MOVE,CARRY];
-    let partsCap = (()=>{
-        if(global.cpuAverage/Game.cpu.limit > 90) return 36;            //Large creeps if over 90% CPU use
-        if(parts.length == 2 || room.controller.level == 8) return 20;  //Need to remember why I added this
-        if(room.controller.level == 2) return 6;
-        if(room.controller.level == 3) return 8;
+    let partsCap = (()=>{ //Caps total parts
+        if(global.cpuAverage/Game.cpu.limit > .90) return 36;            //Large creeps if over 90% CPU use
+        //if(parts.length == 2 || room.controller.level == 8) return 20;  //Need to remember why I added this
+        if(!room.storage){
+            //if(Object.keys(Memory.kingdom.fiefs).length == 1) return 6;
+            //else 
+            return 8;
+        }
         return 18;
     })()
-    let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0);
+    let setCost = parts.reduce((acc, part) => acc + BODYPART_COST[part], 0); //Cost of every part in the set
+    //Caps energy spend
     let maxCap = global.cpuAverage > 90 || room.controller.level < 4 ? room.energyCapacityAvailable : Math.ceil(room.energyCapacityAvailable/2)
     //Spawn immediately if we have less than 3 haulers or have waited 3 rounds (9 ticks) to spawn
     let energyAvailable = (fiefCreeps['hauler'] && fiefCreeps['hauler'].length >= 3 && (!spawnWaits[room.name]['hauler'] || spawnWaits[room.name]['hauler'] < 20)) ? maxCap : energyRemaining;
+    
     let cap = Math.min(room.controller.level > 3 ? 1800 : 600, energyAvailable);
-    let maxParts = Math.floor(cap / setCost);
+    let maxParts = Math.min(Math.floor(cap / setCost),Math.floor(partsCap/parts.length));
     let newBody = [];
     let totalCost = 0;
-
     newBody.push(...parts);
     totalCost += setCost;
 
-    for (let i = 1; i < maxParts && newBody.length + parts.length <= partsCap; i++) {
+    for(let i = 1; i < maxParts; i++) {
         newBody.push(...parts);
         totalCost += setCost;
     }
@@ -532,7 +551,7 @@ function getMHarvester(energyRemaining,room,job = 'default'){
     partsCost = newBod.reduce((totalCost, part) => totalCost + BODYPART_COST[part], 0);
     //console.log(newBod)
     if(job == 'remoteHarvest') {
-        for (let i = 0; i < newBod.length; i++) {
+        for(let i = 0; i < newBod.length; i++) {
             if (newBod[i] == WORK) {
                 newBod[i] = CARRY;
                 partsCost -= BODYPART_COST[WORK] - BODYPART_COST[CARRY];

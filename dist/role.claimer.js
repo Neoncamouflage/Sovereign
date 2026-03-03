@@ -26,7 +26,7 @@ const roleClaimer = {
                 return;
             }
             var targetRoom = creep.memory.holding;
-            var targetText = 'Tax Collection Ongoing💰'
+            //var targetText = 'Tax Collection Ongoing💰'
             if(creep.room.name != targetRoom){
                     creep.travelTo(new RoomPosition(creep.memory.target.x,creep.memory.target.y,creep.memory.holding));
             }
@@ -47,10 +47,10 @@ const roleClaimer = {
                     if(attempt == ERR_NOT_IN_RANGE) {
                         creep.travelTo(creep.room.controller)
                     }else if(attempt == OK){
-                        if(creep.room.controller.sign && creep.room.controller.sign.text && creep.room.controller.sign.text != targetText){
-                            creep.signController(creep.room.controller,targetText)
-                            creep.memory.signed = true;
-                        }
+                        //if(creep.room.controller.sign && creep.room.controller.sign.text && creep.room.controller.sign.text != targetText){
+                            //creep.signController(creep.room.controller,targetText)
+                            //creep.memory.signed = true;
+                        //}
                         //console.log(attempt)
                     }
                     

@@ -16,6 +16,141 @@ Creep.prototype.say = function(message, public = true) {
     return this._say(message, public);
 };
 
+if (!Creep.prototype.getStoreUsed) {
+    Creep.prototype.getStoreUsed = function (resource) {
+        return vstoreUsed(this, resource);
+    };
+}
+
+if (!Creep.prototype.getStoreObj) {
+    Creep.prototype.getStoreObj = function () {
+        return vstoreObj(this);
+    };
+}
+
+if (!Creep.prototype.getStoreFree) {
+    Creep.prototype.getStoreFree = function () {
+        return vstoreFree(this);
+    };
+}
+
+// ---- transfer override ----
+if (!Creep.prototype._transfer) {
+    Creep.prototype._transfer = Creep.prototype.transfer;
+    Creep.prototype.transfer = function (target, resourceType, amount) {
+        let current = this.store.getUsedCapacity(resourceType);
+        let amt = (amount !== undefined) ? amount : current;
+        if (amt < 0) amt = 0;
+        let targetCurrent = 0;
+        if(target instanceof Creep){
+            targetCurrent = target instanceof Creep ? target.getStoreFree(resourceType) : target.store.getFreeCapacity(resourceType);
+            amt = Math.min(current,amt, targetCurrent);
+            let r = this._transfer(target, resourceType, amt);
+            if (r === OK && amt > 0) vstoreUpdate(this, 'transfer', resourceType, amt);
+            return r;
+        }
+
+        targetCurrent = target.store.getFreeCapacity(resourceType);
+        amt = Math.min(current,amt, targetCurrent);
+        if (target instanceof Structure && [STRUCTURE_EXTENSION, STRUCTURE_SPAWN].includes(target.structureType)) {
+            const fiefData = heap.fiefs[this.room.name];
+            if (fiefData && fiefData.extensionMap && fiefData.extensionMap.has(target.id) && amt >= targetCurrent) {
+                const updateSpots = fiefData.extensionMap.get(target.id);
+                
+                //Loop through all spots and remove the extensions from their maps
+                for(let spot of updateSpots) {
+                    // Check both maps and handle consistently
+                    const maps = [
+                        { name: 'sourceRefills', map: fiefData.sourceRefills },
+                        { name: 'otherRefills', map: fiefData.otherRefills }
+                    ];
+                    
+                    for (const mapData of maps) {
+                        if (mapData.map && mapData.map.has(spot)) {
+                            const extensions = mapData.map.get(spot);
+                            extensions.delete(target.id);
+                            
+                            //If the set is now empty just delete the key from the map entirely
+                            if (extensions.size === 0) {
+                                mapData.map.delete(spot);
+                                
+                                //Clear creep memory if this was the target spot
+                                if (this.memory.refillTarget === spot) {
+                                    delete this.memory.refillTarget;
+                                }
+                            } else {
+                                mapData.map.set(spot, extensions);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        //Only include amount if it was included originally
+        let res = this._transfer(target, resourceType, amt);
+        if (res === OK && amt > 0) vstoreUpdate(this, 'transfer', resourceType, amt);
+        //Return the response
+        return res;
+    };
+}
+
+// ---- withdraw override ----
+if (!Creep.prototype._withdraw) {
+    Creep.prototype._withdraw = Creep.prototype.withdraw;
+    Creep.prototype.withdraw = function (target, resourceType, amount) {
+
+        var free = this.getStoreFree();
+
+        // target might not have a store (defensive)
+        var available = 0;
+        if (target && target.store && target.store.getUsedCapacity) {
+            available = target.store.getUsedCapacity(resourceType);
+        }
+
+        var amt = (amount !== undefined) ? amount : available;
+        if (amt > available) amt = available;
+        if (amt > free) amt = free;
+        if (amt < 0) amt = 0;
+
+        var r = this._withdraw(target, resourceType, amount);
+        if (r === OK && amt > 0) vstoreUpdate(this, 'withdraw', resourceType, amt);
+        return r;
+    };
+}
+
+// ---- drop override ----
+if (!Creep.prototype._drop) {
+    Creep.prototype._drop = Creep.prototype.drop;
+    Creep.prototype.drop = function (resourceType, amount) {
+
+        var current = this.getStoreUsed(resourceType);
+        var amt = (amount !== undefined) ? amount : current;
+        if (amt > current) amt = current;
+        if (amt < 0) amt = 0;
+
+        var r = this._drop(resourceType, amount);
+        if (r === OK && amt > 0) vstoreUpdate(this, 'drop', resourceType, amt);
+        return r;
+    };
+}
+
+// ---- pickup override ----
+if (!Creep.prototype._pickup) {
+    Creep.prototype._pickup = Creep.prototype.pickup;
+    Creep.prototype.pickup = function (target) {
+
+        var rt = (target && target.resourceType) ? target.resourceType : null;
+        var free = this.getStoreFree();
+        var amt = (target && target.amount) ? target.amount : 0;
+        if (amt > free) amt = free;
+        if (amt < 0) amt = 0;
+        var r = this._pickup(target);
+        if (r === OK && rt && amt > 0) vstoreUpdate(this, 'pickup', rt, amt);
+        return r;
+    };
+}
+
+
 //#region Granary Modifications
 //#endregion
 
@@ -55,65 +190,29 @@ if (!Creep.prototype._build) {
         let buildCall = this._build(target);
         //If success, register the expense
         if(buildCall == OK) granary.adjustIncome(this,tEnergy)
-
-        return buildCall
-    }
-}
-
-if (!Creep.prototype._transfer) {
-    //Store the original method
-    Creep.prototype._transfer = Creep.prototype.transfer;
-
-    //Create our new function
-    Creep.prototype.transfer = function(target, resourceType, amount) {
-        //If we're refilling energy then update the maps
-        if (target instanceof Structure && [STRUCTURE_EXTENSION, STRUCTURE_SPAWN].includes(target.structureType)) {
-            const fiefData = heap.fiefs[this.room.name];
-            
-            if (fiefData && fiefData.extensionMap && fiefData.extensionMap.has(target.id)) {
-                const updateSpots = fiefData.extensionMap.get(target.id);
-                
-                //Loop through all spots and remove the extensions from their maps
-                for (let spot of updateSpots) {
-                    // Check both maps and handle consistently
-                    const maps = [
-                        { name: 'sourceRefills', map: fiefData.sourceRefills },
-                        { name: 'otherRefills', map: fiefData.otherRefills }
-                    ];
-                    
-                    for (const mapData of maps) {
-                        if (mapData.map && mapData.map.has(spot)) {
-                            const extensions = mapData.map.get(spot);
-                            extensions.delete(target.id);
-                            
-                            //If the set is now empty just delete the key from the map entirely
-                            if (extensions.size === 0) {
-                                mapData.map.delete(spot);
-                                
-                                //Clear creep memory if this was the target spot
-                                if (this.memory.refillTarget === spot) {
-                                    delete this.memory.refillTarget;
-                                }
-                            } else {
-                                mapData.map.set(spot, extensions);
-                            }
-                        }
+        //If invalid, see if there's a creep on it and try to get them to move
+        if(buildCall == ERR_INVALID_TARGET && target){
+            let blockers = this.room.lookForAt(LOOK_CREEPS,target.pos);
+            if(blockers.length){
+                let crp = blockers[0];
+                let intent = Traveler.getMovementIntent(crp.name);
+                //If they aren't planning to move, make them
+                if(!intent){
+                    if(crp.pos.getRangeTo(this.room.controller) > 3){
+                        crp.travelTo(this.room.controller);
+                    }
+                    else if(crp.room.storage && crp.pos.getRangeTo(crp.room.storage) > 3){
+                        crp.travelTo(crp.room.storage);
+                    }
+                    //If no landmark to travel to, just randomly try to move until we're out of the way
+                    else{
+                        crp.move(randomInt(7)+1)
                     }
                 }
             }
         }
-        
-        //Call the actual transfer
-        let transferCall;
-        //Only include amount if it was included originally
-        if (amount !== undefined) {
-            transferCall = this._transfer(target, resourceType, amount);
-        } else {
-            transferCall = this._transfer(target, resourceType);
-        }
-        
-        //Return the response
-        return transferCall;
+
+        return buildCall
     }
 }
 
@@ -186,26 +285,7 @@ Creep.prototype.respawn = function({ticks=250,sev=50} = {}) {
         });
     }
 }
-//Gets a resource up to a target amount
-//If unspecified, resource is energy, amount is full carry
-Creep.prototype.goGet = function (target,resourceType, amount) {
-    resourceType = resourceType || RESOURCE_ENERGY;
-    amount = amount || this.store.getCapacity();
-    //If we're too far away, go to the target
-    if(this.pos.getRangeTo(target) > 1){
-        this.travelTo(target);
-    }
-    //Otherwise, see if free capacity is enough to get us up to the amount
-    //We do this in case we're carrying other things we don't want to lose
-    else if(this.store.getFreeCapacity() >= amount - this.store.getUsedCapacity(resourceType)){
-        //If so, take it
-        this.withdraw(target,resourceType,amount - this.store.getUsedCapacity(resourceType))
-    }
-    //If not, see if we would have enough but there's other stuff
-    //else if(this.store.getCapacity() >= amount){
 
-    //}
-};
 
 //Empties store into storage or terminal
 Creep.prototype.emptyStore = function () {

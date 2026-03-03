@@ -35,7 +35,7 @@ const architectPlanner = {
             
         }
         //Normalize scores, inverting when smaller scores are better, and apply weights
-        for (let regionID of regionIDs) {
+        for(let regionID of regionIDs) {
             let scoredRegion = {id:regionID}
             let r = watershedData[regionID];
             scoredRegion.normSize = minMaxNormalize(r.tiles.length, maxSize, minSize);
@@ -230,7 +230,7 @@ const architectPlanner = {
         while (blobCount < MIN_BLOB && frontier.length){
             //Pick best frontier tile
             let bestIdx = 0;
-            for (let i = 1; i < frontier.length; i++) {
+            for(let i = 1; i < frontier.length; i++) {
                 if (frontier[i].score > frontier[bestIdx].score) bestIdx = i;
             }
             const best = frontier.splice(bestIdx, 1)[0];
@@ -282,14 +282,59 @@ const architectPlanner = {
             exit:       { matrix: roomData.exitCM,       min: Infinity,  max: -Infinity, geneIndex: 0, invert: false , defaultMax: roomData.exitCMMax },
             controller: { matrix: roomData.controllerCM, min: Infinity,  max: -Infinity, geneIndex: 1, invert: true , defaultMax: roomData.controllerCMMax  },
         };
-
-        //Wrap the core location in roads
-
+        //Can hardcode this if we need to shave CPU but best not to assume
+        const STRUCTURES_NEEDED = (() => {
+            let totalStructs = 0;
+            for(const struct of Object.keys(CONTROLLER_STRUCTURES)){
+                if([STRUCTURE_ROAD,STRUCTURE_WALL,STRUCTURE_CONTAINER,STRUCTURE_RAMPART].includes(struct)) continue;
+                totalStructs += CONTROLLER_STRUCTURES[struct][8];
+            }
+            return totalStructs;
+        });
+        let roadCM = new PathFinder.CostMatrix;
+        let sourcePaths = {};
+        let roadTiles = [];
+        //Wrap the core location in roads.
+        for(let x=-1;x<=1;x++){
+            for(let y=-1;y<=1;y++){
+                if(x==0 && y==0)continue;
+                let newX = planData.coreSpot.x + x;
+                let newY = planData.coreSpot.y + y;
+                if(roomData.terrain.get(newX,newY) == TERRAIN_MASK_WALL) continue;
+                addRoad(newX,newY);
+            }
+        }
+        roadCM.set(planData.coreSpot.x,planData.coreSpot.y,255);
         //Route roads to the source(s) and controller
-
+        let corePos = new RoomPosition(planData.coreSpot.x,planData.coreSpot.y,roomData.roomName);
+        let targets = [...roomData.sources,roomData.controller]
+        for(const source of targets){
+            let res = PathFinder.search(corePos,{pos:new RoomPosition(source.x,source.y,roomData.roomName),range:1},{
+                plainCost:2,
+                swampCost:2,
+                roomCallback:function() {
+                    return roadCM;
+                    }
+            });
+            for(const spot of res.path){
+                addRoad(spot.x,spot.y);
+            }
+            //If it has an ID it's a controller, so we add it to the source paths
+            if(source.id){
+                sourcePaths[source.id] = res.path;
+            }
+        }
         //Route road to mineral and remote sources
 
         //Count available structure tiles and expand
+
+        function addRoad(x,y){
+            //Only add unset roads, no duplicates
+            if(roadCM.get(x,y) == 0){
+                roadCM.set(x,y,1);
+                roadTiles.push({x,y});
+            }
+        }
     },
     planStructureAssignment: function(config,roomData,planData,assignBlock){
 

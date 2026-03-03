@@ -1,7 +1,7 @@
 //Get closest by range functionality across rooms
 RoomPosition.prototype.getClosestByTileDistance = function(objArray){
     let minDistance = Infinity;
-    let closestPos = null;
+    let closestObj = null;
 
     objArray.forEach(thisObj => {
         let thisPos = thisObj.pos;
@@ -9,9 +9,9 @@ RoomPosition.prototype.getClosestByTileDistance = function(objArray){
 
         if (distance < minDistance) {
             minDistance = distance;
-            closestPos = thisObj;
+            closestObj = thisObj;
         }
     });
 
-    return closestPos;
+    return closestObj;
 }

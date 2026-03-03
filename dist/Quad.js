@@ -243,7 +243,7 @@ function runAttack(quad,creeps,hostileCreeps,hostileStructs){
             if (quad.roomData.moveCM.get(x, y) != 255 && damageMap < totalHeal && ![0,49].includes(x) && ![0,49].includes(y)) {
                 targetPos = new RoomPosition(x,y,creeps.p1.room.name)
             }
-            for (let { dx, dy } of directions) {
+            for(let { dx, dy } of directions) {
             const newX = x + dx;
             const newY = y + dy;
             const key = `${newX},${newY}`;
@@ -273,10 +273,10 @@ function runAttack(quad,creeps,hostileCreeps,hostileStructs){
         let needsShuffle = false;
         //Get current positions in a format that matches new
         let currentPositions = {};
-        for (let position in creeps) {
+        for(let position in creeps) {
             currentPositions[creeps[position].id] = position;
         }
-        for (let assignment of newPositions) {
+        for(let assignment of newPositions) {
             let currentPosition = currentPositions[assignment.creepId];
             if (currentPosition !== assignment.position) {
                 needsShuffle = true;
@@ -512,7 +512,7 @@ function getFormPos(quad){
             }
 
             // Add neighboring positions to the queue
-            for (let { dx, dy } of directions) {
+            for(let { dx, dy } of directions) {
             const newX = x + dx;
             const newY = y + dy;
             const key = `${newX},${newY}`;
@@ -673,11 +673,11 @@ function optimizePositions(creeps, hostileCreeps, hostileStructs, scores) {
         }
     }
 
-    for (let creepId of creepIds) {
+    for(let creepId of creepIds) {
         let damageScores = scores[creepId];
         scoreMatrix[creepId] = {};
         
-        for (let position of positions) {
+        for(let position of positions) {
             let totalScore = 0;
             let targets = positionTargets[position];
             
@@ -727,7 +727,7 @@ function optimizePositions(creeps, hostileCreeps, hostileStructs, scores) {
       
       for (const perm of QUAD_PERMUTATIONS) {
         let totalScore = 0;
-        for (let i = 0; i < 4; i++) {
+        for(let i = 0; i < 4; i++) {
           const creepId = creepIds[perm[i]];
           totalScore += scoreMatrix[creepId][positions[i]];
         }

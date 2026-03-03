@@ -4,6 +4,7 @@ const fiefPlanner = require('fiefPlanner');
 require('roomVisual');
 const profiler = require('screeps-profiler');
 const supplyDemand = require('supplyDemand');
+const architect = require('architect');
 const granary = require('granary');
 const registry = require('registry');
 const buildRole = require('role.builder');
@@ -41,7 +42,7 @@ const fiefManager = {
         
         let cSites = room.find(FIND_MY_CONSTRUCTION_SITES);
         let mySpawns = room.find(FIND_MY_SPAWNS).map(spawn => spawn.id);
-        let storagePos = fief.roomPlan ? new RoomPosition(fief.roomPlan[4].storage[0].x,fief.roomPlan[4].storage[0].y,room.name) : null;
+        let storagePos = fief.roomPlan && fief.roomPlan[4] && fief.roomPlan[4].storage ? new RoomPosition(fief.roomPlan[4].storage[0].x,fief.roomPlan[4].storage[0].y,room.name) : null;
         let rampartMinimums = {
             4:10000,
             5:50000,
@@ -58,6 +59,7 @@ const fiefManager = {
         fief.spawns = mySpawns;
         let spawns = fief.spawns;
         let [plannedNet,averageNet] = granary.getIncome(room.name);
+        //console.log(room.name,"Planned Income:",plannedNet,"Average Income:",averageNet)
         //Create harvest spot if none exists
         //console.log(room.name,"income",plannedNet,averageNet)
 
@@ -75,6 +77,10 @@ const fiefManager = {
 
             //fief.roomPlanLevel = room.controller.level;
             //console.log(`${room.name} has no room plan!`)
+        }
+        else if(!fief.house){
+            let housePick = randomChoice(Object.values(architect.SPECIES_NAMES));
+            fief.house = housePick[0].toUpperCase() + housePick.slice(1).toLowerCase();
         }
         
 
@@ -169,7 +175,7 @@ const fiefManager = {
 
         }
 
-        if(room.controller.level < 8 && (!heap.travelMatrixes[room.name] || heap.matrixUpdate) && fief.roomPlan){
+        if((!fief.travelRCL || fief.travelRCL < room.controller.level || !heap.travelMatrixes[room.name] || heap.matrixUpdate) && fief.roomPlan){
             getTravelMatrix(room)
         }
 
@@ -180,7 +186,7 @@ const fiefManager = {
         if(Object.keys(buildQueue).length && !cSites.length){
             let toBuild;
             //Spawns > Storage > Towers > Extensions > Roads > Labs
-            let structOrder = [STRUCTURE_SPAWN,STRUCTURE_EXTENSION,STRUCTURE_STORAGE,STRUCTURE_TOWER,STRUCTURE_ROAD,STRUCTURE_LAB,STRUCTURE_CONTAINER,STRUCTURE_LINK,STRUCTURE_EXTRACTOR,STRUCTURE_OBSERVER,STRUCTURE_TERMINAL,STRUCTURE_FACTORY,STRUCTURE_POWER_SPAWN,STRUCTURE_NUKER]
+            let structOrder = [STRUCTURE_SPAWN,STRUCTURE_STORAGE,STRUCTURE_EXTENSION,STRUCTURE_TOWER,STRUCTURE_ROAD,STRUCTURE_LAB,STRUCTURE_CONTAINER,STRUCTURE_LINK,STRUCTURE_EXTRACTOR,STRUCTURE_OBSERVER,STRUCTURE_TERMINAL,STRUCTURE_FACTORY,STRUCTURE_POWER_SPAWN,STRUCTURE_NUKER]
             for(let each of structOrder){
                 //console.log("Checking to build:",each)
                 if(buildQueue[each]){
@@ -301,7 +307,7 @@ const fiefManager = {
                             //If it's a road we don't build until room level 3, then only on swamps til remote roads are done or RCL5.
                             if(building == STRUCTURE_ROAD){
                                 if(roomLevel < 3)continue;
-                                if(!roadsDone && floor != TERRAIN_MASK_SWAMP && room.controller.level <4)continue;
+                                if(!roadsDone && floor != TERRAIN_MASK_SWAMP && room.controller.level <=4)continue;
                             }
                             
                             if(buildQueue[building]){
@@ -583,7 +589,7 @@ const fiefManager = {
             let noHarvs = false;
             let creepSource;
             let targetSources = Object.keys(fief.sources).reduce((obj,key) =>{
-                obj[key] = {harvs:0,power:0,ttlFlag:false};
+                obj[key] = {harvs:0,power:0};
                 return obj;
             },{});
             if(fiefCreeps.harvester){
@@ -591,15 +597,20 @@ const fiefManager = {
                     if(creep.memory.job == 'mineralHarvester' || creep.memory.job == 'remoteHarvest') return;
                     creepSource = creep.memory.target;
                     targetSources[creepSource].harvs++;
-                    targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
+                    //We only add power if we aren't about to die, so it queues a respawn
                     let srcObj = Game.getObjectById(creepSource);
                     if(storagePos && srcObj){
                         let srcObjRange = storagePos.getRangeTo(srcObj) 
                         let creepSpawnLead = CREEP_SPAWN_TIME*creep.body.length
-                        if (creep.ticksToLive < srcObjRange + creepSpawnLead && !creep.memory.respawn){
-                            targetSources[creepSource].ttlFlag = creep.id;
+                        if (creep.ticksToLive > (srcObjRange + creepSpawnLead)){
+                            targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
                         }
-                    };
+                    }
+                    else{
+                        targetSources[creepSource].power += creep.getActiveBodyparts(WORK) * HARVEST_POWER;
+                    }
+                    
+                    
                 })
             }
             else{
@@ -609,16 +620,15 @@ const fiefManager = {
 
             //For each source, see if we have enough harvest power or enough space for a new harvester
             Object.entries(fief.sources).forEach(([sourceID,source])=>{
-                //console.log("CHECKING",sourceID,"Open spots",source.openSpots,'Harvs',targetSources[sourceID].harvs,'Power',targetSources[sourceID].power,'Flag',targetSources[sourceID].ttlFlag)
+                //console.log("CHECKING",sourceID,"Open spots",source.openSpots,'Harvs',targetSources[sourceID].harvs,'Power',targetSources[sourceID].power)
                 //If there's no room, or if we have enough harvest power, return
 
-                if((source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= SOURCE_ENERGY_CAPACITY/ENERGY_REGEN_TIME) && !targetSources[sourceID].ttlFlag) return;
-
+                if(source.openSpots <= targetSources[sourceID].harvs || targetSources[sourceID].power >= SOURCE_ENERGY_CAPACITY/ENERGY_REGEN_TIME) return;
                 //If not enough strength and we have room, order a new harvester. Higher sev if it's closest.
                 let sev = noHarvs == true ? 80 : 55;
                 if(source.closest) sev+= 1
                 let opts = {sev:sev,memory:{role:'harvester',job:'energyHarvester',harvestSpot:{x:source.spotx,y:source.spoty,id:sourceID},fief:room.name,target:sourceID,status:'spawning',preflight:false}}
-                if(targetSources[sourceID].ttlFlag) opts.respawn = targetSources[sourceID].ttlFlag
+                //if(targetSources[sourceID].ttlFlag) opts.respawn = targetSources[sourceID].ttlFlag
                 //console.log("Adding harv to spawnQueue. Opts:")
                 //console.log(JSON.stringify(opts))
                 registry.requestCreep(opts)
@@ -660,7 +670,7 @@ const fiefManager = {
 
             //Remote reps
             if(fief.repRequest){
-                if(room.controller.level >= 4 && !fiefCreeps.repair || !fiefCreeps.repair.length){
+                if(room.controller.level >= 4 && (!fiefCreeps.repair || !fiefCreeps.repair.length)){
                     registry.requestCreep({sev:37,memory:{role:'repair',fief:room.name,status:'spawning',preflight:false}})
                 }
                 //else if(fiefCreeps.repair.length == 1 && damagedStructures.length && damagedStructures.length > ){
@@ -698,8 +708,8 @@ const fiefManager = {
                 let fortFlag = false;
                 //Builder logic
                 //We no longer split the sites since our tower builds them up to minimum levels
-                if(cSites.length && fiefCreeps.builder){
-                    let builds = fiefCreeps.builder.filter(crp => !['fortifier','remoteBuild'].includes(crp.memory.job))
+                if(cSites.length){
+                    let builds = fiefCreeps.builder ? fiefCreeps.builder.filter(crp => !['fortifier','remoteBuild'].includes(crp.memory.job)) : {}
                     if(!builds.length)registry.requestCreep({sev:32,memory:{role:'builder',fief:room.name,status:'spawning',preflight:false}})
                 }
                 /*if(cSites.length){
@@ -769,7 +779,32 @@ const fiefManager = {
             }
             //Don't need to check for harvesters because we use strict priorities now
             else if(!fief.holdUpgrade || room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE[roomLevel]/2){
+                //Up to 1/3 of scribes will be builders
+                if(cSites.length){
+                    let newScribes = [];
+                    let oldScribes = heap.fiefs[room.name].scribes || [];
+                    for(let oldID of oldScribes){
+                        let scribe = Game.getObjectById(oldID);
+                        if(scribe && scribe.ticksToLive >= (scribe.body.length * CREEP_SPAWN_TIME)*2)newScribes.push(scribe.id);
+                    }
+                    
+                    let liveScribes = fiefCreeps.upgrader && fiefCreeps.upgrader.filter(crp => 'starterUpgrader' == crp.memory.job) || [];
+                    let newCount = newScribes.length;
+                    let newLimit = Math.max(1,Math.floor(liveScribes.length/3));
+                    //Now if we have fewer than we want, we request more, minimum 1
+                    if(newCount < newLimit && liveScribes.length > newCount){
+                        for(let scr of liveScribes){
+                            if(!newScribes.includes(scr.id)){
+                                newCount++
+                                newScribes.push(scr.id);
+                            }
+                            if(newCount>= newLimit) break;
+                        }
+                    }
+                    heap.fiefs[room.name].scribes = newScribes;
                 
+                }
+                //console.log("Max upgraders:",upMax)
                 //If no upgraders(who are also builders at this stage), and we're below a default cap
                 if(!fiefCreeps.upgrader){
                     if(upMax == 0) return;
@@ -778,10 +813,12 @@ const fiefManager = {
                     //If we passed all, request an upgrader
                     registry.requestCreep({sev:(!fiefCreeps.upgrader || fiefCreeps.upgrader.length) ? 35 : 50,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
-                else if(plannedNet > 0 && averageNet > 0){
+                else if(averageNet > 20){
                     //Make sure they're all doing something. If so we can justify another
                     let workingUps = fiefCreeps.upgrader.filter(up => up.store.getUsedCapacity() > 0);
+                    //console.log("Working upgraders:",workingUps,"Total upgraders:",fiefCreeps.upgrader.length)
                     if(workingUps.length == fiefCreeps.upgrader.length && fiefCreeps.upgrader.length < upMax){
+                        //console.log("Requesting upgrader")
                         registry.requestCreep({sev:35,memory:{role:'upgrader',job:'starterUpgrader',fief:room.name,status:'spawning',preflight:false}})
                     }
 
@@ -860,7 +897,7 @@ const fiefManager = {
                     const occupiedLabIDs = Object.keys(fief.labs.boostLabs || {});
 
                     //Update source labs with correct ingredients
-                    for (let i = 0; i < Math.min(2, sourceLabIDs.length); i++) {
+                    for(let i = 0; i < Math.min(2, sourceLabIDs.length); i++) {
                         fief.labs.sourceLabs[sourceLabIDs[i]] = ingredients[i];
                     }
                     
@@ -1406,18 +1443,24 @@ function manageResourceCollection(room) {
     //Retrieve current tasks to check against
     droppedResources.forEach(resource => {
         const { id, amount, resourceType } = resource;
-        //Check if this resource is already targeted by an existing task
-        if(resourceType==RESOURCE_ENERGY && amount<50) return
         //If no active/usable storage, don't pick up non energy resources
         if(resourceType != RESOURCE_ENERGY && (!room.storage || !room.storage.my)) return
-
+        //Get the distance to calculate decay
+        let targetPos;
+        let plan = Memory.kingdom.fiefs[room.name].roomPlan
+        if(plan) targetPos = new RoomPosition(plan[4].storage[0].x,plan[4].storage[0].y,room.name);
+        if(!targetPos) targetPos = room.controller.pos;
+        if(!targetPos){
+            console.log("No target position for dropped resources in fief")
+            return;
+        }
+        let distance = getTileDistance(targetPos,resource.pos);
         //Details object for the addRequest call
         let details = {
             type: 'pickup',
             targetID: id,
-            amount: amount,
-            resourceType: resourceType,
-            priority: 6
+            amount: amount-distance,
+            resourceType: resourceType
         };
 
         const taskID = supplyDemand.addRequest(room, details);
@@ -1432,7 +1475,6 @@ function manageResourceCollection(room) {
                 targetID: stone.id,
                 amount: amount,
                 resourceType: resource,
-                priority: 6
             };
             supplyDemand.addRequest(room, details);
         });
@@ -1450,8 +1492,7 @@ function manageResourceCollection(room) {
                 type: 'pickup',
                 targetID: canID,
                 amount: can.store[resType],
-                resourceType: resType,
-                priority: 6
+                resourceType: resType
             };
             supplyDemand.addRequest(room, details);
         }
@@ -1612,7 +1653,8 @@ function getTravelMatrix(room){
         }
     }
     for(let str of structs){
-        if(str.structureType == STRUCTURE_ROAD)roads.push(str)
+        //Roads only once we're at RCL4, otherwise they aren't built
+        if(str.structureType == STRUCTURE_ROAD && room.controller.level >= 4)roads.push(str)
         if(str.structureType == STRUCTURE_SPAWN && str.name && ['Spawn1','Origin Keep'].includes(str.name)) oSpawn = str;
     }
     //Add current roads to matrix
@@ -1625,7 +1667,7 @@ function getTravelMatrix(room){
         console.log("Getting source")
         console.log("source",JSON.stringify(source))
         let route = PathFinder.search(storagePos,{pos:new RoomPosition(source.spotx,source.spoty,room.name),range:1},{
-            plainCost: 5,
+            plainCost: 2,
             swampCost: 10,
             roomCallback:function(roomName){
                 return fiefCM;
@@ -1637,7 +1679,7 @@ function getTravelMatrix(room){
         }
     }
     let cRoute = PathFinder.search(storagePos,{pos:room.controller.pos,range:1},{
-        plainCost: 5,
+        plainCost: 2,
         swampCost: 10,
         roomCallback:function(roomName){
             return fiefCM;
@@ -1649,7 +1691,7 @@ function getTravelMatrix(room){
     }
     if(oSpawn){
         let oRoute = PathFinder.search(storagePos,{pos:oSpawn.pos,range:1},{
-            plainCost: 5,
+            plainCost: 2,
             swampCost: 10,
             roomCallback:function(roomName){
                 return fiefCM;
@@ -1660,7 +1702,7 @@ function getTravelMatrix(room){
         }  
     }
     //Add holding roads
-    for(let holding of Object.values(Memory.kingdom.holdings)){
+    /*for(let holding of Object.values(Memory.kingdom.holdings)){
         if(holding.homeFief != room.name) continue;
         if(!holding.sources)continue;
         for(let source of Object.values(holding.sources)){
@@ -1670,12 +1712,16 @@ function getTravelMatrix(room){
                 if(spot.roomName == room.name)fiefCM.set(spot.x,spot.y,1)
             }
         }
-    }
-    heap.travelMatrixes[room.name] = fiefCM
+    }*/
+    heap.travelMatrixes[room.name] = fiefCM;
+    Memory.kingdom.fiefs[room.name].travelRCL = room.controller.level;
+    Memory.test.testCM = fiefCM.serialize();
 }
 
 //Builds the main extension map, which has extension IDs for the keys and string coordinates of adjacent roads for values
 function getExtensionMap(room){
+    //Track just the coordinates of fillables
+    let fillableCoords = {}
     //console.log("Getting extension map for",room.name)
     //Create three array variables to hold structures that we find in the room
     let extensions = room.find(FIND_STRUCTURES).filter(str => [STRUCTURE_EXTENSION,STRUCTURE_SPAWN].includes(str.structureType));
@@ -1690,6 +1736,7 @@ function getExtensionMap(room){
     //Get the existing map to build on if it exists, otherwise make a new one from scratch
     let extensionRoadMap =  heap.fiefs[room.name].extensionMap || new Map();
     for(let each of extensions){
+        fillableCoords[(each.pos.x)*50+each.pos.y] = each.id;
         //Set up this extension in the map
         if(!extensionRoadMap.has(each.id))extensionRoadMap.set(each.id,new Set())
         let foundSpot = false;
@@ -1719,6 +1766,7 @@ function getExtensionMap(room){
 
     //Update the map
     heap.fiefs[room.name].extensionMap = extensionRoadMap
+    heap.fiefs[room.name].fillableCoords = fillableCoords;
 }
 
 function getControllerSpots(room, fief) {
@@ -1729,9 +1777,9 @@ function getControllerSpots(room, fief) {
     let planCM = new PathFinder.CostMatrix();
 
     // Mark impassable spots from the room plan
-    for (let [rcl, buildings] of Object.entries(fief.roomPlan)) {
+    for(let [rcl, buildings] of Object.entries(fief.roomPlan)) {
         if (rcl > room.controller.level) break;
-        for (let [building, spots] of Object.entries(buildings)) {
+        for(let [building, spots] of Object.entries(buildings)) {
             for(let spot of spots){
                 if (building != STRUCTURE_ROAD) planCM.set(spot.x, spot.y, 255);
             }
@@ -1780,7 +1828,7 @@ function getControllerSpots(room, fief) {
     
             // Explore neighboring positions if within range 3
             if (range <= 3) {
-                for (let dir of directions) {
+                for(let dir of directions) {
                     let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
                     let posKey = newPos.x + ',' + newPos.y;
     
@@ -1834,7 +1882,7 @@ function getControllerSpots(room, fief) {
     
             // Explore neighboring positions if within range 3
             if (range <= 3) {
-                for (let dir of directions) {
+                for(let dir of directions) {
                     let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
                     let posKey = newPos.x + ',' + newPos.y;
     
@@ -1882,7 +1930,7 @@ function getControllerSpots(room, fief) {
 
         // Explore neighboring positions if within range 3
         if (range <=3) {
-            for (let dir of directions) {
+            for(let dir of directions) {
                 let newPos = new RoomPosition(pos.x + dir.dx, pos.y + dir.dy, room.name);
                 let posKey = newPos.x + ',' + newPos.y;
 

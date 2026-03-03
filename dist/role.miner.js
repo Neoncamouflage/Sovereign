@@ -55,7 +55,8 @@ var roleMiner = {
             }
 
         }
-
+        let pathSpot = holding.sources[targetID].path[holding.sources[targetID].path.length-1]
+        let targetSpot = new RoomPosition(pathSpot.x,pathSpot.y,creep.memory.holding);
         //Otherwise move to position
         if(creep.memory.status != 'harvesting'){
             /*if(creep.memory.doRepair){
@@ -87,8 +88,6 @@ var roleMiner = {
             //Large creeps want their spot. Small creeps just go to the source.
             //Large creeps are immobile once placed, small are not
             if(creep.getActiveBodyparts(WORK) >=5){
-                let pathSpot = holding.sources[targetID].path[holding.sources[targetID].path.length-1]
-                let targetSpot = new RoomPosition(pathSpot.x,pathSpot.y,creep.memory.holding);
                 if(creep.pos.isEqualTo(targetSpot)){
                     creep.memory.status = 'harvesting';
                     creep.memory.stay = true;
@@ -175,12 +174,16 @@ var roleMiner = {
                             creep.room.createConstructionSite(creep.pos,STRUCTURE_CONTAINER) 
                         }
                     }
-                    else{
+                    else if(creep.pos.isEqualTo(targetSpot)){
                         creep.build(cSite[0])
                         creep.repping = true;
                     }
                 }
             }
+        }
+        //If we got moved, move back
+        if(creep.getActiveBodyparts(WORK) >=5 && !creep.pos.isEqualTo(targetSpot)){
+            creep.travelTo(targetSpot)
         }
         //Get energy for repairing
         if(creep.repping){

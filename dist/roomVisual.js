@@ -26,7 +26,7 @@ const colors = {
     let c2 = Math.cos(angle);
     let s2 = Math.sin(angle);
   
-    for (let i = 0; i < 5; ++i) {
+    for(let i = 0; i < 5; ++i) {
       result.push([0.0, 0.0]);
       result.push([x, y]);
       result.push([x * c1 - y * s1, x * s1 + y * c1]);

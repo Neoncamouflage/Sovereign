@@ -673,7 +673,7 @@ function buildPopulationIndex(pop) {
     const idx = [];
     for (const k of keys) {
         const arr = pop[k];
-        for (let i = 0; i < arr.length; i++) {
+        for(let i = 0; i < arr.length; i++) {
             idx.push({ k, i });
         }
     }
@@ -820,7 +820,7 @@ function updateGeneration(config){
         let offspring = [];
         let currentBlock = 0;
         let currentParent = randomInt(1);
-        for (let i = 0; i < p1Genes.length; i++) {
+        for(let i = 0; i < p1Genes.length; i++) {
             //If we've passed the boundary for the current block, move to the next block.
             if (currentBlock < blockLimits.length && i > blockLimits[currentBlock]) {
               currentBlock++;
@@ -864,7 +864,7 @@ function updateGeneration(config){
         //Small chance to mutate all genes in a random block
         if (Math.random() < blockMutationRate) {
             const [start, end] = blocks[Math.floor(Math.random() * blocks.length)];
-            for (let i = start; i <= end; i++) {
+            for(let i = start; i <= end; i++) {
                 const [min, max] = GENE_LIMITS[i];
                 const range = max - min;
                 const delta = randombase() * range * maxMutationMagnitude;
@@ -873,7 +873,7 @@ function updateGeneration(config){
         }
 
         //Small chance for any gene to be mutated
-        for (let i = 0; i < genes.length; i++) {
+        for(let i = 0; i < genes.length; i++) {
             if (Math.random() >= mutationRate) continue;
 
             const [min, max] = GENE_LIMITS[i];
@@ -970,11 +970,11 @@ function generateRoomPlan(config,roomData){
     let roadBlock = subject.slice(GENE_BLOCKS.ROAD[0],GENE_BLOCKS.ROAD[1]+1);
     let mineralRoads = modeBlock[1];
     let remoteRoads = modeBlock[2];
-    //planData = architectPlanner.planRoads(config,roomData,planData,roadBlock,mineralRoads,remoteRoads);
+    planData = architectPlanner.planRoads(config,roomData,planData,roadBlock,mineralRoads,remoteRoads);
 
     //Assign structures
     //Special considerations for assigning structures:
-    //Need to return source lab locations so we can buid those first
+    //Need to return source lab locations so we can build those first
     //Need to plan links next to sources early so they don't get filled by extensions
     chronicle.log(`Running assignment.`,'architect.generateRoomPlan()',4);
     let assignBlock = subject.slice(GENE_BLOCKS.ASSN[0],GENE_BLOCKS.ASSN[1]+1);
@@ -1114,8 +1114,8 @@ const architect = {
             for(let each of this.data.sources){
                 matrixes.push(architectMatrixes.getDistanceMap(terrain,[each])[0]);
             }
-            for (let x = 0; x < 50; x++) {
-                for (let y = 0; y < 50; y++) {
+            for(let x = 0; x < 50; x++) {
+                for(let y = 0; y < 50; y++) {
                     if(terrain.get(x,y) == TERRAIN_MASK_WALL) continue;
                     totalDist = 0;
                     for(let each of matrixes){

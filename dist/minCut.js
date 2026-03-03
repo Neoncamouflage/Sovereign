@@ -88,7 +88,7 @@ const EIGHT_DELTA = [
   function minCutToExit(sources, costMap) {
 	// an array indicating whether a point is at the exit or near the exit
 	const exit = new Uint8Array(MAX_PT)
-	for (let i = 0; i < 49; ++i) {
+	for(let i = 0; i < 49; ++i) {
 	  for (const [x, y] of [
 		[i, 0],
 		[49, i],
@@ -119,8 +119,8 @@ const EIGHT_DELTA = [
 	// location, while 8 means the edge goes from s-node to d-node or vice versa
 	const capacityMap = new Int32Array(1 << 17)
 	capacityMap.fill(0)
-	for (let y = 0; y < 50; ++y) {
-	  for (let x = 0; x < 50; ++x) {
+	for(let y = 0; y < 50; ++y) {
+	  for(let x = 0; x < 50; ++x) {
 		if (costMap.get(x, y) == 255) {
 		  continue
 		}
@@ -133,7 +133,7 @@ const EIGHT_DELTA = [
   
 		// setting up the capacity of the edges from d-node to s-nodes of the
 		// surrounding locations
-		for (let dir = 0; dir < EIGHT_DELTA.length; ++dir) {
+		for(let dir = 0; dir < EIGHT_DELTA.length; ++dir) {
 		  const np = pointAdd({ x, y }, EIGHT_DELTA[dir]) // next point
 		  if (!isPointInRoom(np)) {
 			continue
@@ -204,7 +204,7 @@ const EIGHT_DELTA = [
 		const pidx = opidx & PT_MASK // the packed location of the node
 		const p = calcPt(pidx)
 		const npCounterpartFlag = (opidx ^ D_NODE) & D_NODE
-		for (let dir = 0; dir < EIGHT_DELTA.length; ++dir) {
+		for(let dir = 0; dir < EIGHT_DELTA.length; ++dir) {
 		  if (capacityMap[opidx | (dir << DIR_SHIFT)] == 0) {
 			continue
 		  }
@@ -270,7 +270,7 @@ const EIGHT_DELTA = [
 	  let minCapacity = Infinity
 	  let highestPt = -1 // the closest node in the path to the sources, where the edge from it is one of the minimum capacity edges
 	  // we will start from here to find all the nodes whose reachability from the sources changes
-	  for (let res = last[calcIdx(p.x, p.y)]; res != -1; ) {
+	  for(let res = last[calcIdx(p.x, p.y)]; res != -1; ) {
 		const l = res & 0xffff
 		const d = res >> 16
 		const capacity = capacityMap[l | (d << DIR_SHIFT)]
@@ -282,7 +282,7 @@ const EIGHT_DELTA = [
 	  }
   
 	  // step 1.b: loosen the edges
-	  for (let res = last[calcIdx(p.x, p.y)]; res != -1; ) {
+	  for(let res = last[calcIdx(p.x, p.y)]; res != -1; ) {
 		const l = res & 0xffff
 		const d = res >> 16
 		capacityMap[l | (d << DIR_SHIFT)] -= minCapacity
@@ -313,7 +313,7 @@ const EIGHT_DELTA = [
 		const p = calcPt(pidx)
 		const npCounterpartFlag = (opidx ^ D_NODE) & D_NODE
   
-		for (let dir = 0; dir < EIGHT_DELTA.length; ++dir) {
+		for(let dir = 0; dir < EIGHT_DELTA.length; ++dir) {
 		  const np = pointAdd(p, EIGHT_DELTA[dir])
 		  const onpidx = calcIdx(np.x, np.y) | npCounterpartFlag
   
@@ -328,7 +328,7 @@ const EIGHT_DELTA = [
 	  // step 3: add those nodes that can goes forward back to bfsQ
 	  while (readdQ.length) {
 		const opidx = readdQ.shift()
-		for (let dir = 0; dir < EIGHT_DELTA.length + 1; ++dir) {
+		for(let dir = 0; dir < EIGHT_DELTA.length + 1; ++dir) {
 		  const [onpidx, rd] = revEdge(opidx, dir)
 		  const pidx = onpidx & PT_MASK
 		  if (
@@ -345,7 +345,7 @@ const EIGHT_DELTA = [
 	}
   
 	// the main loop, loosen the graph until we can't find a path from the sources to the sinks
-	for (let p = bfs(); p != null; p = bfs()) {
+	for(let p = bfs(); p != null; p = bfs()) {
 	  loosen(p)
 	}
   
@@ -395,8 +395,8 @@ const EIGHT_DELTA = [
 	cm._bits.fill(255)
 	let terrain = Game.map.getRoomTerrain(roomName);
 	
-	for (let y = 0; y < 50; ++y) {
-	  for (let x = 0; x < 50; ++x) {
+	for(let y = 0; y < 50; ++y) {
+	  for(let x = 0; x < 50; ++x) {
 		if (terrain.get(x, y) !== TERRAIN_MASK_WALL && x >= 0 && x < 50 && y >= 0 && y < 50) {
 			cm.set(x,y,1)
 		}
@@ -411,8 +411,8 @@ const EIGHT_DELTA = [
 
 	//Controller
 	if(includeController){
-		for (let cy = -1; cy <= 1; cy++) {
-			for (let cx = -1; cx <= 1; cx++) {
+		for(let cy = -1; cy <= 1; cy++) {
+			for(let cx = -1; cx <= 1; cx++) {
 				let newX = roomController.x + cx;
 				let newY = roomController.y + cy;
 				if (terrain.get(newX, newY) !== TERRAIN_MASK_WALL && newX >= 0 && newX < 50 && newY >= 0 && newY < 50) {
@@ -430,8 +430,8 @@ const EIGHT_DELTA = [
 
 
 	let sourcePoints = [];
-	for (let y = 2; y < 48; y++) {
-		for (let x = 2; x < 48; x++) {
+	for(let y = 2; y < 48; y++) {
+		for(let x = 2; x < 48; x++) {
 			//Protect buildings except roads and links
 			if(buildingCM.get(x,y) != 99 && buildingCM.get(x,y) != 95 && Memory.roomPlanReference[buildingCM.get(x,y)]){
 				coordId = `${x}:${y}`;
@@ -440,8 +440,8 @@ const EIGHT_DELTA = [
 					roomStructs.push({ x: x, y: y });
 					scoreCM.set(x,y,1)
 				}
-				for (let dy = -3; dy <= 3; dy++) {
-					for (let dx = -3; dx <= 3; dx++) {
+				for(let dy = -3; dy <= 3; dy++) {
+					for(let dx = -3; dx <= 3; dx++) {
 						newX = x + dx;
 						newY = y + dy;
 						if (terrain.get(newX, newY) !== TERRAIN_MASK_WALL && newX >= 2 && newX < 48 && newY >= 2 && newY < 48) {

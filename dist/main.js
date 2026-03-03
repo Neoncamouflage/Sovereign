@@ -27,6 +27,7 @@ Memory.lastReset = 0
 Memory.globalReset = Game.time;
 global.heap = {
     scoutList:{},
+    creepPosMap:{},
     roomStructs:{},
     matrixes:{},
     travelMatrixes:{},
@@ -144,24 +145,35 @@ module.exports.loop = function () {
             }
         }
     }
-    if(Game.time % 1000 ===0){
+    //Update scout data
+    if(Game.time % 200 ===0){
         if(heap.newScoutData){
+            let heapString = JSON.stringify(heap.scoutData);
+            let heapLength = (heapString.length * 2)/1024;
+            let cMessage = "Updating scout data segment from heap.";
             try{
-                chronicle.log(`Updating scout data segment from heap. Scout segment size: ${RawMemory.segments[SEGMENT_SCOUT_DATA].length}. Scout heap size: ${JSON.stringify(heap.scoutData).length}`,'main',3)
+                let cutTime = 60000; //Cut rooms we haven't seen in this many ticks. We start 10k higher to account for the first loop
+                while(heapLength > 95 && cutTime > 0){
+                    cutTime-= 10000;
+                    cMessage += `\nScout data oversized at ${heapLength.toFixed(2)}KB. Trimming rooms not seen in ${cutTime} ticks.`
+                    purgeOldScoutData(cutTime);
+                    heapString = JSON.stringify(heap.scoutData);
+                    heapLength = (heapString.length * 2)/1024;
+                }
+                if(cutTime <= 0) chronicle.log("SAFETY BREAK - Scout data loop",'main',1)
                 RawMemory.segments[SEGMENT_SCOUT_DATA] = JSON.stringify(heap.scoutData)
+                let segString = RawMemory.segments[SEGMENT_SCOUT_DATA];
+                let segLength = (segString.length * 2)/1024;
                 heap.newScoutData = false;
+                chronicle.log(`${cMessage} Scout segment size: ${segLength.toFixed(2)}KB.`,'main',3)
             }
             catch(error){
                 chronicle.log(`Unable to update scout data: ${error}`,'main',1)
             }
         }
     }
+    //Clear old room memory
     if(Game.time % 10000 === 0){
-        let l1 = Object.keys(heap.scoutData).length
-        purgeOldScoutData()
-        chronicle.log(`Removing scout data for ${l1-Object.keys(heap.scoutData).length} rooms last seen more than 20k ticks ago.`,'main',3)
-        //Every 1000 ticks clear room memory
-        //Compile list of rooms to keep
         let keepRooms = [
             ...Object.keys(Memory.kingdom.fiefs),
             ...Object.keys(Memory.kingdom.holdings),
@@ -175,7 +187,7 @@ module.exports.loop = function () {
         }
         if(deadRooms.length > 0) console.log('Clearing unneeded room data:',deadRooms);
     }
-    //Clear travel avoids every 50k ticks
+    //Clear travel avoids
     if(Game.time % 50000 === 0){
         let rooms = Object.keys(Memory.travelAvoid);
         for(let roomName of rooms){
@@ -184,261 +196,261 @@ module.exports.loop = function () {
         chronicle.log(`Travel avoidance garbage collection. Rooms removed: ${rooms.length-Object.keys(Memory.travelAvoid).length}`,'main',3);
     }
 
-
-        if(Memory.testRPVisuals){
-            //Flood Fill Section
-            //Wall Groups
-            /*let groups = Object.keys(Memory.test4)
-            groups.forEach((each) =>{
-                let wallGroup = Memory.test4[each]
-                //console.log(JSON.stringify(wallGroup))
-                wallGroup.forEach(spot =>{
-                    new RoomVisual().circle(spot.x,spot.y,{fill:'black'});
-                });
+    if(Memory.testRPVisuals){
+        //Flood Fill Section
+        //Wall Groups
+        /*let groups = Object.keys(Memory.test4)
+        groups.forEach((each) =>{
+            let wallGroup = Memory.test4[each]
+            //console.log(JSON.stringify(wallGroup))
+            wallGroup.forEach(spot =>{
+                new RoomVisual().circle(spot.x,spot.y,{fill:'black'});
             });
-            //Perimeter tiles
-            let perimeterTiles = Object.keys(Memory.test6);
-            let totalGroups = perimeterTiles.length;
-            perimeterTiles.forEach((group,index) =>{
-                let groupTiles = Memory.test6[group];
-                let hue = (360 / totalGroups) * index; // Use the full color spectrum
-                groupTiles.forEach(spot=>{
-                    new RoomVisual().circle(spot.x,spot.y,{fill: `hsl(${hue}, 100%, 50%)`});
+        });
+        //Perimeter tiles
+        let perimeterTiles = Object.keys(Memory.test6);
+        let totalGroups = perimeterTiles.length;
+        perimeterTiles.forEach((group,index) =>{
+            let groupTiles = Memory.test6[group];
+            let hue = (360 / totalGroups) * index; // Use the full color spectrum
+            groupTiles.forEach(spot=>{
+                new RoomVisual().circle(spot.x,spot.y,{fill: `hsl(${hue}, 100%, 50%)`});
+            })
+        })*/
+        //Combined exit and controller fill
+        //Combined scores in Memory.test9
+        /*let cCM = PathFinder.CostMatrix.deserialize(Memory.test9);
+        for(let x = 0; x <= 49; x += 1) {
+            for(let y = 0; y <= 49; y += 1) {
+                let weight = cCM.get(x,y);
+                if(weight == 0) continue;
+                new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
+                    fill: `hsl(${200}${cCM.get(x, y) * 10}, 100%, 60%)`,
+                    opacity: 0.4,
                 })
-            })*/
-            //Combined exit and controller fill
-            //Combined scores in Memory.test9
-            /*let cCM = PathFinder.CostMatrix.deserialize(Memory.test9);
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = cCM.get(x,y);
-                    if(weight == 0) continue;
+                new RoomVisual().text(weight,x,y+0.25)
+            }
+        }*/
+        //Core location selection
+        //new RoomVisual().circle(Memory.test10.x,Memory.test10.y,{fill:'red',radius:0.5});
+        let roomVis =  new RoomVisual();
+        let basePlanCM = PathFinder.CostMatrix.deserialize(Memory.testBasePlanCM);
+        //let mnCM = PathFinder.CostMatrix.deserialize(Memory.minCutCM);
+        let mnResult;
+
+
+
+
+        for(let x = 0; x <= 49; x += 1) {
+            for(let y = 0; y <= 49; y += 1) {
+                let weight = basePlanCM.get(x,y);
+                
+                if(weight == 0) continue;
+                //new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
+                    //fill: `hsl(${200}${basePlanCM.get(x, y) * 10}, 100%, 60%)`,
+                    //opacity: 0.4,
+                //})
+                
+                if(Memory.roomPlanReference[weight] && weight == 99) roomVis.structure(x,y,Memory.roomPlanReference[weight]);
+                //new RoomVisual().text(basePlanCM.get(x,y),x,y+0.25)
+                //new RoomVisual().text(weight,x,y+0.25);
+            }
+        }
+        if(Memory.testBasePlan && Memory.testBasePlan.ramparts){
+            mnResult = Memory.testBasePlan.ramparts;
+            //let midPoint = Memory.test3;
+            mnResult.forEach(spot =>{
+                
+                roomVis.structure(spot.x,spot.y,STRUCTURE_ROAD);
+
+            });
+        }
+        roomVis.connectRoads();
+        for(let x = 0; x <= 49; x += 1) {
+            for(let y = 0; y <= 49; y += 1) {
+                let weight = basePlanCM.get(x,y);
+                
+                if(weight == 0) continue;
+                //new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
+                    //fill: `hsl(${200}${basePlanCM.get(x, y) * 10}, 100%, 60%)`,
+                    //opacity: 0.4,
+                //})
+                
+                if(Memory.roomPlanReference[weight] && weight != 99) roomVis.structure(x,y,Memory.roomPlanReference[weight]);
+                //new RoomVisual().text(basePlanCM.get(x,y),x,y+0.25)
+                //new RoomVisual().text(weight,x,y+0.25);
+            }
+        }
+        if(mnResult){
+            mnResult.forEach(spot =>{
+                
+
+                new RoomVisual().circle(spot.x,spot.y,{fill:'green',radius:0.5});
+            });
+
+        }
+        if(global.fiefPlanner && global.fiefPlanner.stage == 0){
+            let rclPlan = Memory.testRCLPlan;
+            for(let rcl in rclPlan){
+                for(let struct in rclPlan[rcl]){
+                    for(each of rclPlan[rcl][struct]){
+                        new RoomVisual().text(rcl,each.x,each.y+0.25,{font:0.3,stroke:'black'})
+                    }
+                }
+            }
+        }
+
+        
+        if(Memory.scoreVisuals){
+            let scoreCM = PathFinder.CostMatrix.deserialize(Memory.testScoreFloodCM);
+            for(let x = 0; x <= 49; x += 1) {
+                for(let y = 0; y <= 49; y += 1) {
+                    let weight = scoreCM.get(x,y);
                     new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        fill: `hsl(${200}${cCM.get(x, y) * 10}, 100%, 60%)`,
+                        fill: `hsl(${200}${scoreCM.get(x, y) * 10}, 100%, 60%)`,
                         opacity: 0.4,
                     })
                     new RoomVisual().text(weight,x,y+0.25)
                 }
-            }*/
-            //Core location selection
-            //new RoomVisual().circle(Memory.test10.x,Memory.test10.y,{fill:'red',radius:0.5});
-            let roomVis =  new RoomVisual();
-            let basePlanCM = PathFinder.CostMatrix.deserialize(Memory.testBasePlanCM);
-            //let mnCM = PathFinder.CostMatrix.deserialize(Memory.minCutCM);
-            let mnResult;
-
-
-
-
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = basePlanCM.get(x,y);
-                    
-                    if(weight == 0) continue;
-                    //new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        //fill: `hsl(${200}${basePlanCM.get(x, y) * 10}, 100%, 60%)`,
-                        //opacity: 0.4,
-                    //})
-                    
-                    if(Memory.roomPlanReference[weight] && weight == 99) roomVis.structure(x,y,Memory.roomPlanReference[weight]);
-                    //new RoomVisual().text(basePlanCM.get(x,y),x,y+0.25)
-                    //new RoomVisual().text(weight,x,y+0.25);
-                }
             }
-            if(Memory.testBasePlan && Memory.testBasePlan.ramparts){
-                mnResult = Memory.testBasePlan.ramparts;
-                //let midPoint = Memory.test3;
-                mnResult.forEach(spot =>{
-                    
-                    roomVis.structure(spot.x,spot.y,STRUCTURE_ROAD);
-
-                });
-            }
-            roomVis.connectRoads();
-            for (let x = 0; x <= 49; x += 1) {
-                for (let y = 0; y <= 49; y += 1) {
-                    let weight = basePlanCM.get(x,y);
-                    
-                    if(weight == 0) continue;
-                    //new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                        //fill: `hsl(${200}${basePlanCM.get(x, y) * 10}, 100%, 60%)`,
-                        //opacity: 0.4,
-                    //})
-                    
-                    if(Memory.roomPlanReference[weight] && weight != 99) roomVis.structure(x,y,Memory.roomPlanReference[weight]);
-                    //new RoomVisual().text(basePlanCM.get(x,y),x,y+0.25)
-                    //new RoomVisual().text(weight,x,y+0.25);
-                }
-            }
-            if(mnResult){
-                mnResult.forEach(spot =>{
-                    
-
-                    new RoomVisual().circle(spot.x,spot.y,{fill:'green',radius:0.5});
-                });
-    
-            }
-            if(global.fiefPlanner && global.fiefPlanner.stage == 0){
-                let rclPlan = Memory.testRCLPlan;
-                for(let rcl in rclPlan){
-                    for(let struct in rclPlan[rcl]){
-                        for(each of rclPlan[rcl][struct]){
-                            new RoomVisual().text(rcl,each.x,each.y+0.25,{font:0.3,stroke:'black'})
-                        }
-                    }
-                }
-            }
-
-            
-            if(Memory.scoreVisuals){
-                let scoreCM = PathFinder.CostMatrix.deserialize(Memory.testScoreFloodCM);
-                for (let x = 0; x <= 49; x += 1) {
-                    for (let y = 0; y <= 49; y += 1) {
-                        let weight = scoreCM.get(x,y);
-                        new RoomVisual().rect(x - 0.5, y - 0.5, 1, 1, {
-                            fill: `hsl(${200}${scoreCM.get(x, y) * 10}, 100%, 60%)`,
-                            opacity: 0.4,
-                        })
-                        new RoomVisual().text(weight,x,y+0.25)
-                    }
-                }
-            }
-
-
-
-
-            
-
-
-            if(Memory.testScoreTracker){
-                let tLine = 0;
-                let totalScore = 0;
-                for([key,value] of Object.entries(Memory.testScoreTracker)){
-                    new RoomVisual().text(key+': '+value,42,3+tLine,{font:1});
-                    totalScore += value;
-                    tLine++;
-                }
-                new RoomVisual().text('Total: '+totalScore,42,3+tLine,{font:1});
-            }
-            
         }
 
-        if(Memory.testModuleVisuals){
 
-            //Remote road visuals
 
-            //One route per gametime for standard 2 source, 1 controller room
-            let tickMod = Memory.testModule.routeRoad.totalRoutes.length
-            
-            //Colors
-            let colors = {
-                0:'red',
-                1:'blue',
-                2:'pink',
-                3:'purple',
-                4:'white',
-                5:'black',
-                6:'teal'
+
+        
+
+
+        if(Memory.testScoreTracker){
+            let tLine = 0;
+            let totalScore = 0;
+            for([key,value] of Object.entries(Memory.testScoreTracker)){
+                new RoomVisual().text(key+': '+value,42,3+tLine,{font:1});
+                totalScore += value;
+                tLine++;
             }
-            let displayRoutes = Memory.testModule.routeRoad.totalRoutes
+            new RoomVisual().text('Total: '+totalScore,42,3+tLine,{font:1});
+        }
+        
+    }
 
-            //console.log(displayRoutes.length)
-            //Draw all routes for 1 tick each, then draw selected route for last couple
-            
-            if(Game.time % (tickMod+3) < tickMod){
-                let tickRoute = displayRoutes[Game.time % (tickMod+3)];
-                //console.log(Game.time % (tickMod+3))
-                tickRoute.forEach(route =>{
-                    for(let i = 0; i < route.length-1; i++){
-                        const startPos = route[i];
-                        const endPos = route[i + 1];
-                    
-                        // Draw a line between each pair of adjacent positions
-                        if(startPos.roomName == endPos.roomName){
-                            new RoomVisual(startPos.roomName).line(startPos, endPos, { color: colors[Game.time % (tickMod+3)], width: 0.2 });
-                        }
+    if(Memory.testModuleVisuals){
+
+        //Remote road visuals
+
+        //One route per gametime for standard 2 source, 1 controller room
+        let tickMod = Memory.testModule.routeRoad.totalRoutes.length
+        
+        //Colors
+        let colors = {
+            0:'red',
+            1:'blue',
+            2:'pink',
+            3:'purple',
+            4:'white',
+            5:'black',
+            6:'teal'
+        }
+        let displayRoutes = Memory.testModule.routeRoad.totalRoutes
+
+        //console.log(displayRoutes.length)
+        //Draw all routes for 1 tick each, then draw selected route for last couple
+        
+        if(Game.time % (tickMod+3) < tickMod){
+            let tickRoute = displayRoutes[Game.time % (tickMod+3)];
+            //console.log(Game.time % (tickMod+3))
+            tickRoute.forEach(route =>{
+                for(let i = 0; i < route.length-1; i++){
+                    const startPos = route[i];
+                    const endPos = route[i + 1];
+                
+                    // Draw a line between each pair of adjacent positions
+                    if(startPos.roomName == endPos.roomName){
+                        new RoomVisual(startPos.roomName).line(startPos, endPos, { color: colors[Game.time % (tickMod+3)], width: 0.2 });
                     }
-                });
-            }
-            else{
-                Memory.testModule.routeRoad.combinedShortest.forEach(route =>{
-                    for(let i = 0; i < route.length-1; i++){
-                        const startPos = route[i];
-                        const endPos = route[i + 1];
-                    
-                            // Draw a line between each pair of adjacent positions
-                        if(startPos.roomName == endPos.roomName){
-                            new RoomVisual(startPos.roomName).line(startPos, endPos, { color: 'gold', width: 0.2 });
-                        }
-                        
-                    }
-                });
-            }
-            //Orbit Path Visuals
-            /*const startColor = { r: 255, g: 0, b: 0 }; // Red
-            const endColor = { r: 0, g: 255, b: 0 }; // Green
-            //Paths > Orbit > Individual Routes In Orbit > RoomPositions
-            //Access each whole orbit
-            Memory.testModule.paths.forEach((orbit,index) => {
-                //Get paths for each route in the orbit
-                let progress = index / (orbit.length - 1); // Calculate progress
-                let color = test.interpolateColors(startColor, endColor, progress);
-                orbit.forEach(route =>{
-                    //Draw on each spot in the route
-                    //new RoomVisual(route[0].roomName).poly(route,{fill:`rgb(${color.r},${color.g},${color.b})`});
-                    //route.forEach(spot =>{
-                        //new RoomVisual(spot.roomName).poly(spot,{fill:`rgb(${color.r},${color.g},${color.b})`});
-                    //});
-                    for(let i = 0; i < route.length-1; i++){
-                        const startPos = route[i];
-                        const endPos = route[i + 1];
+                }
+            });
+        }
+        else{
+            Memory.testModule.routeRoad.combinedShortest.forEach(route =>{
+                for(let i = 0; i < route.length-1; i++){
+                    const startPos = route[i];
+                    const endPos = route[i + 1];
                 
                         // Draw a line between each pair of adjacent positions
-                        new RoomVisual(startPos.roomName).line(startPos, endPos, { color: `rgb(${color.r},${color.g},${color.b})`, width: 0.1 });
+                    if(startPos.roomName == endPos.roomName){
+                        new RoomVisual(startPos.roomName).line(startPos, endPos, { color: 'gold', width: 0.2 });
                     }
-                });
+                    
+                }
             });
-            //Draw midpoint
-            new RoomVisual(Memory.testModule.room).circle(Memory.testModule.centerX,Memory.testModule.centerY,{color:'blue',radius:0.9})*/
         }
+        //Orbit Path Visuals
+        /*const startColor = { r: 255, g: 0, b: 0 }; // Red
+        const endColor = { r: 0, g: 255, b: 0 }; // Green
+        //Paths > Orbit > Individual Routes In Orbit > RoomPositions
+        //Access each whole orbit
+        Memory.testModule.paths.forEach((orbit,index) => {
+            //Get paths for each route in the orbit
+            let progress = index / (orbit.length - 1); // Calculate progress
+            let color = test.interpolateColors(startColor, endColor, progress);
+            orbit.forEach(route =>{
+                //Draw on each spot in the route
+                //new RoomVisual(route[0].roomName).poly(route,{fill:`rgb(${color.r},${color.g},${color.b})`});
+                //route.forEach(spot =>{
+                    //new RoomVisual(spot.roomName).poly(spot,{fill:`rgb(${color.r},${color.g},${color.b})`});
+                //});
+                for(let i = 0; i < route.length-1; i++){
+                    const startPos = route[i];
+                    const endPos = route[i + 1];
+            
+                    // Draw a line between each pair of adjacent positions
+                    new RoomVisual(startPos.roomName).line(startPos, endPos, { color: `rgb(${color.r},${color.g},${color.b})`, width: 0.1 });
+                }
+            });
+        });
+        //Draw midpoint
+        new RoomVisual(Memory.testModule.room).circle(Memory.testModule.centerX,Memory.testModule.centerY,{color:'blue',radius:0.9})*/
+    }
 
-        kingdomManager.run();
-        //console.log("CPU Used:",Game.cpu.getUsed().toFixed(2),'/',Game.cpu.limit);
+    kingdomManager.run();
+    //console.log("CPU Used:",Game.cpu.getUsed().toFixed(2),'/',Game.cpu.limit);
 
-        Traveler.resolveMovement();
-        let endCPU = Game.cpu.getUsed();
-        //Record CPU utilization over last 100 ticks
+    Traveler.resolveMovement();
+    let endCPU = Game.cpu.getUsed();
+    //Record CPU utilization over last 100 ticks
 
-        let trailingCPU = Memory.trailingCPU || [];
-        trailingCPU = trailingCPU.filter(item =>{
-            return Game.time - item.gameTime <= 100;
-        })
-        trailingCPU.push({cpu:endCPU,gameTime:Game.time});
-        Memory.trailingCPU = trailingCPU;
-        //If we're room planning, trigger the rest
-        //if(!Memory.roomPlanComplete && Memory.testStructureBlobCM){
-            //test.generateRoomPlanStage2(Memory.roomPlanRoomName);
-        //}
+    let trailingCPU = Memory.trailingCPU || [];
+    trailingCPU = trailingCPU.filter(item =>{
+        return Game.time - item.gameTime <= 100;
+    })
+    trailingCPU.push({cpu:endCPU,gameTime:Game.time});
+    Memory.trailingCPU = trailingCPU;
+    //If we're room planning, trigger the rest
+    //if(!Memory.roomPlanComplete && Memory.testStructureBlobCM){
+        //test.generateRoomPlanStage2(Memory.roomPlanRoomName);
+    //}
 
-        //If we have a room planner object and we're not in 0 status, check bucket and run planner
-        if(architect.config && architect.config.running){
-            if(Game.cpu.bucket > 250){
-                architect.run();
-            }
+    //If we have a room planner object and we're not in 0 status, check bucket and run planner
+    if(architect.config && architect.config.running){
+        if(Game.cpu.bucket > 250){
+            architect.run();
         }
-        if(global.heap.fiefPlanner && global.heap.fiefPlanner.stage && global.heap.fiefPlanner.stage != 0){
-            if(Game.cpu.bucket > 250){
-                fiefPlanner.continueFiefPlan();
-            }
+    }
+    if(global.heap.fiefPlanner && global.heap.fiefPlanner.stage && global.heap.fiefPlanner.stage != 0){
+        if(Game.cpu.bucket > 250){
+            fiefPlanner.continueFiefPlan();
         }
+    }
 
 
-        if (Game.cpu.bucket == 10000 && ['shard0','shard1','shard2','shard3'].includes(Game.shard.name)) {
-            Game.cpu.generatePixel()
-            console.log("<font color='green'>", Game.shard.name, "generated pixel.</font>")
-        }
-    });
+    if (Game.cpu.bucket == 10000 && ['shard0','shard1','shard2','shard3'].includes(Game.shard.name)) {
+        Game.cpu.generatePixel()
+        console.log("<font color='green'>", Game.shard.name, "generated pixel.</font>")
+    }
     chronicle.run();
+    });
+    
 }
 
 //Respawn checker by @SemperRabbit

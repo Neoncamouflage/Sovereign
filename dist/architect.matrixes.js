@@ -9,7 +9,7 @@ const architectMatrixes = {
         seedQueue = mergeSeeds(seedQueue)
         let watershedCM = runWatershed(seedQueue,distanceCM,terrain,distanceMax,exitCM);
         //Merge up to 20 times
-        for (let i = 0; i < MAX_MERGE; i++){
+        for(let i = 0; i < MAX_MERGE; i++){
             let res = mergeSmallRegions(watershedCM, terrain);
             watershedCM = res.out;
             if(!res.merged){
@@ -69,7 +69,7 @@ const architectMatrixes = {
                 //console.log(JSON.stringify(each))
             //}
             // region ids start at 1
-            for (let i = 0; i < seeds.length; i++) seeds[i].region = i + 1;
+            for(let i = 0; i < seeds.length; i++) seeds[i].region = i + 1;
 
             // Bucketed priority queue: buckets[d] holds tiles with priority d
             const buckets = Array.from({ length: maxDist + 1 }, () => []);
@@ -97,7 +97,7 @@ const architectMatrixes = {
                 safety++;
                 if(safety>3000){console.log("SAFETYBREAK-WATERSHED");break;}
                 // Process from high to low distance
-                for (let d = maxDist; d >= 1; d--) {
+                for(let d = maxDist; d >= 1; d--) {
                     const bucket = buckets[d];
                     while (bucket.length) {
                         const tile = bucket.pop();
@@ -146,8 +146,8 @@ const architectMatrixes = {
             // 1) Count region sizes
             const size = Object.create(null);
 
-            for (let x = 1; x < 49; x++) {
-                for (let y = 1; y < 49; y++) {
+            for(let x = 1; x < 49; x++) {
+                for(let y = 1; y < 49; y++) {
                     if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
                     const r = regionCM.get(x, y);
                     if (r === 0 || r === BORDER) continue;
@@ -158,8 +158,8 @@ const architectMatrixes = {
             // 2) Build adjacency THROUGH border tiles
             const adj = Object.create(null);
 
-            for (let x = 1; x < 49; x++) {
-                for (let y = 1; y < 49; y++) {
+            for(let x = 1; x < 49; x++) {
+                for(let y = 1; y < 49; y++) {
                     if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
                     if (regionCM.get(x, y) !== BORDER) continue;
 
@@ -172,8 +172,8 @@ const architectMatrixes = {
                         if (!seen.has(r)) { seen.add(r); around.push(r); }
                     }
 
-                    for (let i = 0; i < around.length; i++) {
-                        for (let j = i + 1; j < around.length; j++) {
+                    for(let i = 0; i < around.length; i++) {
+                        for(let j = i + 1; j < around.length; j++) {
                             const a = around[i], b = around[j];
                             if (!adj[a]) adj[a] = Object.create(null);
                             if (!adj[b]) adj[b] = Object.create(null);
@@ -238,8 +238,8 @@ const architectMatrixes = {
             }
 
             const out = new PathFinder.CostMatrix();
-            for (let x = 0; x < 50; x++) {
-                for (let y = 0; y < 50; y++) {
+            for(let x = 0; x < 50; x++) {
+                for(let y = 0; y < 50; y++) {
                     const v = regionCM.get(x, y);
                     // only resolve real region IDs
                     out.set(x, y, (v !== 0 && v !== BORDER) ? resolve(v) : v);
@@ -255,14 +255,14 @@ const architectMatrixes = {
             const out = new PathFinder.CostMatrix();
 
             // copy everything first
-            for (let x = 0; x < 50; x++) {
-                for (let y = 0; y < 50; y++) {
+            for(let x = 0; x < 50; x++) {
+                for(let y = 0; y < 50; y++) {
                     out.set(x, y, regionCM.get(x, y));
                 }
             }
 
-            for (let x = 1; x < 49; x++) {
-                for (let y = 1; y < 49; y++) {
+            for(let x = 1; x < 49; x++) {
+                for(let y = 1; y < 49; y++) {
                     if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
                     if (regionCM.get(x, y) !== BORDER) continue;
 
@@ -337,8 +337,8 @@ const architectMatrixes = {
         let distanceMap = new PathFinder.CostMatrix();
         let qi = 0;
         queue = queue.map(p => ({ x: p.x, y: p.y, distance: 0 }));
-        for (let x = 0; x < 50; x++) {
-            for (let y = 0; y < 50; y++) {
+        for(let x = 0; x < 50; x++) {
+            for(let y = 0; y < 50; y++) {
                 distanceMap.set(x, y, 255);
             }
         }
@@ -382,8 +382,8 @@ const architectMatrixes = {
             return regions[id];
         };
 
-        for (let x = 0; x < 50; x++) {
-            for (let y = 0; y < 50; y++) {
+        for(let x = 0; x < 50; x++) {
+            for(let y = 0; y < 50; y++) {
                 const id = watershedCM.get(x, y);
                 if (id === 0 || id === 255) continue;
 

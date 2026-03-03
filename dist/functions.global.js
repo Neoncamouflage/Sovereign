@@ -3,6 +3,7 @@ const supplyDemand = require('supplyDemand');
 const helper = require('functions.helper');
 const Quad = require('Quad');
 const profiler = require('screeps-profiler');
+const Traveler = require('Traveler');
 //Fetch a random integer from 0 to max(inclusive) and random array selection
 global.randomInt = function(max) {
     return Math.floor(Math.random() * (max + 1));
@@ -34,12 +35,64 @@ global.invertScore = function(v){
 //Normalization of weights within a gene block
 global.normalizeWeights = function(raw, floor = 0) {
     let sum = 0;
-    for (let v of raw) sum += Math.max(floor, v);
+    for(let v of raw) sum += Math.max(floor, v);
 
     if (sum === 0) return raw.map(_ => 0);
 
     return raw.map(v => Math.max(floor, v) / sum);
 }
+
+//Per tick virtual store
+global._vstoreInitTick = function () {
+    if (!global.heap) global.heap = {};
+    if (global.heap._vstoreTick !== Game.time) {
+        global.heap._vstoreTick = Game.time;
+        global.heap._vstore = Object.create(null);
+    }
+};
+global._vstoreEnsure = function (creep) {
+    _vstoreInitTick();
+    let vs = global.heap._vstore[creep.id];
+    if (vs) return vs;
+
+    vs = Object.create(null);
+    for (const res in creep.store) {
+        const amt = creep.store[res] || 0;
+        if (amt) vs[res] = amt;
+    }
+    global.heap._vstore[creep.id] = vs;
+    return vs;
+};
+global.vstoreUsed = function (creep, resource) {
+    const vs = _vstoreEnsure(creep);
+    if (resource) return vs[resource] || 0;
+    let sum = 0;
+    for (const r in vs) sum += vs[r] || 0;
+    return sum;
+};
+global.vstoreFree = function (creep) {
+    const cap = creep.store.getCapacity() || 0;
+    return Math.max(0, cap - vstoreUsed(creep));
+};
+
+global.vstoreObj = function (creep){
+    const vs = _vstoreEnsure(creep);
+    return vs;
+}
+global.vstoreUpdate = function (creep, action, resource, amount) {
+    if (!amount) return;
+    const vs = _vstoreEnsure(creep);
+
+    if (action === 'transfer' || action === 'drop') amount = -amount;
+
+    const before = vs[resource] || 0;
+    let after = before + amount;
+    if (after < 0) after = 0;
+
+    if (after === 0) delete vs[resource];
+    else vs[resource] = after;
+};
+
 
 //Update diplomacy
 global.setDiplomacy = function(type,username){
@@ -117,7 +170,7 @@ global.isMe = function(target){
 }
 
 global.getDiplomacy = function(username){
-    for (let [type,members] of Object.entries(Memory.diplomacy)){
+    for(let [type,members] of Object.entries(Memory.diplomacy)){
         //console.log("Type",type,'Members',members)
         //Continue if we're not looking at one of the member lists
         if(!['allies','ceasefire','outlaws'].includes(type)){
@@ -180,6 +233,7 @@ global.getScoutData = function(roomName=false){
      * sources: s
      * mineral: m
      * exits: e
+     * lairs: k
      */
     let scoutData = global.heap && global.heap.scoutData;
     //If first tick or no scout data for a specific room, return false
@@ -214,7 +268,8 @@ global.getScoutData = function(roomName=false){
             controllerLevel: roomData.u || '',
             towers: roomData.y || '',
             sources: roomData.s || '',
-            mineral: roomData.m || ''
+            mineral: roomData.m || '',
+            lairs: roomData.k || ''
         };
     }
 }
@@ -232,26 +287,28 @@ global.setScoutData = function(room, data = {}, force = false) {
             console.log("Room name or object must be provided for scout data");
             return;
         }
-
+        let lairs = [];
         let parsedType = describeRoom(room.name);
         if (parsedType == ROOM_SOURCE_KEEPER) {
-
+            let hStructs = room.find(FIND_HOSTILE_STRUCTURES);
             if (!Memory.travelAvoid) {
                 Memory.travelAvoid = {};
             }
-            if (!Memory.travelAvoid[room.name]) {
-                let core = room.find(FIND_HOSTILE_STRUCTURES, { filter: s => s.structureType == STRUCTURE_INVADER_CORE })[0];
-                if (core) {
-                    let total = core.ticksToDeploy || 0;
+            for(const struct of hStructs){
+                if (!Memory.travelAvoid[room.name]) {
+                    if (struct.structureType == STRUCTURE_INVADER_CORE) {
+                        let total = core.ticksToDeploy || 0;
 
-                    if (core.effects && core.effects.length) {
-                        let collapseEffect = core.effects.find(e => e.effect == EFFECT_COLLAPSE_TIMER);
-                        if (collapseEffect) {
-                            total += collapseEffect.ticksRemaining;
+                        if (core.effects && core.effects.length) {
+                            let collapseEffect = core.effects.find(e => e.effect == EFFECT_COLLAPSE_TIMER);
+                            if (collapseEffect) {
+                                total += collapseEffect.ticksRemaining;
+                            }
                         }
+                        Memory.travelAvoid[room.name] = { expiry: Game.time + total, type: 'stronghold' ,pos:{x:struct.x,y:struct.y}};
                     }
-                    Memory.travelAvoid[room.name] = { expiry: Game.time + total, type: 'stronghold' };
                 }
+                if(struct.structureType == STRUCTURE_KEEPER_LAIR) lairs.push({x:struct.x,y:struct.y});
             }
         }
 
@@ -272,6 +329,7 @@ global.setScoutData = function(room, data = {}, force = false) {
             ...(roomType === 'fief' && room.controller && room.controller.level && { u: room.controller.level }),
             ...(towerPositions.length && { y: towerPositions }),
             ...(sources.length && { s: sources }),
+            ...(lairs.length && { k: lairs }),
 
             m: mineral ? { x: mineral.pos.x, y: mineral.pos.y, type: mineral.mineralType } : null
         };
@@ -292,25 +350,48 @@ global.setScoutData = function(room, data = {}, force = false) {
 //Get calculated tile distance across rooms
 global.getTileDistance = function(pos1, pos2) {
     const ROOM_SIZE = 50;
-    let posX;
-    let posY;
-    //Just do basic calculation if in the same room
+
+    let dx, dy;
+
     if (pos1.roomName === pos2.roomName) {
-         posX = pos2.x - pos1.x;
-         posY = pos2.y - pos1.y;
-        return Math.sqrt(posX * posX + posY * posY);
+        return pos1.getRangeTo(pos2);
     }
+
     const coord1 = parseRoomName(pos1.roomName);
     const coord2 = parseRoomName(pos2.roomName);
-    
 
     const roomDeltaX = (coord2.x - coord1.x) * ROOM_SIZE;
     const roomDeltaY = (coord2.y - coord1.y) * ROOM_SIZE;
 
-    posX = pos2.x + roomDeltaX - pos1.x;
-    posY = pos2.y + roomDeltaY - pos1.y;
+    dx = Math.abs((pos2.x + roomDeltaX) - pos1.x);
+    dy = Math.abs((pos2.y + roomDeltaY) - pos1.y);
 
-    return Math.sqrt(posX * posX + posY * posY);
+    return Math.max(dx, dy);
+};
+
+//Need to finish this
+global.checkAdjacent = function(pos,func,use4 = false){
+    if(!(pos instanceof RoomPosition)){
+        if(!pos.pos){
+            chronicle.log(`Invalid argument. ${pos} is not and does not contain a RoomPosition.`,'global.checkAdjacent',1)
+            return null;
+        }
+        pos = pos.pos;
+    }
+    if(!pos.roomName){
+        chronicle.log(`Position requires a roomName property.`,'global.checkAdjacent',1);
+        return null;
+    }
+    let terrain = new Room.Terrain(pos.roomName);
+    let directions = use4 ? DIRECTIONS_4 : DIRECTIONS_8;
+    for(const dir of directions){
+        let newX = pos.x+dir[0];
+        let newY = pos.y+dir[1];
+        if(newX < 0 || newY < 0 || newX > 49 || newY > 49) continue;
+        //No default terrain check, we might want to check walls sometimes. This should be generic.
+        //if(terrain.get(newX,newY) == TERRAIN_MASK_WALL) continue;
+
+    }
 }
 
 //Parse room names into a world coordinate system
@@ -330,8 +411,7 @@ global.spawnCreep = function(role,body,fief,sev=50,memory = {}){
     //More robust sawning function needed at some point, to accept quick spawns and full detailed ones
     //let opts = {};
     //If string, get room name
-    //if (typeof args === 'string' || args instanceof String){
-
+    //if (typeof args === 'string' || args instanceof String){)
     //}
 
     if(!Array.isArray(body)) body = parseBody(body)
@@ -378,7 +458,7 @@ global.parseBody = function(bodyString){
         const count = parseInt(match[1]);
         const partSequence = match[2].toLowerCase().split('');
         const parts = partSequence.map(char => partMap[char]);
-        for (let i = 0; i < count; i++) {
+        for(let i = 0; i < count; i++) {
             bodyParts.push(...parts);
         }
     }
@@ -416,8 +496,7 @@ global.convertStructure = function convertStructure(structure) {
     chronicle.log(`Invalid structure: ${structure}`,'global.convertStructure',1)
 };
 
-const FLAG_MASK = 0x8000;
-const MAX_VALUE = 0x7FFF;
+
 global.BigCostMatrix = function() {
     this._bits = new Uint16Array(2500);
 };
@@ -467,7 +546,7 @@ BigCostMatrix.deserialize = function(serializedStr) {
     const matrix = new BigCostMatrix();
     const bits = matrix._bits;
     let idx = 0;
-    for (let i = 0; i < serializedStr.length; i++) {
+    for(let i = 0; i < serializedStr.length; i++) {
         const charCode = serializedStr.charCodeAt(i);
         if (charCode & FLAG_MASK) {
             //If the top bit is set, then this character is a flagged value.
@@ -475,7 +554,7 @@ BigCostMatrix.deserialize = function(serializedStr) {
             const value = charCode & ~FLAG_MASK;
             //The next character contains the run length.
             const run = serializedStr.charCodeAt(++i);
-            for (let j = 0; j < run; j++) {
+            for(let j = 0; j < run; j++) {
                 bits[idx++] = value;
             }
         } else {
@@ -486,12 +565,10 @@ BigCostMatrix.deserialize = function(serializedStr) {
     return matrix;
 };
 
-global.getDistance = function(pos1,pos2){
-    let route = PathFinder.search(pos1,{pos:pos2,range:1},{
-        maxOps:20000,
-        maxRooms:64,
-        roomCallback: function(roomName) {
-      
+global.getDistance = function(pos1,pos2,opts = {}){
+    opts.maxOps ??= 20000;
+    opts.maxRooms ??= 64;
+    opts.roomCallback ??= function(roomName) {
             let room = Game.rooms[roomName];
             let costs = new PathFinder.CostMatrix;    
             if (room){
@@ -506,20 +583,46 @@ global.getDistance = function(pos1,pos2){
                 });
             }
             return costs;
-          },
-    });
+          };
+    let route = PathFinder.search(pos1,{pos:pos2,range:1},opts);
     let dist = route.path.length;
     let incomp = route.incomplete;
     return [dist,incomp]
+}
+global.getTravelPath = function(origin,destination,opts){
+    return Traveler.findTravelPath(origin,destination,opts)
+}
+global.getSerializedPath = function(startPos,path){
+    return Traveler.serializePath(startPos,path);
+}
+global.getRoute = function(pos1,pos2,opts = {}){
+    opts.maxOps ??= 20000;
+    opts.maxRooms ??= 64;
+    opts.roomCallback ??= function(roomName) {
+            let room = Game.rooms[roomName];
+            let costs = new PathFinder.CostMatrix;    
+            if (room){
+              room.find(FIND_STRUCTURES).forEach(function(struct) {
+                  if (struct.structureType === STRUCTURE_ROAD) {
+                    costs.set(struct.pos.x, struct.pos.y, 1);
+                  } else if (struct.structureType !== STRUCTURE_CONTAINER &&
+                             (struct.structureType !== STRUCTURE_RAMPART ||
+                              !struct.my)) {
+                    costs.set(struct.pos.x, struct.pos.y, 255);
+                  }
+                });
+            }
+            return costs;
+          };
+    let route = PathFinder.search(pos1,{pos:pos2,range:1},opts);
+    return route
 }
 
 global.purgeOldScoutData = function(amt = 20000){
     let data = global.heap && global.heap.scoutData;
     if(!data) return false;
     for(let [room,roomData] of Object.entries(getScoutData())){
-        
         if((Game.time - roomData.lastRecord) > amt){
-            
             removeScoutData(room);
         }
     }
@@ -704,6 +807,57 @@ global.changeRoomPlan = function(roomName,rcl,structure,update){
     }
     
     Memory.kingdom.fiefs[roomName].roomPlan[rcl][structure] = newSection;
+}
+
+//Accepts 'add', 'remove', 'swap'
+global.updatePlan = function(room,method,rcl,structure,coord1,coord2){
+    if(!coord1.x || !coord1.y){
+        console.log("Bad coords");
+        return;
+    }
+    if(coord2 && (!coord2.x || !coord2.y)){
+        console.log("Bad second coords");
+        return;
+    }
+    if(!CONTROLLER_STRUCTURES[structure]){
+        console.log("Bad structure");
+        return;
+    }
+    let plan;
+    if(room instanceof Room && room.name && Memory.kingdom.fiefs[room.name]){
+        plan = Memory.kingdom.fiefs[room.name].roomPlan;
+    }
+    else if(Memory.kingdom.fiefs[room]){
+        plan = Memory.kingdom.fiefs[room].roomPlan;
+    }
+    else console.log("Bad room")
+    let arr = plan[rcl][structure];
+    if(method == 'add'){
+        if(arr) arr.push(coord1);
+        else plan[rcl][structure] = [coord1];
+    }
+    if(method == 'remove'){
+        if(!arr) return;
+        let newarr = [];
+        for(const each of arr){
+            if(each.x == coord1.x && each.y == coord1.y) continue;
+            newarr.push(each);
+        } 
+        plan[rcl][structure] = newarr;
+    }
+    if(method == 'swap'){
+        if(!arr){
+            console.log("Can't swap as the target array is empty");
+            return;
+        }
+        let newarr = [];
+        for(const each of arr){
+            if(each.x == coord1.x && each.y == coord1.y) continue;
+            newarr.push(each);
+        }
+        newarr.push(coord2);
+        plan[rcl][structure] = newarr;
+    }
 }
 
 setDiplomacy = profiler.registerFN(setDiplomacy, 'setDiplomacy');

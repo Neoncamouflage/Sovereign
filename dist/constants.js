@@ -83,6 +83,22 @@ const constants = {
     DIRECTIONS_4:  [[1, 0], [0, 1], [-1, 0], [0, -1]],
     DIRECTIONS_8: [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]],
 
+    //Custom cost matrix constants
+    FLAG_MASK: 0x8000,
+    MAX_VALUE: 0x7FFF,
+
+    //House mottos
+    HOUSE_WORDS: {
+        'Utrium':"Our Blades Bite Deeper", //"Twice the blow. Thrice the yield."
+        'Lemergium':"What Falls, We Raise",
+        'Keanium':"Swift as Arrows",
+        'Zynthium':"Tireless in the Breach", //"We Unmake"
+        'Catalyst':"We Make the Mighty", //"We Perfect"
+        'Ghodium':"The Sum of Strength", //Born of Many
+        'Hydrogen':"We Kindle the Fire",
+        'Oxygen':"We Fan the Flame"
+    }
+
 }
 
 

@@ -231,7 +231,7 @@ const fiefPlanner = {
                         //Get the new offspring of our parents
                         let offspring = breedSubjects(fiefPlanner.population[firstParent], fiefPlanner.population[secondParent]);
                         //Allow for possible mutation
-                        for (let child of offspring) {
+                        for(let child of offspring) {
                             //Push child to newPop array
                             newPop.push(mutateSubject(child,fiefPlanner.mutationRate));
                         }
@@ -311,7 +311,7 @@ const fiefPlanner = {
 
         function mutateSubject(subject, mutationRate = 0.01) {
             let fiefPlanner = global.heap.fiefPlanner;
-            for (let i = 0; i < subject.length; i++) {
+            for(let i = 0; i < subject.length; i++) {
                 if (Math.random() < mutationRate) {
                     let geneMin = fiefPlanner.geneLimits[i][0];
                     let geneMax = fiefPlanner.geneLimits[i][1];
@@ -335,7 +335,7 @@ const fiefPlanner = {
             //Uniform swap, 50/50 chance of swapping any given gene
             let offspring1 = [];
             let offspring2 = [];
-            for (let i = 0; i < parent1.length; i++) {
+            for(let i = 0; i < parent1.length; i++) {
                 if (Math.random() > 0.5) { // Swap genes with 50% probability
                     offspring1.push(parent1[i]);
                     offspring2.push(parent2[i]);
@@ -557,8 +557,8 @@ const fiefPlanner = {
         }
         
 
-        for (let y = 2; y < 48; y++) {
-            for (let x = 2; x < 48; x++) {
+        for(let y = 2; y < 48; y++) {
+            for(let x = 2; x < 48; x++) {
                 let exitScore = exitMatrix.get(x, y);
                 let controllerScore = controllerMatrix.get(x, y);
                 let sourceScore = sourceMatrix.get(x,y);
@@ -815,8 +815,8 @@ const fiefPlanner = {
 
         //Set distance transform weight to 255 for the hub zone and get another cost matrix
         //Also using this to generate room positions
-        for (let x=-CORE_ZONE_RADIUS; x<=CORE_ZONE_RADIUS; x++){
-            for (let y=-CORE_ZONE_RADIUS;y<=CORE_ZONE_RADIUS;y++){
+        for(let x=-CORE_ZONE_RADIUS; x<=CORE_ZONE_RADIUS; x++){
+            for(let y=-CORE_ZONE_RADIUS;y<=CORE_ZONE_RADIUS;y++){
                 secondDist.set(coreLocation.x+x,coreLocation.y+y,255)
                 coreRoomPositions.push(new RoomPosition(coreLocation.x+x,coreLocation.y+y,roomName))
             }
@@ -1298,8 +1298,8 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
             nextRoad = roadTiles.shift();
             if(!nextRoad) break;
             //For all adjacent tiles, get the total structures added and keep track of the best one
-            for (let x=-1; x<=1; x++){
-                for (let y=-1;y<=1;y++){
+            for(let x=-1; x<=1; x++){
+                for(let y=-1;y<=1;y++){
                     //nextStructs is an array of all the new structures
                     //nextCount is a list of total surrounding structures
                     [nextStructs,nextCount] = findAdjacentStructs({x:nextRoad.x+x,y:nextRoad.y+y},structureBlobCM,terrain);
@@ -1455,8 +1455,8 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
 
         function findOverlappingTiles(source,source2, radius = 2) {
             let tiles = [];
-            for (let x = source.x - radius; x <= source.x + radius; x++) {
-              for (let y = source.y - radius; y <= source.y + radius; y++) {
+            for(let x = source.x - radius; x <= source.x + radius; x++) {
+              for(let y = source.y - radius; y <= source.y + radius; y++) {
                 //Don't add sources themselves
                 if(!(x == source.x && y == source.y) && !(x == source2.x && y == source2.y)){
                     if(calculateDistance(x,y,source2.x,source2.y) <= 2){
@@ -1577,8 +1577,8 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
             floodFill(x, y-1);
         }
     
-        for (let x = 0; x < 50; x++) {
-            for (let y = 0; y < 50; y++) {
+        for(let x = 0; x < 50; x++) {
+            for(let y = 0; y < 50; y++) {
                 if (!processed[x][y] && terrain.get(x, y) === TERRAIN_MASK_WALL) {
                     wallGroups[currentGroupId] = [];
                     floodFill(x, y);
@@ -1617,7 +1617,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
         
             // The main step of the Graham Scan algorithm
             const hull = [start];
-            for (let i = 1; i < points.length; i++) {
+            for(let i = 1; i < points.length; i++) {
                 let top = hull[hull.length - 1];
                 while (hull.length >= 2 && crossProduct(hull[hull.length - 2], top, points[i]) < 0) {
                     hull.pop(); // Pop the last point because it's not part of the convex hull
@@ -1644,7 +1644,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
         //};
         
         let convexHulls = {};
-        for (let groupId in wallGroups) {
+        for(let groupId in wallGroups) {
             convexHulls[groupId] = getConvexHull(wallGroups[groupId]);
         }
         return convexHulls;
@@ -1687,7 +1687,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
         let rampartLookup = new Set(ramparts.map(ramp => `${ramp.x},${ramp.y}`));
 
         //Look through every rampart. If it isn't in the set of checked ramps, we find all its neighbors and put them in a group.
-        for (let each of ramparts){
+        for(let each of ramparts){
             //Get the key for this rampart and skip the loop if it's already been found
             let rampKey = `${each.x},${each.y}`;
             if(checkedRamps.has(rampKey)){
@@ -1711,7 +1711,7 @@ let scoreB = (normalizedWeightB * ALPHA) - (normalizedRangeB * BETA) + (normaliz
             currentGroup.push({x, y});
     
             // Explore all directions
-            for (let [dx, dy] of directions) {
+            for(let [dx, dy] of directions) {
                 groupRamps(x + dx, y + dy, currentGroup);
             }
         }
