@@ -10,6 +10,9 @@ const marshal = {
         for(let [room,alarm] of Object.entries(global.heap.alarms)){
             if(Game.time - alarm.tick > 1500 || (alarm.expiry && Game.time > alarm.expiry)) delete global.heap.alarms[room]
         }
+        //Check tombstones
+        checkTombstones();
+
         for(let mission of Object.values(heap.missions)){
             if(!mission.assigned){
                 let troupe = new Troupe(mission);
@@ -40,13 +43,21 @@ const marshal = {
             let attk = creep.getActiveBodyparts(ATTACK);
             let rng = creep.getActiveBodyparts(RANGED_ATTACK);
             let closeRange = false;
+            let canHeal = creep.getActiveBodyparts(HEAL) > 1;
             if(hostiles.length && (attk>1 || rng>1)){
                 creep.memory.stay = true
                 let target = creep.pos.findClosestByRange(hostiles);
-                creep.travelTo(target,{range:rng > 1 ? 3 : 1});
+                creep.travelTo(target,{range:rng > 1 && !canHeal ? 3 : 1});
                 creep.attack(target);
                 if(creep.pos.getRangeTo(target) <=1){
-                    creep.rangedMassAttack()
+                    creep.rangedMassAttack();
+                    if(canHeal && injured.length){
+                        if(creep.pos.getRangeTo(injured[0]) > 1){
+                            creep.rangedHeal(injured[0])
+                        }else{
+                            creep.heal(injured[0])
+                        }
+                    };
                     closeRange = true;
                 }
                 else if(helper.isSoldier(target) && creep.pos.getRangeTo(target) <= 2){
@@ -127,7 +138,7 @@ const marshal = {
             resTime:'resTime'
         })
     },
-    skMining(roomName){
+    skMine(roomName){
         marshal.addMission({
             type:'skMining',
             roomName:roomName
@@ -138,9 +149,18 @@ const marshal = {
             type:'settle',
             roomName:roomName
         })
+    },
+    harass(roomName){
+        marshal.addMission({
+            type:'rangedHarass',
+            roomName:roomName
+        })
     }
 }
 
+// ---TODO---
+//Add more prototype methods so I can modify these on the fly
+//Add/remove creeps, change properties quickly, etc
 function Mission(details) {
     this.missionID = generateMissionID();
     this.type = details.type;
@@ -176,7 +196,28 @@ function generateMissionID(){
     .toString(16)
     .padStart(8, '0');
 }
+
+function checkTombstones(){
+    for(const roomName of Object.keys(heap.tombstones)){
+        let tombstones = heap.tombstones[roomName];
+        for(const tomb of tombstones){
+            //Recent death not due to TTL
+            if(tomb.deathTime == Game.time-1 && tomb.creep.ticksToLive > 1){
+                console.log("Tombstone found:",JSON.stringify(tomb.creep))
+                let events = tomb.room.getEventLog();
+                
+            }
+        }
+    }
+}
 global.addMission = marshal.addMission;
+global.destroyCore = marshal.destroyCore;
+global.defend = marshal.defend;
+global.settle = marshal.settle;
+global.skMine = marshal.skMine;
+global.harass = marshal.harass;
+
+
 module.exports = marshal;
 profiler.registerObject(marshal, 'marshal');
 profiler.registerClass(Mission, 'Mission');

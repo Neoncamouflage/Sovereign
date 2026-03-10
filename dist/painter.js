@@ -24,6 +24,7 @@ const painter = {
         if(visuals.drawTest) this.drawTest();
         if(visuals.drawRoomPlan) this.drawRoomPlan(visuals.drawRoomPlan);
         if(visuals.drawShipping) this.drawShipping(visuals.drawShipping,kingdomCreeps);
+        if(visuals.drawSpawn) this.drawSpawn();
         /*if(visuals.drawScores) this.drawScores(architect.config);
         if(visuals.drawAllies) this.drawAllies();
         if(visuals.drawStartup) this.drawStartup();*/
@@ -265,6 +266,22 @@ const painter = {
         }
         return;
     },
+    drawSpawn(){
+        let queue = heap.spawnQueue;
+        if(!queue)return;
+        for(const roomName of Object.keys(queue)){
+            let creeps = queue[roomName];
+            let spawn = Memory.kingdom.fiefs[roomName]?.roomPlan?.[1]?.[STRUCTURE_SPAWN]?.[0];
+            if(!spawn)continue
+            let roomVis =  new RoomVisual(roomName);
+            roomVis.text(`Spawn check in ${GLOBAL_SPAWN_INTERVAL-(Game.time % GLOBAL_SPAWN_INTERVAL)} ticks`,spawn.x,spawn.y-3,{align:'left',color:'white',font:'0.8'});
+            let yNext = -2;
+            for(let creep of creeps){
+                roomVis.text(creep,spawn.x+1,spawn.y+yNext,{align:'left',color:'white',font:'0.8'});
+                yNext += 1;
+            }
+        }
+    },
     drawIntel(kingdomCreeps){
         let scoutData = global.heap.scoutData;
         if(!scoutData) return;
@@ -342,6 +359,7 @@ const painter = {
             linePos.y++;
             for(let id of Object.keys(request.assignees)){
                 let g = Game.getObjectById(id);
+                if(!g)continue;
                 new RoomVisual(fief).text(`${id} ${request.assignees[id].amount} ${g.getStoreUsed()} ${g.store.getCapacity()} ${g.store.getUsedCapacity()}`,linePos.x+1,linePos.y,{align:'left',color:'white',font:'0.3'})
                 linePos.y++;
             }
@@ -443,7 +461,7 @@ const painter = {
             let totalGroups = perimeterTiles.length;
             for(let perID of perimeterTiles){
                 let groupTiles = perimeters[perID]
-                let hue = (360 / totalGroups) * perimeterTiles.indexOf(perID);
+                let hue = (perimeterTiles.indexOf(perID) * 137.508) % 360;
                 for(let spot of groupTiles){
                     rVis.circle(spot.x,spot.y,{fill: `hsl(${hue}, 100%, 50%)`});
                 }

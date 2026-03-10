@@ -6,21 +6,16 @@ const roleRepair = {
     run: function(creep) {
         let target = Game.getObjectById(creep.memory.target)
         let targetRoom = creep.memory.targetRoom;
-        if(global.heap.alarms[creep.memory.holding]){     
+        let homeController = Game.rooms[creep.memory.fief].controller;    
+        if(global.heap.alarms[creep.memory.holding]){
             if(creep.room.name != creep.memory.fief){
                 creep.memory.stay = false;
                 creep.memory.status = 'flee';
                 creep.drop(RESOURCE_ENERGY)
-                creep.travelTo(Game.rooms[creep.memory.fief].controller)
                 let words = helper.getSay({symbol:`${Game.time % 2 == 0 ? '🚨' : '📢'}`});
                 creep.say(words.join(''))
             }
-            else{
-                //console.log("AYE")
-                if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
-                    creep.travelTo(Game.rooms[creep.memory.fief].controller);
-                }
-            }
+            if(creep.pos.getRangeTo(homeController) > 5)creep.travelTo(homeController,{range:5})
             return;
         }
         else if(creep.hits < creep.hitsMax && Memory.kingdom.holdings[creep.room.name]){
@@ -28,9 +23,7 @@ const roleRepair = {
             if(hostiles.length && !global.heap.alarms[creep.room.name] && (!heap.wardens || !heap.wardens[Memory.kingdom.holdings[creep.room.name].homeFief])){
                 setAlarm({roomName:creep.room.name,alarmType:hostiles[0].owner.username == 'Invader' ? 'invader' : 'creep',hostiles:hostiles,origin:'role.repair'})
             }
-            if([0,1,48,49].includes(creep.pos.x) || [0,1,48,49].includes(creep.pos.y)){
-                creep.travelTo(Game.rooms[creep.memory.fief].controller);
-            }
+            if(creep.pos.getRangeTo(homeController) > 5)creep.travelTo(homeController,{range:5})
             return;
         }
 
@@ -157,11 +150,11 @@ const roleRepair = {
                 if(tRange <=1) creep.withdraw(target,RESOURCE_ENERGY);
                 else{creep.travelTo(target)}
             }
-            else{
+            else if(tRange <= 8){
                 //console.log('T6')
                 let orderDetails = {
                     targetID:creep.id,
-                    amount:creep.store.getCapacity()*2,
+                    amount:creep.store.getCapacity(),
                     resourceType:RESOURCE_ENERGY,type:'dropoff'
                 };
                 supplyDemand.addRequest(creep.room,orderDetails);

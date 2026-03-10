@@ -9,7 +9,8 @@ var roleHarvester = {
             const homeRoom = creep.memory.fief
             const fief = Memory.kingdom.fiefs[homeRoom]
             if(!fief)return;
-            const link = fief.sources[targetID] && fief.sources[targetID].link;
+            const link = fief.sources && fief.sources[targetID] && fief.sources[targetID].link;
+            if(!fief.sources)return;
             if(!creep.memory.preflight){
                 if(creep.memory.job == 'remoteHarvest'){
                     //If we're a remote builder, our preflight is setting our id to our troupe.

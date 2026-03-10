@@ -82,7 +82,7 @@ const helper = {
     },
     //Returns a phrase for a room sign based on the room
     getSign: function(room){
-        const MAX_NEAR_RANGE = 4;
+        const MAX_NEAR_RANGE = 5;
         //No sign if it's one of my rooms or we've already marked it
         //console.log("Getting sign")
         
@@ -91,6 +91,7 @@ const helper = {
         }
 
         let near = [
+            "These walls remember every siege, and still they stand for the Throne.",
             "Here lies the heart of the Sovereign's empire, unbreakable and eternal.",
             "This land thrives under the rule of the Throne.",
             "These rooms flourish under the royal banner, unyielding and proud.",
@@ -111,31 +112,47 @@ const helper = {
             "A fortress of loyalty, bound by honor to the Crown's eternal rule.",
             "By decree of the Throne, this soil is consecrated and protected.",
             "Under the Sovereign's eye, this land knows only one ruler.",
-            "Let joy be in your hearts and peace in your mind, for the Sovereign protects these lands."
+            "Every sunrise over these lands is a gift from the Sovereign. Every sunset, a reminder.",
+            "Let joy be in your hearts and peace in your mind, for the Sovereign protects these lands.",
+            "To stand in the Crownlands is to stand in the shadow of something far greater than yourself.",
+            "The Sovereign welcomes all visitors. The Knights are less welcoming. Mind the Knights."
 
         ]
         let far = [
             "This frontier bears the mark of the Crown's silent watch.",
+            "Far-flung, yet not forgotten. The Throne's reach is longer than your hope.",
             "Even in foreign lands, the Throne's will is manifest.",
             "The Crown's eye misses nothing, no matter how remote.",
             "The Throne's authority is felt in every corner, no matter how far.",
             "No land is too remote to escape the weight of the Crown.",
             "The Sovereign's eyes survey these distant lands, ever watchful.",
             "Here at the edge, the Sovereign's presence is a whisper on the wind.",
+            "These borderlands are quiet now. The Crown prefers it that way.",
             "Marked by the Sovereign's scouts, this territory knows no secrets.",
             "Beware, for the Sovereign's scouts mark your every move.",
+            "A whisper carried far enough becomes a command. Heed it.",
             "The Crown's power reaches out, grasping even the most remote lands.",
             "The royal will extends even here. None are beyond reach.",
             "Those dwelling here still yet know the weight of the Throne's will.",
             "Distant though it may be, this land is witness to the Sovereign's command.",
             "These distant shores are touched by whispers of the Throne's might.",
             "In these outer realms, the Sovereign's presence is still felt.",
+            "Even the stars above these lands report to the Throne.",
+            "Distance is an illusion the Sovereign has not chosen to entertain.",
+            "These lands cry out for purpose. The Crown alone can answer.",
+            "A land without the Sovereign's mark is a land without a soul."
+            
         ]
+
         let occupied =[
             "The Throne's justice will soon restore order to this land.",
+            "The pretender's seal means nothing, and shall soon be broken.",
+            "A crown poorly worn is easily lost.",
             "Here lies a land soon to be reclaimed by the Crown.",
             "This land trembles in anticipation of the Throne's righteous fury.",
             "Chaos reigns for now, but the Kingdom's order is on the horizon.",
+            "The Throne mourns what was lost here, and sharpens its sword in equal measure.",
+            "This land screams beneath a false banner. The Sovereign hears it.",
             "A land in turmoil, soon to be pacified under the Crown's iron fist.",
             "This land will one day sing the hymns of the Throne.",
             "Order shall be restored; the Crown's banner will rise over these walls.",
@@ -147,6 +164,8 @@ const helper = {
             "Under the weight of the Throne, rebellion will crumble into dust.",
             "You dwell in borrowed time. The Sovereign's tide will reclaim all.",
             "A tapestry incomplete, awaiting the Crown's unifying thread.",
+            "You are being watched and judged. The Sovereign forgets nothing.",
+            "The Sovereign wishes the current occupant well. Briefly."
         ]
         let occupiedHolding = [
             "These fields, stolen by the weak, will soon be liberated.",
@@ -155,11 +174,20 @@ const helper = {
             "These resources are bound by fate to serve the Sovereign's greater purpose.",
             "This bounty, wrongly held, will be rightfully seized by the Sovereign's command.",
             "The usurpers plunder in vain, for soon these fields will belong to the Crown.",
-            "Resources exploited by thieves will be seized with no mercy."
+            "Resources exploited by thieves will be seized with no mercy.",
+            "The pretender hoards, the Sovereign simply collects what is owed.",
+            "These fields pay their tithe to the Crown, regardless of who holds the deed.",
+            "These fields groan under the weight of their own stolen fate.",
+            "The harvest stolen from the Crown does not nourish. It condemns.",
+            "Every resource taken by false hands is a debt written in the Sovereign's ledger.",
+            "The usurper farms. The Sovereign harvests."
         ]
-
+        //Holding messages are requested by reservers
         if(room.controller.owner){
             return occupied[Math.floor(Math.random() * occupied.length)]
+        }
+        else if(room.controller.reservation && !isMe(room.controller.reservation.username)){
+            return occupiedHolding[Math.floor(Math.random() * occupiedHolding.length)]
         }
         
         //Get closest fief distance

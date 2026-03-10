@@ -81,6 +81,7 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
                 //console.log("Range to creep <=3")
                 if(creep.pos.getRangeTo(target) <=1){
                     creep.rangedMassAttack();
+
                 }
                 else{
                     creep.rangedAttack(target);
@@ -105,7 +106,7 @@ BlinkyLance.prototype.runCreeps = function(myCreeps,hostiles){
                 creep.memory.stay = false;
                 if(!hostiles || !hostiles.length){
                     if(targetPos){
-                         let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{range:targetPos.range,military:true});
+                         let x = creep.travelTo(new RoomPosition(targetPos.x,targetPos.y,targetPos.roomName),{military:true});
                      }
                 }
                 else{

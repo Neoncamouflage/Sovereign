@@ -1,5 +1,16 @@
 const helper = require('functions.helper');
-
+const SIGNS = [
+            "This soil has drunk the blood of those who dared question the Crown. It is richer for it.",
+            "This holding has been deemed worthy of the Sovereign's attention, if not the Sovereign's residence.",
+            "The Sovereign's Porters walk these roads with purpose. The land is honored by their boots.",
+            "This bounty is yielded in service to the Throne.",
+            "These resources are bound to the Sovereign's will",
+            "This holding feeds the kingdom's ambition. It is a noble purpose.",
+            "This land was not conquered. It was chosen. There is a greatness in that.",
+            "These resources flow toward the Throne like rivers to the sea. Inevitably, and without question.",
+            "The Crown needs no deed to this land. Its purpose has been written into the soil itself.",
+            "To serve the Throne's ambition, even unknowingly, is a land's highest calling."
+        ]
 const roleClaimer = {
 
     /** @param {Creep} creep **/
@@ -25,7 +36,8 @@ const roleClaimer = {
                 }
                 return;
             }
-            var targetRoom = creep.memory.holding;
+            let targetRoom = creep.memory.holding;
+            let holding = Memory.kingdom.holdings[targetRoom];
             //var targetText = 'Tax Collection Ongoing💰'
             if(creep.room.name != targetRoom){
                     creep.travelTo(new RoomPosition(creep.memory.target.x,creep.memory.target.y,creep.memory.holding));
@@ -47,11 +59,14 @@ const roleClaimer = {
                     if(attempt == ERR_NOT_IN_RANGE) {
                         creep.travelTo(creep.room.controller)
                     }else if(attempt == OK){
-                        //if(creep.room.controller.sign && creep.room.controller.sign.text && creep.room.controller.sign.text != targetText){
-                            //creep.signController(creep.room.controller,targetText)
-                            //creep.memory.signed = true;
-                        //}
-                        //console.log(attempt)
+                        if(!holding)return;
+                        if(!holding.targetIdx) holding.targetIdx = randomInt(SIGNS.length-1)+'';
+                        //console.log("targetIndex",holding.targetIdx);
+                        let targetText = SIGNS[holding.targetIdx]
+                        //console.log("TargetText",targetText)
+                        if(creep.room.controller.sign && creep.room.controller.sign.text && creep.room.controller.sign.text != targetText){
+                            creep.signController(creep.room.controller,targetText);
+                        }
                     }
                     
                 }

@@ -15,6 +15,8 @@ const roleBait = require('role.bait');
 const roleDuo = require('role.duo');
 const roleRepair = require('role.repair');
 const roleSettler = require('role.settler')
+const roleTransit = require('role.transit')
+const roleBandit = require('role.bandit')
 const statusManager = require('statusManager');
 const helper = require('functions.helper');
 const profiler = require('screeps-profiler');
@@ -65,10 +67,11 @@ const kingdomManager = {
             let fRoom = funnels.reduce((maxRoom, room) => {
                 return (maxRoom === null || room.controller.progress > maxRoom.controller.progress) ? room : maxRoom;
             }, null);
-            global.heap.funnelTarget = fRoom == null ? null : fRoom.name;
+            Memory.kingdom.funnelTarget = fRoom == null ? null : fRoom.name;
         }
 
         for(const fief in Memory.kingdom.fiefs){
+            if(!heap.fiefs[fief]) heap.fiefs[fief] = {};
             supplyDemand.prepShipping(fief);
             kingdomCreeps[fief] = kingdomCreeps[fief] || [];
             //Make sure fief is live, remove if not
@@ -81,10 +84,12 @@ const kingdomManager = {
             heap.kingdomStatus.fiefs[fief] = fiefManager.run(Game.rooms[fief],kingdomCreeps[fief]);
             //Manage shipping tasks
             //Traveler.relay(kingdomCreeps[fief]['hauler'] || [])
-            supplyDemand.manageShipping(fief,kingdomCreeps[fief]['hauler'] || []);
+            supplyDemand.manageShipping(fief,kingdomCreeps[fief]);
             //Run spawn logic every 3 ticks
             if(Game.time % 3 == 0) registry.calculateSpawns(Game.rooms[fief],kingdomCreeps[fief]);
         }
+        //Manage kingdom resources
+        granary.manageWares();
 
         //simpleAllies.requestResource()
         //simpleAllies.requestEcon()
@@ -150,6 +155,10 @@ function runRoles(kingdomCreeps){
                 roleGunner.run(myCreep);
                 creepRole = '💥';
                 break;
+            case 'bandit':
+                roleBandit.run(myCreep);
+                creepRole = '';
+                break;
             case 'boost':
                 roleBoost.run(myCreep);
                 creepRole = '⏫';
@@ -181,6 +190,10 @@ function runRoles(kingdomCreeps){
             case 'settler':
                 roleSettler.run(myCreep);
                 creepRole = '⛺';
+                break;
+            case 'transit':
+                roleTransit.run(myCreep);
+                creepRole = '🚚';
                 break;
             case 'hunter':
                 roleHunter.run(myCreep);

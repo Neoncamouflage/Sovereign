@@ -33,7 +33,8 @@ const registry = {
         'declaimer'  : 'Duke',
         'guard' : 'Guardsman',
         'repair' : 'Paver',
-        'marauder' : 'Marauder'
+        'marauder' : 'Marauder',
+        'bandit' : 'Bandit'
     },
     //Calculates which creeps, if any, should be spawned from each spawn queue
     calculateSpawns: function(room,fiefCreeps){
@@ -49,11 +50,13 @@ const registry = {
         }
         if(Memory.hardSpawns && Memory.hardSpawns[room.name]) spawnQueue.push(...Memory.hardSpawns[room.name])
         if(!spawnQueue.length) return;
-        let qprint = '';
+        if(!heap.spawnQueue)heap.spawnQueue = {};
+        heap.spawnQueue[room.name] = [];
+        let roomQueue = heap.spawnQueue[room.name]
         for(let each of spawnQueue){
-            qprint+=`${each.memory.job || each.memory.role} - ${each.sev}\n`
+            roomQueue.push(`${each.memory.role}${each.memory.job ? ':'+each.memory.job : ''} - ${each.sev}`)
         }
-        console.log(qprint)
+        //console.log(qprint)
         //Sort the queue's keys based on severity
         spawnQueue.sort((a, b) => b.sev - a.sev);
         
@@ -502,12 +505,18 @@ function getHauler(energyRemaining,room,fiefCreeps){
 
 //Starter upgrader - Scribe
 function getUpgrader(energyRemaining,room,fiefCreeps,job){
+    let isStarter = job == 'starterUpgrader';
+    let storeClose = room.storage && room.storage.pos.getRangeTo(room.controller) <= 4;
+    //Starter scribes use generalist setup. Full upgraders significantly overweight work if in chaining range.
     let parts = [MOVE,CARRY,WORK];
+    if(!isStarter){
+        if(storeClose) parts = [MOVE,CARRY,WORK,WORK,WORK,WORK,WORK];
+        else parts = [MOVE,CARRY,WORK,WORK];
+    }
     let partsCost = 0;
     for(each of parts){
         partsCost += BODYPART_COST[each];
     }
-    let isStarter = job == 'starterUpgrader';
     let engAvail = (!fiefCreeps.upgrader && isStarter) ? energyRemaining : room.energyCapacityAvailable;
     let mult = Math.floor(engAvail/partsCost)
     let arrCap = room.controller.level > 3 ? 4 : 2;

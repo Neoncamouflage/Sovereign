@@ -6,6 +6,8 @@ const marshal = require('marshal');
 
 //How often we adjust holdings
 const ADD_REMOVE_INTERVAL = 100
+const MAX_UNASSIGNED_PER_DISTANCE = 1000;
+const DISTANCE_UNIT = 150;
 var holdingManager = {
 
     run: function(kingdomCreeps){
@@ -113,7 +115,7 @@ var holdingManager = {
         heap.kingdomStatus.totalHoldings = activeHoldings.length
         let spawnSkip = []
         for(const each of activeHoldings){
-            if(Game.time % GLOBAL_SPAWN_INTERVAL != 0) break
+            //if(Game.time % GLOBAL_SPAWN_INTERVAL != 0) break
             //If we're about to hit CPU limit, check bucket and abandon if needed
             if(Game.cpu.bucket < 7000){
                 if(avCPU > Game.cpu.limit*0.95){
@@ -165,6 +167,15 @@ var holdingManager = {
         let data = getScoutData(holdingName)
         global.heap.fiefs[fief] = global.heap.fiefs[fief] || {};
         let fiefHeap = global.heap.fiefs[fief];
+        let routeAlarms = false;
+        if(holding.routeRooms){
+            for(const each of holding.routeRooms){
+                if(global.heap.alarms[each]){
+                    routeAlarms = true;
+                    break;
+                }
+            }
+        }
 
         let roomMissions = global.heap && global.heap.missionMap && global.heap.missionMap[holdingName] || []
         //------Initial Checks------//
@@ -236,7 +247,20 @@ var holdingManager = {
             heap.matrixes[holdingName] = newCM
             heap.matrixUpdate = true;
         }
-
+        //Build remote route if not there or every so often
+        if(holding.remoteRoute && (!holding.routeRooms || Game.time % 550 == 0)){
+            let routeRooms = [];
+            for(const source of Object.values(holding.sources)){
+                if(!source.path)continue;
+                for(const spot of source.path){
+                    let spotRoom = spot.roomName;
+                    if(!routeRooms.includes(spotRoom)){
+                        routeRooms.push(spotRoom);
+                    }
+                }
+            }
+            if(routeRooms.length && (!holding.routeRooms || !holding.routeRooms.length < routeRooms.length)) holding.routeRooms = routeRooms;
+        }
         //Cost matrix is calculated after the fief gets its room plan, make sure it's there
         //Tick limit so we don't reoute a million of these at once
         let scoutCheck = !Object.values(heap && heap.scoutList || {}).length
@@ -364,25 +388,15 @@ var holdingManager = {
         }
         //Check for dropped resources and submit tasks as needed, only if not hostile
         if(remote && data.roomType != 'fief'){
-            let reserveCheck = remote.controller && remote.controller.reservation && isMe(remote.controller.reservation.username)
-            let resTime = reserveCheck ? remote.controller.reservation.ticksToEnd : false
+
+            
+            
+            let baddies = remote.find(FIND_HOSTILE_CREEPS).filter(crp => (helper.isSoldier(crp) || crp.getActiveBodyparts(CLAIM) > 0) && !isFriend(crp) && !isSK(crp))
+            if(baddies.length && !global.heap.alarms[holdingName])setAlarm({roomName:holdingName,alarmType:baddies[0].owner.username == 'Invader' ? 'invader' : 'creep',hostiles:baddies,origin:'holdingManager'})
             //Check for hostiles
-            let hostiles = remote.find(FIND_HOSTILE_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_INVADER_CORE)
-            if(hostiles.length && Game.rooms[holding.homeFief].controller.level > 2){
-                let hasMission = false;
-                if(global.heap.missionMap && global.heap.missionMap[holdingName]){
-                    for(let mission of global.heap.missionMap[holdingName]){
-                        if(mission.type == 'destroyCore') hasMission = true;
-                        break;
-                    }
-                }
-                if(!hasMission){
-                    chronicle.log(`Invader core detected in holding ${holdingName}.`,'holdingManager',3)
-                    marshal.destroyCore(holdingName,hostiles[0].id,resTime);
-                }
-            }
+            
         }
-        if(remote && !global.heap.alarms[holdingName] && data.ownerType != 'enemy'){
+        if(remote && !routeAlarms && !global.heap.alarms[holdingName] && data.ownerType != 'enemy'){
             
             let droppedResources = remote.find(FIND_DROPPED_RESOURCES);
             //console.log("Checking drops in",remote.name,"and found",droppedResources.length)
@@ -405,6 +419,7 @@ var holdingManager = {
                     amount: amount,//-distance
                     resourceType: resourceType,
                     international : true,//amount < 1000 ? 5 : 6
+                    priority:3
                 };
                 //console.log("Attempting to add",JSON.stringify(details))
                 const taskID = supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
@@ -419,6 +434,7 @@ var holdingManager = {
                         amount: amount,
                         resourceType: resource,
                         international:true,
+                        priority:3
                     };
                     supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
                 });
@@ -436,7 +452,8 @@ var holdingManager = {
                         targetID: canID,
                         amount: can.store[resType],
                         resourceType: resType,
-                        international:true
+                        international:true,
+                        priority:3
                     };
                     supplyDemand.addRequest(Game.rooms[holding.homeFief], details);
                 }
@@ -448,7 +465,6 @@ var holdingManager = {
         let needSpawns = false
         let remote = Game.rooms[holdingName]
         let holding = Memory.kingdom.holdings[holdingName];
-        
         let fief = holding.homeFief;
         let data = getScoutData(holdingName)
         global.heap.fiefs[fief] = global.heap.fiefs[fief] || {};
@@ -465,12 +481,31 @@ var holdingManager = {
         }
         if(!holding.remoteRoute) return;
         //Keep track of how many holdings we're actively processing
-        fiefHeap.holdingDist = (fiefHeap.holdingDist || 0) + (holding.distance || 0)
+        fiefHeap.holdingDist += holding.distance || 0;
+        //console.log(fief,holdingName,"NEWDIST",fiefHeap.holdingDist)
+        
         //console.log("MAINHOLD",holdingName)
         //console.log("SPAWNPAD",spawnPad)
         //Spawn Time
+        let routeAlarms = false;
+        for(const each of holding.routeRooms){
+            if(global.heap.alarms[each]){
+                routeAlarms = true;
+                break;
+            }
+        }
+
+        //If 
+        let unassignedHoldingAmount = heap.fiefs[fief].holdingUnassigned || 0;
+        //Check if we're below the allowed amounts
+        let belowAllowedUnassignedAmount = unassignedHoldingAmount * DISTANCE_UNIT < fiefHeap.holdingDist * MAX_UNASSIGNED_PER_DISTANCE;
+        //console.log(holdingName,"Checking Distance:",fiefHeap.holdingDist,"Amount:",unassignedHoldingAmount,"Below?",belowAllowedUnassignedAmount)
+        if(!belowAllowedUnassignedAmount){
+            //console.log(holdingName,"not allowed to continue. Distance:",fiefHeap.holdingDist,"Unassigned:",unassignedHoldingAmount);
+            return needSpawns;
+        }
         if(Game.time % GLOBAL_SPAWN_INTERVAL == 0){
-            if(!enemyReserve && (!global.heap.alarms[holdingName] || !holding.noDefend)){
+            if(!enemyReserve && !routeAlarms){
                 //-- Harvester --
                 //Check each source for open space and harvester need
                 //console.log("RUNNING HOLDING SPAWN")
@@ -505,11 +540,25 @@ var holdingManager = {
             //If we have the energy capacity in our home fief and we need a reservation, ask for a claim creep if needed
             //We want vision for this
             if(remote){
-
-                let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => (helper.isSoldier(crp) || crp.getActiveBodyparts(CLAIM) > 0) && !isFriend(crp))
-                if(hostiles.length && !holding.noDefend && !global.heap.alarms[holdingName] && (!heap.wardens || !heap.wardens[fief])){
-                    setAlarm({roomName:holdingName,alarmType:hostiles[0].owner.username == 'Invader' ? 'invader' : 'creep',hostiles:hostiles,origin:'holdingManager'})
+                let reserveCheck = remote.controller && remote.controller.reservation && isMe(remote.controller.reservation.username)
+                let resTime = reserveCheck ? remote.controller.reservation.ticksToEnd : false
+                let hstructs = remote.find(FIND_HOSTILE_STRUCTURES).filter(struct => struct.structureType == STRUCTURE_INVADER_CORE)
+                if(hstructs.length && Game.rooms[holding.homeFief].controller.level > 2){
                     let hasMission = false;
+                    if(global.heap.missionMap && global.heap.missionMap[holdingName]){
+                        for(let mission of global.heap.missionMap[holdingName]){
+                            if(mission.type == 'destroyCore') hasMission = true;
+                            break;
+                        }
+                    }
+                    if(!hasMission){
+                        chronicle.log(`Invader core detected in holding ${holdingName}.`,'holdingManager',3)
+                        marshal.destroyCore(holdingName,hstructs[0].id,resTime);
+                    }
+                }
+                let hostiles = remote.find(FIND_HOSTILE_CREEPS).filter(crp => (helper.isSoldier(crp) || crp.getActiveBodyparts(CLAIM) > 0) && !isFriend(crp))
+                let hasMission = false;
+                if(hostiles.length && describeRoom(holdingName) != ROOM_CENTER && !holding.noDefend && (!heap.wardens || !heap.wardens[fief])){
                     if(global.heap.missionMap && global.heap.missionMap[holdingName]){
                         for(let mission of global.heap.missionMap[holdingName]){
                             if(mission.type == 'defend') hasMission = true;
@@ -547,6 +596,9 @@ var holdingManager = {
                                 myMission.complete();
                             }
                         }
+                    }
+                    else{
+                        
                     }
                 }
                 //Get controller spots if we don't
@@ -644,12 +696,14 @@ var holdingManager = {
 
         //With Vision
         if(remote){//Game.rooms[fief].storage && Game.rooms[fief].storage.my && Game.rooms[fief].storage.store.getUsedCapacity(RESOURCE_ENERGY) > 10000
-            let timeCheck = Game.rooms[holding.homeFief].controller.level >=5 ? 200 : 30
+            let homeRoom = Game.rooms[holding.homeFief];
+            let timeCheck = homeRoom.controller.level >=5 ? 200 : 30
+            let storeCheck = !!homeRoom.storage;
             //Only build over swamps til RCL5 to speed up room development
-            let swampsOnly = Game.rooms[holding.homeFief].controller.level <=4;
+            let swampsOnly = homeRoom.controller.level <4;
             //If we're RCL4 or less and this is a later remote, we need much more frequent construction checks 
-            if(Game.rooms[holding.homeFief].controller.level <=4 && heap.sortedHoldings && heap.sortedHoldings.indexOf(holdingName) > 1) timeCheck = 1;
-            if(Game.time % (GLOBAL_SPAWN_INTERVAL*timeCheck) == 0 && Game.rooms[holding.homeFief].controller.level >=3 && Object.keys(Game.constructionSites).length < 40){
+            if(homeRoom.controller.level <=4 && heap.sortedHoldings && heap.sortedHoldings.indexOf(holdingName) > 1) timeCheck = 1;
+            if(Game.time % 90/*(GLOBAL_SPAWN_INTERVAL*timeCheck)*/ == 0 && homeRoom.controller.level >=3 && Object.keys(Game.constructionSites).length < 70){
                 //console.log("Construction check in ",holdingName)
                 //Set remote build based on whether we have active sites
                 //This section was previously inside if(spawnPad == 1){} and I don't know why. If this breaks things and we come back to revert, comment why
@@ -662,16 +716,22 @@ var holdingManager = {
                 //console.log("REMOTEBUILD",Memory.kingdom.fiefs[fief].remoteBuild)
                 //If no active sites, check if any are needed and build if so
                 if(!Memory.kingdom.fiefs[fief].remoteBuild || (Memory.kingdom.fiefs[fief].remoteBuild == holdingName && remote.find(FIND_MY_CONSTRUCTION_SITES).filter(site => site.structureType == STRUCTURE_ROAD).length < 20)){
+                    let roadCount = 0;
+                    let maxRoads = 0;
                     let buildCount = 0;
                     for(let source of Object.values(holding.sources)){
+                        maxRoads += source.path.length;
                         for(let spot of source.path.filter(spt => ![0,49,source.x].includes(spt.x) && ![0,49,source.y].includes(spt.y))){
                             let terrain = new Room.Terrain(spot.roomName)
                             if(Game.rooms[spot.roomName]){
                                 let spotCheck = Game.rooms[spot.roomName].lookForAt(LOOK_STRUCTURES,spot.x,spot.y).filter(spt => spt.structureType == STRUCTURE_ROAD);
                                 if(!spotCheck.length){
-                                    if(swampsOnly && terrain.get(spot.x,spot.y) != TERRAIN_MASK_SWAMP)continue;
+                                    if((swampsOnly && terrain.get(spot.x,spot.y) != TERRAIN_MASK_SWAMP) || (!swampsOnly && !storeCheck))continue;
                                     Game.rooms[spot.roomName].createConstructionSite(spot.x,spot.y,STRUCTURE_ROAD);
                                     buildCount++;
+                                }
+                                else{
+                                    roadCount++;
                                 }
                                 if(buildCount >= 20) break;
                             }
@@ -682,9 +742,14 @@ var holdingManager = {
                     if(buildCount > 0) Memory.kingdom.fiefs[fief].remoteBuild = holdingName;
                     else{
                         //Roads done marker for haulers later on
-                        if(!swampsOnly){
+                        //Doesn't need to be fully complete, just mostly
+                        if(roadCount/maxRoads >= 0.9){
                             Memory.kingdom.fiefs[fief].roadsDone = Memory.kingdom.fiefs[fief].roadsDone || {};
                             if(!Memory.kingdom.fiefs[fief].roadsDone[holdingName])Memory.kingdom.fiefs[fief].roadsDone[holdingName] = 1;
+                        }
+                        else{
+                            Memory.kingdom.fiefs[fief].roadsDone = Memory.kingdom.fiefs[fief].roadsDone || {};
+                            if(!Memory.kingdom.fiefs[fief].roadsDone[holdingName])Memory.kingdom.fiefs[fief].roadsDone[holdingName] = 0;
                         }
                     }
                 }

@@ -109,13 +109,13 @@ const roleMarauder = {
 
 function getNewRemote(currentRoom,harassTarget){
     //Temporary for SWC, replace with a ledger search for remote targets
-    remoteOptions = ['E3N4','E4N2','E5N2','E6N1','E3N6','E3N7','E3N8','E4N8','E4N9','E5N8','E6N8','E6N9','E7N8','E7N7','E8N8','E8N9','E2S4','E2S5','E3S6'];
+    remoteOptions = ['W6N61','W4N61'];
     let distances = []
     for(let each of remoteOptions){
-        distances.push({dist:Game.map.getRoomLinearDistance(currentRoom,each),roomName:each});
+        if(each != currentRoom)distances.push({dist:Game.map.getRoomLinearDistance(currentRoom,each),roomName:each});
     }
     distances.sort((a,b) => b.dist - a.dist)
-
+    return randomChoice(distances);
     //Prefer much closer options if not doing a first pick
     if(Memory.kingdom.fiefs[currentRoom]){
         return randomChoice([distances[1].roomName,distances[2].roomName,distances[3].roomName,distances[4].roomName,distances[5].roomName])

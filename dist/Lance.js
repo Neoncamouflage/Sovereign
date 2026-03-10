@@ -113,7 +113,7 @@ Lance.prototype.populate = function(fief,kingdomCreeps,options={}){
             }
             if(kingdomCreeps[this.name].length >= this.unitsNeeded){
                 foundReserve = true;
-                if(kingdomCreeps[this.name].length >= this.unitsNeeded*2) break;
+                if(kingdomCreeps[this.name].length >= this.unitsNeeded) break;
             }
         }
     }

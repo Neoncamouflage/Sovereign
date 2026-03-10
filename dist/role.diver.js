@@ -7,11 +7,40 @@ var roleDiver = {
     //Object.values(Game.creeps).filter(crp => crp.memory.role = 'diver').forEach(x=>{x.memory.portalled = false})
     /** @param {Creep} creep **/
     run: function(creep) {
-        let targetPos = new RoomPosition(27,33,'W32N27');
-        creep.travelTo(targetPos);
-        if(creep.pos.isEqualTo(targetPos)){
-            creep.claimController(creep.room.controller);
+        creep.respawn()
+        let tpos =new RoomPosition(11,28,'W9N67');
+        if(creep.room.controller && creep.room.controller.safeMode){
+            creep.suicide();
+            return;
         }
+        if(!creep.memory.stepped){
+            if(creep.pos.isEqualTo(tpos)){
+                creep.memory.stepped = true;
+            }
+            else{
+                creep.travelTo(tpos);
+                return;
+            }
+            
+        }
+        let target = creep.memory.target && Game.getObjectById(creep.memory.target);
+        if(!target){
+            let sites = creep.room.find(FIND_CONSTRUCTION_SITES);
+            if(sites.length){
+                creep.memory.target = sites[0].id;
+                target = sites[0];
+            }
+        }
+        if(target && creep.pos.getRangeTo(target) > 1){
+            creep.travelTo(target);
+        }
+        else if(target && creep.pos.getRangeTo(target) == 1){
+            let movDir = creep.pos.getDirectionTo(target);
+            creep.move(movDir);
+        }
+        
+
+        return;
     }
 };
 
@@ -21,7 +50,7 @@ var roleDiver = {
 
 function drainRoom(creep){
     if(creep.room.name != creep.memory.targetRoom){
-        creep.travelTo(new RoomPosition(25,25,creep.memory.targetRoom));
+        creep.travelTo(new RoomPosition(11,28,creep.memory.targetRoom));
         return;
     }
     if(creep.store[RESOURCE_ENERGY]) creep.drop(RESOURCE_ENERGY)

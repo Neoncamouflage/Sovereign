@@ -397,8 +397,8 @@ class Traveler {
         let ret = PathFinder.search(origin, { pos: destination, range: options.range }, {
             maxOps: options.maxOps,
             maxRooms: options.maxRooms,
-            plainCost: options.offRoad ? 1 : options.ignoreRoads ? 1 : (options.creepRole == 'hauler' && options.creepState != 'refill') ? 5 : 2,
-            swampCost: options.offRoad ? 1 : options.ignoreRoads ? 5 : (options.creepRole == 'hauler' && options.creepState != 'refill') ? 25 : 10,
+            plainCost: options.plainCost ? options.plainCost : options.offRoad ? 1 : options.ignoreRoads ? 1 : (options.creepRole == 'hauler' && options.creepState != 'refill') ? 5 : 2,
+            swampCost: options.swampCost ? options.swampCost : options.offRoad ? 1 : options.ignoreRoads ? 5 : (options.creepRole == 'hauler' && options.creepState != 'refill') ? 25 : 10,
             roomCallback: callback,
         });
         if (ret.incomplete && options.ensurePath) {

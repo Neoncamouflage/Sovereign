@@ -185,6 +185,10 @@ global.getDiplomacy = function(username){
     return 'neutral';
 }
 
+global.isSK = function(creep){
+    return creep.owner.username == 'Source Keeper';
+}
+
 global.isFriend = function(target){
     let checkVal;
     if(target instanceof RoomObject){
@@ -208,7 +212,7 @@ global.isFriend = function(target){
     }
     //Get diplo status and return friendly check
     let diplo = getDiplomacy(checkVal);
-    if(diplo == 'allies' || diplo == 'ceasefire'){
+    if(diplo == 'allies' || (target && target.room && diplo == 'ceasefire' && !Memory.kingdom.fiefs[target.room.name])){
         return true;
     }
     else{
@@ -297,10 +301,10 @@ global.setScoutData = function(room, data = {}, force = false) {
             for(const struct of hStructs){
                 if (!Memory.travelAvoid[room.name]) {
                     if (struct.structureType == STRUCTURE_INVADER_CORE) {
-                        let total = core.ticksToDeploy || 0;
+                        let total = struct.ticksToDeploy || 0;
 
-                        if (core.effects && core.effects.length) {
-                            let collapseEffect = core.effects.find(e => e.effect == EFFECT_COLLAPSE_TIMER);
+                        if (struct.effects && struct.effects.length) {
+                            let collapseEffect = struct.effects.find(e => e.effect == EFFECT_COLLAPSE_TIMER);
                             if (collapseEffect) {
                                 total += collapseEffect.ticksRemaining;
                             }
@@ -589,33 +593,13 @@ global.getDistance = function(pos1,pos2,opts = {}){
     let incomp = route.incomplete;
     return [dist,incomp]
 }
-global.getTravelPath = function(origin,destination,opts){
+global.getTravelPath = function(origin,destination,opts = {}){
+    opts.maxOps ??= 100000;
+    opts.maxRooms ??= 64;
     return Traveler.findTravelPath(origin,destination,opts)
 }
 global.getSerializedPath = function(startPos,path){
     return Traveler.serializePath(startPos,path);
-}
-global.getRoute = function(pos1,pos2,opts = {}){
-    opts.maxOps ??= 20000;
-    opts.maxRooms ??= 64;
-    opts.roomCallback ??= function(roomName) {
-            let room = Game.rooms[roomName];
-            let costs = new PathFinder.CostMatrix;    
-            if (room){
-              room.find(FIND_STRUCTURES).forEach(function(struct) {
-                  if (struct.structureType === STRUCTURE_ROAD) {
-                    costs.set(struct.pos.x, struct.pos.y, 1);
-                  } else if (struct.structureType !== STRUCTURE_CONTAINER &&
-                             (struct.structureType !== STRUCTURE_RAMPART ||
-                              !struct.my)) {
-                    costs.set(struct.pos.x, struct.pos.y, 255);
-                  }
-                });
-            }
-            return costs;
-          };
-    let route = PathFinder.search(pos1,{pos:pos2,range:1},opts);
-    return route
 }
 
 global.purgeOldScoutData = function(amt = 20000){
@@ -669,7 +653,7 @@ global.clearQueue = function(room='all'){
 global.setAlarm = function({roomName,alarmType='general',hostiles=[],manualExpiry=false,origin='global.setAlarm'} = {}){
     let expiration = manualExpiry || Game.time + Math.max(...hostiles.map(creep => creep.ticksToLive))
     heap.alarms[roomName] = {tick:Game.time,type:alarmType,creeps:hostiles.map(creep => creep.id),expiry:expiration}
-    chronicle.log(`Alarm raised in room ${roomName}. Type: ${alarmType}. Hostile count: ${hostiles.length}. Expiration: ${expiration-Game.time} ticks.`,origin,3);
+    chronicle.log(`Alarm raised in room ${roomName}. Type: ${alarmType == 'creep' ? 'creep '+hostiles[0].owner.username : alarmType}. Hostile count: ${hostiles.length}. Expiration: ${expiration-Game.time} ticks.`,origin,3);
 }
 
 global.showMem = function(objectID){

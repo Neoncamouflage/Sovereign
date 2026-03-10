@@ -226,7 +226,6 @@ const roleBuilder = {
                 if(creep.memory.job == 'remoteBuilder'){
                     orderDetails.international = true;
                     orderDetails.priority = 6
-                    orderDetails.amount *= 3;
                 }
                 supplyDemand.addRequest(creep.room,orderDetails)
             }
@@ -249,7 +248,6 @@ const roleBuilder = {
                     if(creep.memory.job == 'remoteBuilder'){
                         orderDetails.international = true;
                         orderDetails.priority = 6
-                        orderDetails.amount *= 3;
                     }
                     if(creep.room.energyAvailable > creep.room.energyCapacityAvailable/2 || creep.memory.job == 'remoteBuilder') supplyDemand.addRequest(creep.room,orderDetails)
                 }

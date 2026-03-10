@@ -7,6 +7,7 @@ const spinup = {
         Memory.me = 'NeonCamouflage';
         Memory.diplomacy = {allies:STARTING_ALLIES, ceasefire:[], outlaws:[],ledger:[]}
         Memory.ledgerRef = {};
+        Memory.ledger = {};
         Memory.kingdom = {};
         Memory.kingdom.holdings = {};
         Memory.kingdom.fiefs = {};

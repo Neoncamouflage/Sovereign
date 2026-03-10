@@ -5,7 +5,6 @@ function Warden(room) {
     this.roomName = room.name;
     this.towerMap = helper.getTowerMap(room);
     this.rampartPlan = Memory.kingdom.fiefs[room.name].rampartPlan;
-    this.rampSafe = checkRamps(room,Memory.kingdom.fiefs[room.name].rampartPlan);
     this.defenseMap = getDefenseMap(room,Memory.kingdom.fiefs[room.name].rampartPlan);
     this.lastActive = Game.time;
     this.firstActive = Game.time;
@@ -37,7 +36,7 @@ Warden.prototype.run = function(hostiles,fiefCreeps) {
     }
 
     //Check if we need to fire safemode due to rampart break or structure damage.
-    if(this.rampSafe && ramps.length != this.rampartPlan.length) room.controller.activateSafeMode();
+    if(ramps.length != this.rampartPlan.length) room.controller.activateSafeMode();
     if(damagedKeyStructs) room.controller.activateSafeMode();
 
     //Gather all defensive creeps
@@ -91,13 +90,6 @@ function getDefenseMap(room,rampSpots){
     return walkCM;
 }
 
-//Checks to see if there are as many live ramps as planned.
-function checkRamps(room,rampPlan){
-    let ramps = room.find(FIND_MY_STRUCTURES).filter(str => str.structureType == STRUCTURE_RAMPART);
-    return ramps.length == rampPlan.length;
-}
-
 module.exports = Warden;
-checkRamps = profiler.registerFN(checkRamps, 'checkRamps');
 getDefenseMap = profiler.registerFN(getDefenseMap, 'getDefenseMap');
 profiler.registerClass(Warden, 'Warden');

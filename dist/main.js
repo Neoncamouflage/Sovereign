@@ -12,6 +12,7 @@ require('functions.global');
 require('architect')
 const supplyDemand = require('supplyDemand')
 global.chronicle = require('chronicle');
+global.ledger = require('ledger');
 const spinup = require('spinup')
 const kingdomManager = require('kingdomManager'); //Top level kingdom manager system
 const Traveler = require('Traveler');
@@ -50,8 +51,7 @@ global.heap = {
         reserve:[]
     },
     duos:[],
-    quads:[],
-    funnelTarget:null
+    quads:[]
 }
 module.exports.loop = function () {
     console.log = console.logUnsafe;
@@ -92,7 +92,8 @@ module.exports.loop = function () {
     else{
         spinup.reset();
     }
-
+    heap.allHostiles = {};
+    heap.tombstones = [];
     //Check fiefs 
     for(const room in Game.rooms){
         let myRoom = Game.rooms[room];
@@ -117,7 +118,14 @@ module.exports.loop = function () {
             heap.matrixUpdate = true;
         }
 
-        //Record hostile actions
+        //Record hostiles
+        let roomHostiles = myRoom.find(FIND_HOSTILE_CREEPS);
+        if(roomHostiles.length) heap.allHostiles[room] = roomHostiles
+        //Shut off alarms if no enemy
+        else if(heap.alarms && heap.alarms[room])  delete heap.alarms[room];
+        //Record tombstones
+        heap.tombstones[room] = myRoom.find(FIND_TOMBSTONES);
+        
     }
 
     //Garbage collection and routine tasks
@@ -154,7 +162,7 @@ module.exports.loop = function () {
             try{
                 let cutTime = 60000; //Cut rooms we haven't seen in this many ticks. We start 10k higher to account for the first loop
                 while(heapLength > 95 && cutTime > 0){
-                    cutTime-= 10000;
+                    cutTime-= 2000;
                     cMessage += `\nScout data oversized at ${heapLength.toFixed(2)}KB. Trimming rooms not seen in ${cutTime} ticks.`
                     purgeOldScoutData(cutTime);
                     heapString = JSON.stringify(heap.scoutData);

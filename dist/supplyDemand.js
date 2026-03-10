@@ -10,16 +10,17 @@ const supplyDemand = {
             global.heap.shipping[roomName].utilization = [];
         }
     },
-    manageShipping: function(roomName,poolHaulers){
+    manageShipping: function(roomName,roomCreeps){
         //Primary management function for a room to handle all supply/demand tasks
         //Run prepShipping for the room to ensure we're set up
         let room = Game.rooms[roomName];
         let unassignedTotal = 0;
         let newUtil = 0;
+        let poolHaulers = roomCreeps['hauler']
         const shipping = global.heap.shipping[roomName];
-        const MIN_IDLE = 0.22;
+        const MIN_IDLE = 0.12;
         const FILL_REFRESH_TICKS = 50;
-        const ROOM_UTIL_MULTIPLE = 25;
+        const ROOM_UTIL_MULTIPLE = 100;
         const safeMode = room.controller && room.controller.safeMode;
         const storageEnergy = room.storage ? room.storage.store.getUsedCapacity(RESOURCE_ENERGY) : 0;
         const terminalEnergy = room.terminal ? room.terminal.store.getUsedCapacity(RESOURCE_ENERGY) : 0;
@@ -141,7 +142,12 @@ const supplyDemand = {
             //Continue task progress
             //console.log("PRERUN IDLES\n",stateHaulers['idle'])
             let currentIdle = runHaulerTasks(poolHaulers,room);
+            
+            
+            
             newUtil = currentIdle/poolHaulers.length;
+
+
             //console.log("Idle Count:",idleCount,"Total Count:",totalCount,"Post Idles",postIdles)
             //Add the new utilization
         }
@@ -157,13 +163,16 @@ const supplyDemand = {
             let totalCarry = (poolHaulers && poolHaulers.length) ? poolHaulers.reduce((sum,c) => sum + c.store.getCapacity(), 0) : 0;
             let unassignedUtilization = totalCarry/Math.max(unassignedTotal,1);
             let utilization = shipping.utilSum / shipping.utilization.length;
-            let holdingUtilization = totalCarry/Math.max(((heap.fiefs[roomName].holdingDist || 0)*ROOM_UTIL_MULTIPLE),1);
-            //console.log("Total Carry",totalCarry,"Unassigned Total",unassignedTotal)
-            //console.log("Checking for hauler spawning.\nUtilization - Overall:",utilization,"Tick:",shipping.utilization[0],"Unassigned:",unassignedUtilization,"Holding:",holdingUtilization)
+            let holdingMiners = roomCreeps.miner || [];
+            let holdingProduction = holdingMiners.reduce((sum,each)=> sum+each.getActiveBodyparts(WORK),0)*ROOM_UTIL_MULTIPLE;
+            let holdingUtilization = totalCarry/Math.max(holdingProduction,1);
+            //console.log(roomName,"Total Carry",totalCarry,"Unassigned Total", unassignedTotal, "Holding Production",holdingProduction)
+            //console.log(roomName,"Checking for hauler spawning.\nUtilization - Overall:",utilization,"Tick:",shipping.utilization[0],"Unassigned:",unassignedUtilization,"Holding:",holdingUtilization)
             utilization = Math.min(utilization,unassignedUtilization,holdingUtilization);
             //Extra check, no spawning if half or more haulers are currently idle
-            //console.log("Final util:",utilization,"Min Idle over Utilization?",MIN_IDLE > utilization, "Current tick utilization 0.5 or less?",shipping.utilization[0] <= 0.5)
-            if((!poolHaulers || poolHaulers.length < 1) || (MIN_IDLE > utilization && shipping.utilization[0] <= 0.5 && unassignedTotal > 0)){
+            //console.log(roomName,"Final util:",utilization,"Min Idle over Utilization?",MIN_IDLE > utilization, "Current tick utilization 0.5 or less?",shipping.utilization[0] <= 0.5)
+            //Last Update: Added check for unassignedUtilization under 0.5 as we're overspawning haulers
+            if((!poolHaulers || poolHaulers.length < 1) || (MIN_IDLE > utilization && shipping.utilization[0] <= 0.3 && unassignedTotal > 0)){
                 //Extra check to make sure we have task assignments
                 //console.log("Yes2")
                 registry.requestCreep({sev:poolHaulers.length > 1 ? 36 : room.storage && room.storage.store[RESOURCE_ENERGY] > 100 ? 100 :  poolHaulers.length > 2 ? 50 : 60,memory:{role:'hauler',fief:roomName,preflight:false}});  
@@ -175,7 +184,7 @@ const supplyDemand = {
         //console.log("Shipping ready!")
         //Adds a request to the room's shipping tasks
         //Details is an object containing task data
-        const DEFAULT_PRIORITY = 1;
+        const DEFAULT_PRIORITY = 3;
         //console.log("Add room",room.name)
 
         if (!room || !(room instanceof Room)) {
@@ -252,6 +261,9 @@ const supplyDemand = {
                     return taskID;
                 }
             }
+            else{
+                if(!details.priority) details.priority = DEFAULT_PRIORITY;
+            }
         }
         //If no match, set up new task.
         let newTask = new Task(room.name,details.type,details.resourceType,details.targetID,details.amount,details.priority,details.international);
@@ -309,6 +321,9 @@ function completeTasks(shipping,haulers,room){
                 setIdle(creep);
                 continue;
             }
+            if(creep.store.getUsedCapacity() && (creep.room.storage && creep.pos.getRangeTo(creep.room.storage)) && Object.keys(creep.store)[0] != task.resourceType){
+                creep.transfer(creep.room.storage,Object.keys(creep.store)[0])
+            }
             //Refillers just need to check if the room is full to complete
             if(state == 'refill'){
                 if(room.energyAvailable == room.energyCapacityAvailable){
@@ -341,7 +356,7 @@ function completeTasks(shipping,haulers,room){
                 setIdle(creep);
                 continue;
             }
-            if(task.type == 'dropoff' && taskTarget.store.getFreeCapacity(task.resourceType) === 0){
+            if(task.type == 'dropoff' && taskTarget.store.getFreeCapacity(task.resourceType) === 0 && !task.override){
                 let noStuff = (!room.storage || !room.storage.store[task.resourceType]) && (!room.terminal || !room.terminal.store[task.resourceType])
 
                 if(noStuff){
@@ -529,12 +544,18 @@ function runRelays(storeHaulers){
             creep.storeLock = true;
             relayTarget.storeLock = true;
             usedEmpties.add(relayTarget.id)
+
+            // -- FIX THIS WITH PROPER TRAVEL DATA SWAP
+            delete creep.memory._trav
+            delete relayTarget.memory._trav
+
+
             didRelay = true;
             /*console.log(`Relay finished. Starting state:\n
                 ${startMesage}
                 Ending State:\n
                 Creep TaskID: ${creep.memory.task} Creep state: ${getState(creep)} Target TaskID: ${relayTarget.memory.task} Target state: ${getState(relayTarget)}`)*/
-            console.log(`Relay Target ${relayTarget} TaskID: ${relayTarget.memory.task} Target state: ${getState(relayTarget)}`);
+            //console.log(`Relay Target ${relayTarget} TaskID: ${relayTarget.memory.task} Target state: ${getState(relayTarget)} Target getStoreUsed: ${relayTarget.getStoreUsed()} Target getStoreFree: ${relayTarget.getStoreFree()}`);
             break;
         }
         
@@ -562,14 +583,20 @@ function assignHaulerTasks(allHaulers, room) {
     let unassignedTasks = [];
     let stealTasks = [];
     let newPriorityTasks = [];
-
+    //Track unassigned amounts for the holding manager to reference
+    let holdingUnassigned = 0;
     for (const task of Object.values(shippingTasks)) {
         //Audit tasks for cleanup
         if(Game.time % AUDIT_INTERVAL == 0){
             //Make sure the target exists and is relevant
             //When we remove the vision requirement, we'll need to fix this
             //Or even just change it to an expiration timer if the request is international, vision if not
-            if(!Game.getObjectById(task.targetID)){
+            let taskTarget = Game.getObjectById(task.targetID);
+            if(!taskTarget){
+                task.remove(room.name);
+                continue;
+            }
+            if(heap.alarms[taskTarget.room.name]){
                 task.remove(room.name);
                 continue;
             }
@@ -579,6 +606,8 @@ function assignHaulerTasks(allHaulers, room) {
             }
         }
         const ua = task.unassignedAmount();
+        if(task.international && task.resourceType == RESOURCE_ENERGY) holdingUnassigned += ua;
+        //
         if (ua > 0) {
             startingUnassignedTotal += ua;
             if(task.tick == Game.time && task.priority >= 8 && task.type == 'dropoff') newPriorityTasks.push(task);
@@ -588,7 +617,8 @@ function assignHaulerTasks(allHaulers, room) {
             stealTasks.push(task);
         }
     }
-
+    heap.fiefs[room.name].holdingUnassigned = holdingUnassigned;
+    //console.log("Total remote unassigned for",room.name,holdingUnassigned)
     if (!unassignedTasks.length && !stealTasks.length) return 0;
     if (!idleHaulers.length) return startingUnassignedTotal;
 
@@ -614,6 +644,7 @@ function assignHaulerTasks(allHaulers, room) {
     }
 
     const terminal = room.terminal;
+    const termNeeds = Memory.kingdom.fiefs[room.name] && Memory.kingdom.fiefs[room.name].termNeeds;
     const storage = room.storage;
 
     const storagePos = storage
@@ -641,7 +672,7 @@ function assignHaulerTasks(allHaulers, room) {
             let dist = getTileDistance(h.pos, targetPos);
 
             // Prefer matching smaller UA with smaller carriers (so we don’t waste big haulers on tiny jobs)
-            if (ua > 0 && ua < h.getStoreFree()) dist *= 1.25;
+            //if (ua > 0 && ua < h.getStoreFree()) dist *= 1.25;
 
             if (dist < bestScore) {
                 bestScore = dist;
@@ -678,10 +709,14 @@ function assignHaulerTasks(allHaulers, room) {
         }
     }
 
-    //Figure out why we keep assigning non-positive amounts
-    //Whatever is doing that is breaking everything
     function canSourceResourceInRoom(resourceType) {
-        return false //((terminal && terminal.store[resourceType] > 0) || (storage && storage.store[resourceType] > 0));
+        let termGood = terminal && terminal.store[resourceType] > 0 && (!termNeeds || termNeeds[resourceType] > terminal.store[resourceType]);
+        let storeGood = storage && storage.store[resourceType] > 0;
+        //Energy check, no assignign for energy if we have less than 5k
+        //if(resourceType == RESOURCE_ENERGY){
+
+        //}
+        return (termGood || storeGood);
     }
 
     //keep assigning from a pool until task is satisfied or pool exhausted.
@@ -740,7 +775,7 @@ function assignHaulerTasks(allHaulers, room) {
             const totalStore = Object.values(task.assignees || {}).reduce((sum, each) => sum + each.amount, 0);
             const refillGap = room.energyCapacityAvailable - room.energyAvailable;
 
-            if (current >= 3 || (refillGap > 0 && totalStore / refillGap > 0.5)) {
+            if (current >= 6 || (refillGap > 0 && totalStore / refillGap > 0.2)) {
                 const refillers = Object.keys(task.assignees)
                     .map(id => Game.getObjectById(id))
                     .filter(c => !!c);
@@ -843,6 +878,7 @@ function assignHaulerTasks(allHaulers, room) {
             //Flow-fill remaining demand with:
             // 1) haulers already carrying the resource, then
             // 2) empty haulers (only if storage/terminal can source).
+             
             if ((task.unassignedAmount() || 0) > 0) {
                 const carryingPool = (byRes[rt] || []).filter(h => h.getStoreUsed(rt) > 0);
                 assigned = flowAssignFromPool(
@@ -864,7 +900,7 @@ function assignHaulerTasks(allHaulers, room) {
                         taskTarget,
                         function (h, t) {
                             // Empty haulers will go pick up then deliver; reserve up to carry cap.
-                            return Math.min(h.store.getCapacity(), t.unassignedAmount() || 0);
+                            return Math.max(Math.min(h.store.getCapacity(), t.unassignedAmount()),0);
                         }
                     ) || assigned;
                 }
@@ -953,8 +989,9 @@ function assignHaulerTasks(allHaulers, room) {
         }
 
         // Update unassigned total
+        // Priority 1 tasks are constant, large-scale resources moves that shouldn't be used for this
         let mult = task.international ? 2 : 1;
-        unassignedTotal += (task.unassignedAmount() || 0) * mult;
+        if(task.priority > 1)unassignedTotal += (task.unassignedAmount() || 0) * mult;
 
         // Exit early if we’ve exhausted candidates
         if (!empty.length && !Object.keys(byRes).some(rt => byRes[rt] && byRes[rt].length)) break;
@@ -1089,13 +1126,14 @@ function runRefill(creep,room,task){
             }
             //No storage location, shouldn't be refilling at all
             else{
-                console.log(`Refill task for ${room.name} despite no storage/terminal.`);
+                //console.log(`Refill task for ${room.name} despite no storage/terminal.`);
                 if(task && task.type == 'refill')task.remove(creep.memory.fief);
                 newIdles.push(creep);
             }
             if(creep.pos.getRangeTo(roomTarget) > 1){
                 creep.travelTo(roomTarget);
             }
+            else(creep.withdraw(roomTarget,RESOURCE_ENERGY))
         }
         //If we have energy, go start dropping it off
         else{
@@ -1185,32 +1223,34 @@ function runIdles(idles,room){
 
     if(storage || terminal){
         for(const creep of idles){
-            if(storage && creep.getStoreUsed()){
-                //Temporarily run refill on idles if needed
-                if(creep.getStoreUsed(RESOURCE_ENERGY) && room.energyAvailable < room.energyCapacityAvailable){
+            if(room.energyAvailable < room.energyCapacityAvailable && creep.getStoreUsed() == creep.getStoreUsed(RESOURCE_ENERGY)){
                     runRefill(creep,room,null);
+            }   
+            else{
+                if(storage && creep.getStoreUsed()){
+                    if(creep.pos.getRangeTo(storage) == 1){
+                        creep.transfer(storage,Object.keys(creep.store)[0]);
+                        creep.storeLock = true;
+                    }
+                    else{
+                        creep.travelTo(storage,{range:1});
+                        
+                    }
                 }
-                else if(creep.pos.getRangeTo(storage) == 1){
-                    creep.transfer(storage,Object.keys(creep.store)[0]);
+                else if(terminal && creep.getStoreUsed()){
+                    if(creep.pos.getRangeTo(terminal) == 1){
+                        creep.transfer(terminal,Object.keys(creep.store)[0]);
+                        creep.storeLock = true;
+                    }
+                    else{
+                        creep.travelTo(terminal,{range:1});
+                    }
                 }
                 else{
-                    creep.travelTo(storage,{range:1});
-                    creep.storeLock = true;
+                    returnIdles.push(creep);
                 }
             }
-            else if(terminal && creep.getStoreUsed()){
-                if(creep.getStoreUsed(RESOURCE_ENERGY) && room.energyAvailable < room.energyCapacityAvailable){
-                    runRefill(creep,room,null);
-                }
-                else if(creep.pos.getRangeTo(terminal) == 1){
-                    creep.transfer(terminal,Object.keys(creep.store)[0]);
-                    creep.storeLock = true;
-                }
-                else{
-                    creep.travelTo(terminal,{range:1});
-                }
-            }
-            else if(!creep.storeLock && fillables && creep.store.getUsedCapacity(RESOURCE_ENERGY)){
+            if(!creep.storeLock && fillables && creep.store.getUsedCapacity(RESOURCE_ENERGY)){
                 for(const direct of DIRECTIONS_8){
                     let newX = creep.pos.x+direct[0];
                     let newY = creep.pos.y+direct[1];
@@ -1226,7 +1266,7 @@ function runIdles(idles,room){
             }
         }
         
-        return idles;
+        return returnIdles;
     }
 
     let combos = [];
@@ -1317,7 +1357,7 @@ function getState(creep){
 
 //#region Task Prototype
 //#endregion
-function Task(fief,type, resourceType, targetID, amount, priority,international,targetRoom,taskID,assignees,tick) {
+function Task(fief,type, resourceType, targetID, amount, priority,international,targetRoom,taskID,assignees,tick,opts = {}) {
     this.fief = fief;
     this.taskID = taskID || generateTaskID();
     this.type = type;
@@ -1340,7 +1380,10 @@ function Task(fief,type, resourceType, targetID, amount, priority,international,
     */
     this.international = international || false;
     this.tick = tick || Game.time;
-    this.coreDist = getTaskDist(fief,targetID)
+    this.coreDist = getTaskDist(fief,targetID);
+    for (const [k, v] of Object.entries(opts)) {
+        if (!(k in this)) this[k] = v;
+    }
 }
 
 Task.prototype.assignTo = function(hauler,amount='default') {       
@@ -1359,7 +1402,8 @@ Task.prototype.assignTo = function(hauler,amount='default') {
     //This needs some better logic for figuring out if it should pick up energy or drop off what it already has
     if(this.type == 'dropoff'){
         //If the hauler is at max capacity, or is above the unassigned amount, use either of those.
-        newAssignee.amount = amount == 'default' ? Math.min(unassigned,haulerCap) : Math.min(amount, haulerUsed, unassigned);
+        newAssignee.amount = amount == 'default' || haulerUsed <= 0 ? Math.min(unassigned,haulerCap) : Math.min(amount, haulerUsed, unassigned);
+        //console.log("ASSIGNING DROPOPFF",hauler,"Unassigned",unassigned,"Hauler cap",haulerCap,"Hauler used",haulerUsed,"Final amount:",newAssignee.amount)
         if(haulerUsed >= newAssignee.amount)newAssignee.state = 'dropoff';
         else{
             if(haulerUsed)newAssignee.state = "dropoff"
@@ -1371,7 +1415,7 @@ Task.prototype.assignTo = function(hauler,amount='default') {
         newAssignee.state = 'refill';
     }
     else if(this.type == 'pickup'){
-        newAssignee.amount = amount == 'default' ? Math.min(haulerFree,unassigned) : Math.min(amount, haulerFree, unassigned);
+        newAssignee.amount = amount == 'default' ? Math.min(haulerCap,unassigned) : Math.min(amount, haulerCap, unassigned);
         newAssignee.state = 'pickup';
     }
     //Other non-transport tasks will end up here (towing, renewing, etc)

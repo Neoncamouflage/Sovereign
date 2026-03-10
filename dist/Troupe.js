@@ -100,7 +100,7 @@ Troupe.prototype.run = function(kingdomCreeps) {
                 this.createLance('demo');
                 break;
             case 'rangedHarass':
-                this.createLance('blinky');
+                this.createLance('blinky',{unitsNeeded:1});
                 break;
             case 'defend':
                 this.createLance('blinky',{unitsNeeded: Game.rooms[this.baseFief].controller && Game.rooms[this.baseFief].controller.level < 5 ? 2 : 1});

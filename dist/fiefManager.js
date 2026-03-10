@@ -35,7 +35,7 @@ const fiefManager = {
         if(!fief.rclTimes[roomLevel]){
             fief.rclTimes[roomLevel] = Game.time - fief.rclTimes.tick;
             //If we were the funnel target and we leveled up, reset it
-            if(roomLevel == 7 && room.name == heap.funnelTarget) heap.funnelTarget = null;
+            if(roomLevel == 7 && room.name == Memory.kingdom.funnelTarget) Memory.kingdom.funnelTarget = null;
         }
         if(!fief.rclTimes['storage'] && room.storage) fief.rclTimes['storage'] = Game.time - fief.rclTimes.tick
         if(!fief.rampTarget) fief.rampTarget = 15000;
@@ -186,7 +186,7 @@ const fiefManager = {
         if(Object.keys(buildQueue).length && !cSites.length){
             let toBuild;
             //Spawns > Storage > Towers > Extensions > Roads > Labs
-            let structOrder = [STRUCTURE_SPAWN,STRUCTURE_STORAGE,STRUCTURE_EXTENSION,STRUCTURE_TOWER,STRUCTURE_ROAD,STRUCTURE_LAB,STRUCTURE_CONTAINER,STRUCTURE_LINK,STRUCTURE_EXTRACTOR,STRUCTURE_OBSERVER,STRUCTURE_TERMINAL,STRUCTURE_FACTORY,STRUCTURE_POWER_SPAWN,STRUCTURE_NUKER]
+            let structOrder = [STRUCTURE_TOWER,STRUCTURE_SPAWN,STRUCTURE_STORAGE,STRUCTURE_EXTENSION,STRUCTURE_ROAD,STRUCTURE_LAB,STRUCTURE_CONTAINER,STRUCTURE_LINK,STRUCTURE_EXTRACTOR,STRUCTURE_OBSERVER,STRUCTURE_TERMINAL,STRUCTURE_FACTORY,STRUCTURE_POWER_SPAWN,STRUCTURE_NUKER]
             for(let each of structOrder){
                 //console.log("Checking to build:",each)
                 if(buildQueue[each]){
@@ -304,10 +304,11 @@ const fiefManager = {
                             if(building == STRUCTURE_TOWER && room.controller.level <=4 && room.controller.safeMode && room.controller.safeMode > 2000){
                                 continue;
                             }
-                            //If it's a road we don't build until room level 3, then only on swamps til remote roads are done or RCL5.
+                            //If it's a road we don't build until room level 3, then only on swamps til remote roads are done and we have minimum storage.
+                            //Why are we waiting til remote roads are done? Removing that and only checking for storages
                             if(building == STRUCTURE_ROAD){
-                                if(roomLevel < 3)continue;
-                                if(!roadsDone && floor != TERRAIN_MASK_SWAMP && room.controller.level <=4)continue;
+                                //if(roomLevel < 3)continue;
+                                if(/*!roadsDone && floor != TERRAIN_MASK_SWAMP &&*/ (!room.storage || room.storage.store[RESOURCE_ENERGY] < FIEF_ROAD_STORAGE_MIN))continue;
                             }
                             
                             if(buildQueue[building]){
@@ -474,7 +475,7 @@ const fiefManager = {
             //Get scouted domain rooms, exclude SK for now
             let domainRooms = getDomainRooms(room.name)
             //No SK rooms for remotes. Only check unscouted rooms except for extremely periodic checks
-            let fDomain = domainRooms.filter(dRoom => !Memory.kingdom.holdings[dRoom] && (!dRoom.scouted || Game.time % (1000*Object.keys(Memory.kingdom.fiefs).length) == 0));
+            let fDomain = domainRooms.filter(dRoom => !Memory.kingdom.holdings[dRoom] && (!dRoom.scouted));
             //console.log("D",domainRooms)
             //console.log("F",fDomain)
             for(let dRoom of fDomain){
@@ -638,7 +639,7 @@ const fiefManager = {
             //-- Upgrader --
             let upMax = 0;
             if(fief.controllerSpots){
-                if(fief.controllerSpots.storage && room.storage && room.storage.store[RESOURCE_ENERGY] > 10000){
+                if(fief.controllerSpots.storage && room.storage && room.storage.store[RESOURCE_ENERGY] > 20000){
                     for(let each of Object.values(fief.controllerSpots.storage)){
                         if(Array.isArray(each)) upMax+=each.length;
                     }
@@ -682,11 +683,11 @@ const fiefManager = {
             //Spawn operations when storage is available
             if(room.storage && room.storage.my){
                 let upgradersNeeded;
-                if(roomLevel == 8 || fief.holdUpgrade || totalEnergy < 10000){
+                if(roomLevel == 8 || fief.holdUpgrade || totalEnergy < 20000){
                     //console.log("Upgrade held",room.name)
                     if(!fiefCreeps.upgrader && room.controller.ticksToDowngrade < CONTROLLER_DOWNGRADE[roomLevel]/2) registry.requestCreep({sev:35,body:[MOVE,CARRY,WORK,MOVE,WORK],memory:{role:'upgrader',fief:room.name,status:'spawning',preflight:false}})
                 }
-                else if([6,7].includes(roomLevel) && heap.funnelTarget && heap.funnelTarget != room.name && room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[roomLevel]/2){
+                else if([6,7].includes(roomLevel) && Memory.kingdom.funnelTarget && Memory.kingdom.funnelTarget != room.name && room.controller.ticksToDowngrade > CONTROLLER_DOWNGRADE[roomLevel]/2){
                     //No upgrading if we're helping funnel and aren't in downgrade alert
                     //console.log("Funneling, no upgrade",room.name)
                     upgradersNeeded = 0;
@@ -694,7 +695,7 @@ const fiefManager = {
                 else{
                     let storageLevel = room.controller.level == 4 ? 25000 : 100000;
                     //Chaining significantly reduces the upgraders required
-                    if(fief.controllerSpots && room.name != heap.funnelTarget && (fief.controllerSpots.storage || fief.controllerSpots.terminal)){
+                    if(fief.controllerSpots && room.name != Memory.kingdom.funnelTarget && (fief.controllerSpots.storage || fief.controllerSpots.terminal)){
                         upgradersNeeded = Math.min(upMax,Math.ceil(totalEnergy/(storageLevel*1.5)));
                     }
                     else{
@@ -742,6 +743,7 @@ const fiefManager = {
                         let mineral = Game.getObjectById(fief.mineral.id)
                         if(!Memory.kingdom.mineralNeed) Memory.kingdom.mineralNeed = {};
                         let mineralNeed = Memory.kingdom.mineralNeed[mineral.mineralType] || DEFAULT_MINERAL_NEED
+                        //Always harvets if below 10k mineral amount so we kick off new regeneration
                         if(!mineral.ticksToRegeneration && room.storage.store.getFreeCapacity() > STORAGE_SPACE_FOR_MINERAL_HARVEST && (heap.stock[mineral.mineralType] < mineralNeed || mineral.mineralAmount < 10000)){
                             if(!fiefCreeps.harvester || !fiefCreeps.harvester.filter(crp => crp.memory.target == mineral.id).length){
                                 registry.requestCreep({sev:33,memory:{role:'harvester',job:'mineralHarvester',fief:room.name,target:mineral.id,status:'spawning',preflight:false}})
@@ -749,7 +751,8 @@ const fiefManager = {
                         }
                     }
                     else{
-                        if(fief.mineral.harvestSpot){
+                        //TODO - Either add the container to the room plan or check room plan for open spaces and add the container if missing
+                        /*if(fief.mineral.harvestSpot){
                             let spot = room.lookForAt(LOOK_STRUCTURES,fief.mineral.harvestSpot.x,fief.mineral.harvestSpot.y).filter(str=> str.structureType == STRUCTURE_CONTAINER)[0];
                             if(spot){
                                 fief.mineral.can = spot.id;
@@ -761,6 +764,9 @@ const fiefManager = {
                                 }
                             }
                         }
+                        else{
+
+                        }*/
                     }
 
                 }
@@ -1055,32 +1061,32 @@ const fiefManager = {
             }
                 
 
-            if(room.terminal){
+            /*if(room.terminal){
                 //Maintain terminal levels as needed. Default energy amount set if the import manager hasn't assigned anything
-                if(!fief.termNeeds) fief.termNeeds = {[RESOURCE_ENERGY]:DEFAULT_TERMINAL_ENERGY};
+                //if(!fief.termNeeds) fief.termNeeds = {[RESOURCE_ENERGY]:DEFAULT_TERMINAL_ENERGY};
                 let termNeeds = fief.termNeeds;
                 //Check every 25 ticks to fill terminal if below any of the needs
                 if(Game.time % 25 == 0){
                     for(let resource of Object.keys(termNeeds)){
                         let amount = termNeeds[resource];
                         if(room.terminal.store[resource] < amount){
-                            supplyDemand.addRequest(room,{type:'dropoff',amount:50000-room.terminal.store[resource],targetID:room.terminal.id});
+                            supplyDemand.addRequest(room,{type:'dropoff',amount:50000-room.terminal.store[resource],targetID:room.terminal.id,priority:1});
                         }
                     }  
                 }
-            }
+            }*/
 
 
             //Funnelcheck - RCL 7 helps funnel to 6 as well
-            if(heap.funnelTarget && room.terminal && [6,7].includes(roomLevel)){
+            if(Memory.kingdom.funnelTarget && room.terminal && [6,7].includes(roomLevel)){
                 //If we are not the funnel target
-                if(room.name != heap.funnelTarget && !cSites.length){
-                    if(room.storage.store[RESOURCE_ENERGY] > 50000 && room.terminal.store.getFreeCapacity() > 10000){
-                        supplyDemand.addRequest(room,{type:'dropoff',resourceType:'energy',amount:Math.min(room.storage.store[RESOURCE_ENERGY] - 50000,room.terminal.store.getFreeCapacity()),targetID:room.terminal.id,international:false,priority:4})
+                if(room.name != Memory.kingdom.funnelTarget && !cSites.length){
+                    if(room.storage.store[RESOURCE_ENERGY] > 25000 && room.terminal.store.getFreeCapacity() > 10000){
+                        supplyDemand.addRequest(room,{type:'dropoff',resourceType:'energy',amount:Math.min(room.storage.store[RESOURCE_ENERGY] - 20000,room.terminal.store.getFreeCapacity(),5000),targetID:room.terminal.id,international:false,priority:1})
                     }
                     if(room.terminal.store[RESOURCE_ENERGY] > 50000){
-                        let fee = Math.ceil( room.terminal.store[RESOURCE_ENERGY] * ( 1 - Math.exp(-Game.map.getRoomLinearDistance(room.name,heap.funnelTarget,true)/30) ) )
-                        room.terminal.send(RESOURCE_ENERGY,room.terminal.store[RESOURCE_ENERGY]-fee,heap.funnelTarget)
+                        let fee = Math.ceil( room.terminal.store[RESOURCE_ENERGY] * ( 1 - Math.exp(-Game.map.getRoomLinearDistance(room.name,Memory.kingdom.funnelTarget,true)/30) ) )
+                        room.terminal.send(RESOURCE_ENERGY,room.terminal.store[RESOURCE_ENERGY]-fee,Memory.kingdom.funnelTarget)
                     }
                 }
             }
@@ -1223,7 +1229,7 @@ const fiefManager = {
                         cook = false;
                         //If we have enough to order some, do so
                         if(room.terminal.store[item] + room.storage.store[item] > qty){
-                            supplyDemand.addRequest(room,{resourceType:item,amount:Math.min(room.terminal.store[item] + room.storage.store[item],qty*4),type:'dropoff',targetID:factory.id});
+                            supplyDemand.addRequest(room,{resourceType:item,amount:Math.min(room.terminal.store[item] + room.storage.store[item],qty*4),type:'dropoff',targetID:factory.id,priority:1});
                         }
                     }
                 });
@@ -1326,7 +1332,7 @@ const fiefManager = {
         }
         
         
-        const hostiles = roomBaddies.filter(bad=>(bad.body.length <25) || bad.owner.username == 'Invader');
+        const hostiles = roomBaddies//.filter(bad=>(bad.body.length <25) || bad.owner.username == 'Invader');
         
         let closestHostile = randomChoice(hostiles)
         if(damageRamps.length){
@@ -1421,9 +1427,11 @@ function totalWares(room,fief) {
     let mineral = Game.getObjectById(Memory.kingdom.fiefs[room.name].mineral.id);
     if(!totalResources[mineral.mineralType]){
         totalResources[mineral.mineralType] = 0;
+    }
+    if(!heap.kingdomStatus.wares[mineral.mineralType]){
         heap.kingdomStatus.wares[mineral.mineralType] = 0;
     }
-    if(fief.labs){
+    if(fief.labs && fief.labs.targetLabs){
         let labIDs = Object.keys(fief.labs.sourceLabs);
         labIDs.push(...fief.labs.targetLabs)
         let labs = labIDs.map(id => Game.getObjectById(id));
@@ -1482,9 +1490,9 @@ function manageResourceCollection(room) {
     //Check for mining containers and submit requests for any over 100 full
     let cans = []
     for(let source of Object.values(Memory.kingdom.fiefs[room.name].sources)){
-        if(source.can && Game.getObjectById(source.can) &&  Game.getObjectById(source.can).store.getUsedCapacity() > 500) cans.push(source.can)
+        if(source.can && Game.getObjectById(source.can) &&  Game.getObjectById(source.can).store && Game.getObjectById(source.can).store.getUsedCapacity() > 50) cans.push(source.can)
     }
-    if(Memory.kingdom.fiefs[room.name].mineral.can && Game.getObjectById(Memory.kingdom.fiefs[room.name].mineral.can) &&  Game.getObjectById(Memory.kingdom.fiefs[room.name].mineral.can).store.getUsedCapacity() > 500) cans.push(Memory.kingdom.fiefs[room.name].mineral.can)
+    if(Memory.kingdom.fiefs[room.name].mineral.can && Game.getObjectById(Memory.kingdom.fiefs[room.name].mineral.can) &&  Game.getObjectById(Memory.kingdom.fiefs[room.name].mineral.can).store.getUsedCapacity() > 200) cans.push(Memory.kingdom.fiefs[room.name].mineral.can)
     for(let canID of cans){
         let can = Game.getObjectById(canID)
         for(let resType in can.store){
@@ -1544,27 +1552,6 @@ function getDomainRooms(fief) {
     Memory.kingdom.fiefs[fief].domain = validRooms;
     chronicle.log(`${fief} -  Domain mapped. ${validRooms.length} rooms located.`,'fiefManager',3);
     return validRooms;
-}
-
-function getBoostTier(resource){
-    if(!resource) return 0;
-    
-    //Tier 1 compounds
-    if(resource.length === 2 || resource === 'ZK' || resource === 'UL') {
-        return 1;
-    }
-    
-    //Tier 2 compounds
-    if(resource.length === 4) {
-        return 2;
-    }
-    
-    //Tier 3 compounds
-    if(resource.length === 5) {
-        return 3;
-    }
-    
-    return 0; //Unknown or other resources
 }
 
 //Builds two maps of road coordinates and their associated extensions

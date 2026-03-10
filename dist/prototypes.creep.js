@@ -43,11 +43,14 @@ if (!Creep.prototype._transfer) {
         if (amt < 0) amt = 0;
         let targetCurrent = 0;
         if(target instanceof Creep){
-            targetCurrent = target instanceof Creep ? target.getStoreFree(resourceType) : target.store.getFreeCapacity(resourceType);
+            targetCurrent = target.getStoreFree(resourceType);
             amt = Math.min(current,amt, targetCurrent);
-            let r = this._transfer(target, resourceType, amt);
-            if (r === OK && amt > 0) vstoreUpdate(this, 'transfer', resourceType, amt);
-            return r;
+            let ret = this._transfer(target, resourceType, amt);
+            if (ret === OK && amt > 0) {
+                vstoreUpdate(this, 'transfer', resourceType, amt);
+                vstoreUpdate(target, 'receive', resourceType, amt);
+            }
+            return ret;
         }
 
         targetCurrent = target.store.getFreeCapacity(resourceType);
@@ -88,7 +91,9 @@ if (!Creep.prototype._transfer) {
         }
         //Only include amount if it was included originally
         let res = this._transfer(target, resourceType, amt);
-        if (res === OK && amt > 0) vstoreUpdate(this, 'transfer', resourceType, amt);
+        if (res === OK && amt > 0) {
+            vstoreUpdate(this, 'transfer', resourceType, amt);
+        }
         //Return the response
         return res;
     };
@@ -440,7 +445,8 @@ Creep.prototype.shove = function(targetCreep,originSpace,depth=0){
         return false;
     }
     //Creeps that want to stay in a specific area have a target in memory.
-    let otherTarget = targetCreep.memory && Game.getObjectById(targetCreep.memory.target);
+    let otherMem = targetCreep.memory.target || targetCreep.memory.targetID;
+    let otherTarget = Game.getObjectById(otherMem);
     let preferredRange = rangeRef[targetCreep.memory.role] || 3
 
     //Fill arrays with every available space around the target creep

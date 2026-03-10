@@ -55,30 +55,33 @@ const constants = {
     ROOM_CROSSROAD : 	 'crossroad',
 
     //Fief Constants
+    FIEF_ROAD_STORAGE_MIN: 7000,
     DEFAULT_MINERAL_NEED : 30000,
     STORAGE_SPACE_FOR_MINERAL_HARVEST : 100000,
     RAMPART_REPAIR_MINIMUM_ENERGY : 20000,
-    DEFAULT_TERMINAL_ENERGY : 50000,
+    DEFAULT_TERMINAL_ENERGY : 10000,
     MAX_SHIPPING_UTILIZATION : 80,
     RAMPART_LOWRCL_CAP : 3000000,
 
-    //Lab Constants
+    //Lab and Factory Constants
+
     REACTION_INGREDIENTS : {},
     MINERALS:[...Object.keys(MINERAL_MIN_AMOUNT),'G'],
-    //Minimum amounts to maintain for each boost tier
-    TIER1_MIN_AMOUNT: 5000,
-    TIER2_MIN_AMOUNT: 3000,
-    TIER3_MIN_AMOUNT: 2000,
-    
-    //Surplus amount to maintain before moving to next tier
-    TIER1_SURPLUS: 2000,
-    TIER2_SURPLUS: 1000,
-    
-    //Priority for different types of lab operations
-    PRIORITY_BOOST: 7,
-    PRIORITY_REACTION: 6,
-    PRIORITY_CLEANUP: 8,
+    //Minimum amounts to maintain for each boost tier before moving to the next
+    RESOURCE_TIER_MIN_AMOUNTS:{
+        1:15000,
+        2:10000,
+        3:5000
+    },
+    //Max amount before we try to sell
+    RESOURCE_TIER_MAX_AMOUNTS:{
+        1:25000,
+        2:25000,
+        3:15000
+    },
 
+    //Minimum production amount
+    MINIMUM_LAB_PRODUCTION_AMOUNT:500,
     //Direction offset arrays
     DIRECTIONS_4:  [[1, 0], [0, 1], [-1, 0], [0, -1]],
     DIRECTIONS_8: [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]],

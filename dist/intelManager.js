@@ -7,7 +7,7 @@ const intelManager = {
     toScout:[],
     run: function(scouts,fiefs){
         let scoutList = heap && heap.scoutList || {}//{scoutRoom:requestingFief}
-        const SCOUT_MAX = 2;
+        const SCOUT_MAX = 4;
         if(!scouts || !fiefs) return;
         //If we have no scouts, order one
         if(Game.time % GLOBAL_SPAWN_INTERVAL == 0){
@@ -200,6 +200,10 @@ const intelManager = {
                 let roomOpts = [];
                 let unscouted = [];
                 //Get scout data for all the room options, add their names since that isn't yet part of the object data
+                if(!exitRooms){
+                    console.log(`${exitRooms} not iterable! ${creep}`);
+                    return;
+                }
                 for(let roomOpt of exitRooms){
                     let scout = getScoutData(roomOpt);
                     //Unscouted means we pick you first
